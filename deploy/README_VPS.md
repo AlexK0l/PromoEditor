@@ -1,5 +1,7 @@
 # PromoEditor: installation on a Linux VPS
 
+> **НЕ применять эту Docker Compose схему к Time4VPS с RegionalResearch.** На сервере уже запущен Caddy на 80/443; используйте [time4vps/README.md](time4vps/README.md) для второго приложения через существующий прокси и systemd.
+
 This recipe prepares a **private, password-protected** instance. It does not deploy to a VPS automatically. It assumes Ubuntu 22.04+/Debian 12+, Docker Engine with the Compose v2 plugin, a domain name, and working DNS. Do not point it at a shared reverse proxy without checking which service already owns ports 80/443.
 
 ## Prerequisites

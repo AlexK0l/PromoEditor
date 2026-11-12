@@ -1,0 +1,37 @@
+[Unit]
+Description=PromoEditor industrial promotion image generator
+Documentation=https://github.com/AlexK0l/PromoEditor
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=promoeditor
+Group=promoeditor
+WorkingDirectory=/opt/promoeditor
+EnvironmentFile=/etc/promoeditor/promoeditor.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=PROMO_DATA_DIR=/var/lib/promoeditor/jobs
+ExecStart=/opt/promoeditor/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 18080 --workers 1 --limit-concurrency 6 --timeout-keep-alive 10
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/promoeditor/jobs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=800M
+TasksMax=64
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
