@@ -33,7 +33,7 @@ def test_archived_layouts_keep_original_controls_and_api_routes():
         assert "fetch('/api/generate'" in js
         assert "fetch('/api/inspect'" in js
         assert 'window.PromoEditorVariant' in js
-        assert 'restoreResult(' in js
+        assert 'restoreResult:' in js
         assert f'/static/designs/{name}/app.js' in html
         assert f'/static/designs/{name}/app.css' in html
         assert 'href="/"' not in html
