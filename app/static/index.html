@@ -3,145 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f8fc">
-  <meta name="description" content="PromoEditor — удобное создание рекламных PNG 4:3 и 9:16 из ваших материалов.">
-  <title>PromoEditor — новый промо-материал</title>
-  <link rel="stylesheet" href="/static/app.css">
+  <meta name="theme-color" content="#f6f7f9">
+  <meta name="description" content="PromoEditor: выбор из трёх вариантов интерфейса для создания PNG 4:3 и 9:16.">
+  <title>PromoEditor — выберите удобный интерфейс</title>
+  <link rel="stylesheet" href="/static/design-switcher.css">
+  <script src="/static/design-switcher.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="/" aria-label="PromoEditor — главная">
-        <span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="12" height="12" rx="3" stroke="currentColor" stroke-width="2"/><rect x="9" y="9" width="12" height="12" rx="3" fill="currentColor" opacity=".19"/><path d="M15 4h5v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
-        <span>Promo<span class="brand-accent">Editor</span></span>
-      </a>
-      <div class="topbar-right">
-        <span class="api-pill" role="status"><span id="api-dot" class="api-dot"></span><span id="api-state">Проверяем сервер…</span></span>
-        <button type="button" id="reset-btn" class="quiet-button">Заполнить пример</button>
+  <div class="app-shell">
+    <header class="design-bar">
+      <div class="bar-brand"><span class="brand-icon" aria-hidden="true">P</span><span><strong>PromoEditor</strong><small>Выберите удобный вид редактора</small></span></div>
+      <div class="switcher" role="tablist" aria-label="Варианты оформления интерфейса">
+        <button type="button" class="design-tab" role="tab" data-variant="wizard" id="tab-wizard" aria-controls="view-wizard" aria-selected="false"><span class="tab-icon" aria-hidden="true">①</span><span><strong>По шагам</strong><small>Мастер · версия 4</small></span></button>
+        <button type="button" class="design-tab" role="tab" data-variant="studio" id="tab-studio" aria-controls="view-studio" aria-selected="false"><span class="tab-icon" aria-hidden="true">▦</span><span><strong>Студия</strong><small>Карточки · версия 5</small></span></button>
+        <button type="button" class="design-tab" role="tab" data-variant="compact" id="tab-compact" aria-controls="view-compact" aria-selected="true"><span class="tab-icon" aria-hidden="true">≡</span><span><strong>Компактный</strong><small>Простая форма · версия 6</small></span></button>
       </div>
-    </div>
-  </header>
-
-  <main class="page">
-    <section class="heading" aria-labelledby="page-title">
-      <span class="section-tag">НОВЫЙ МАТЕРИАЛ</span>
-      <h1 id="page-title">Создайте рекламное изображение</h1>
-      <p>Фото, короткий текст — и готовы два размера для публикации. Без редактора со сложными настройками.</p>
-    </section>
-
-    <div id="error-box" class="error" role="alert" tabindex="-1" hidden></div>
-
-    <section class="composer" aria-label="Создать промо-материал">
-      <div class="composer-top">
-        <div><span class="step-label">ОСНОВНОЕ</span><h2>Что будем рекламировать?</h2></div>
-        <span class="optional-note">Займёт пару минут</span>
-      </div>
-
-      <div class="composer-grid">
-        <div class="media-column">
-          <label for="hero" id="hero-drop" class="dropzone">
-            <span class="drop-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4 18V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="9" cy="9" r="1.5"/><path d="m5 17 5-5 3 3 3-3 3 3"/></svg></span>
-            <strong id="hero-label">Добавить фото товара</strong>
-            <span id="hero-hint">Перетащите сюда или выберите файл</span>
-            <small>PNG / JPG / WEBP · до 20 МБ</small>
-            <input type="file" id="hero" accept="image/png,image/jpeg,image/webp" aria-label="Основное фото товара">
-          </label>
-          <button type="button" id="clear-hero" class="remove-link" hidden>Убрать фотографию</button>
-          <div class="mini-uploads">
-            <label for="documents" class="mini-upload"><span class="mini-icon" aria-hidden="true">▤</span><span><strong>Документы</strong><small id="file-documents">PDF, Excel, Word</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Документы с характеристиками"></label>
-            <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотип</strong><small id="file-logo">Необязательно</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Логотип бренда"></label>
-          </div>
-          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button></div>
-          <button type="button" id="inspect-btn" class="quick-extract" hidden>Извлечь характеристики из документов <span aria-hidden="true">→</span></button>
-          <p id="file-feedback" class="file-feedback" role="status" aria-live="polite">Оригинальные файлы не добавляются в скачиваемый ZIP.</p>
-        </div>
-
-        <div class="brief-column">
-          <label class="field" for="model"><span>Название продукта <span class="required">*</span></span><input id="model" maxlength="80" autocomplete="off" placeholder="Например, ZubrTrail 500"></label>
-          <label class="field" for="slogan"><span>Главное сообщение <span class="field-hint">то, что увидят покупатели</span></span><textarea id="slogan" rows="3" maxlength="250" placeholder="Например: Алюминиевый зерновоз, который перевозит больше за каждый рейс"></textarea></label>
-          <label class="field" for="design-notes"><span>Пожелания к оформлению <span class="field-hint">необязательно</span></span><textarea id="design-notes" rows="3" maxlength="1800" placeholder="Например: светлый фон, крупная техника, красные акценты, современный стиль"></textarea><small class="field-tip">Пожелания учитываются при AI-генерации фона. Тексты и характеристики добавляются из заполненных полей.</small></label>
-        </div>
-      </div>
-
-      <div class="composer-bottom">
-        <div class="choices-row">
-          <div class="style-wrap">
-            <span class="control-label">Стиль оформления</span>
-            <select id="style" class="sr-only" aria-label="Выбранный стиль"><option value="industrial">Контрастный</option><option value="graphite">Премиальный</option><option value="minimal">Минимальный</option></select>
-            <div class="style-pills" role="group" aria-label="Стиль оформления">
-              <button type="button" class="style-pill is-active" data-style="industrial" aria-pressed="true"><span class="style-dot dot-red"></span>Контрастный</button>
-              <button type="button" class="style-pill" data-style="graphite" aria-pressed="false"><span class="style-dot dot-graphite"></span>Премиальный</button>
-              <button type="button" class="style-pill" data-style="minimal" aria-pressed="false"><span class="style-dot dot-light"></span>Минимальный</button>
-            </div>
-          </div>
-          <label class="ai-choice" for="use-openai"><span class="ai-text"><strong>Генерировать фон с OpenAI</strong><small id="ai-description">Два платных запроса при включении</small></span><input id="use-openai" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span></label>
-        </div>
-        <div class="generate-row">
-          <span id="modebanner" class="modebanner" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span><strong>Без расходов на API</strong><small>Обычная сборка изображений</small></span></span>
-          <button type="button" id="generate-btn" class="primary-button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Создать два формата <span aria-hidden="true">→</span></button>
-        </div>
-      </div>
-    </section>
-
-    <details id="advanced-settings" class="advanced">
-      <summary><span class="settings-icon" aria-hidden="true">⚙</span><span><strong>Дополнительные настройки</strong><small>Характеристики, цена, дополнительные фото, экономика и точная настройка</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
-      <div class="advanced-body">
-        <div class="advanced-group">
-          <div class="group-title"><h3>Характеристики и преимущества</h3><p>Если цифры должны быть точными, впишите их здесь или извлеките из документов.</p></div>
-          <div class="two-fields"><label class="field" for="brand"><span>Бренд</span><input id="brand" maxlength="70" placeholder="ZUBR TRAIL"></label><label class="field" for="category"><span>Тип товара</span><input id="category" maxlength="100" placeholder="Полуприцеп-зерновоз"></label></div>
-          <label class="field" for="claims"><span>Короткие преимущества <span class="field-hint">одно на строку, до 4</span></span><textarea id="claims" rows="3" placeholder="Легче на 2,5 т&#10;Больше полезной нагрузки"></textarea></label>
-          <label class="field" for="specs"><span>Технические характеристики <span class="field-hint">Название | Значение</span></span><textarea id="specs" class="monospace" rows="5" placeholder="Грузоподъёмность | 44 т&#10;Объём кузова | 55 м³"></textarea></label>
-          <label class="field" for="benefits"><span>Другие преимущества</span><textarea id="benefits" rows="3" placeholder="Алюминиевый кузов&#10;Проверенные компоненты"></textarea></label>
-          <label class="field" for="dimensions"><span>Габариты <span class="field-hint">Название | Значение</span></span><textarea id="dimensions" class="monospace" rows="3" placeholder="Длина | 12 360 мм"></textarea></label>
-          <div class="document-tools"><div><strong>Характеристики из документов</strong><small>После загрузки нажмите «Извлечь характеристики» рядом с документами. Проверьте все значения перед применением.</small></div></div>
-          <label class="check-field"><input id="parse-ai" type="checkbox"><span>Использовать OpenAI для анализа документов <small>Отдельный платный запрос</small></span></label>
-          <div id="extract-box" class="extract-box" hidden><strong>Предложенные характеристики</strong><p id="extract-summary"></p><textarea id="extract-result" rows="5" aria-label="Извлечённые характеристики для проверки"></textarea><button type="button" id="apply-extracted" class="secondary-button">Применить к таблице ТТХ</button><small>Проверяйте данные перед публикацией.</small></div>
-        </div>
-        <div class="advanced-group">
-          <div class="group-title"><h3>Другие материалы</h3><p>Дополнительные изображения не обязательны.</p></div>
-          <div class="extra-uploads">
-            <label class="mini-upload" for="detail"><span class="mini-icon">▣</span><span><strong>Второе фото</strong><small id="file-detail">Дополнительный ракурс</small></span><span class="mini-plus">+</span><input id="detail" type="file" accept="image/png,image/jpeg,image/webp"></label>
-            <label class="mini-upload" for="drawing"><span class="mini-icon">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">PNG, JPG или PDF</small></span><span class="mini-plus">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf"></label>
-            <label class="mini-upload" for="references"><span class="mini-icon">▧</span><span><strong>Референсы</strong><small id="file-references">До 2 изображений</small></span><span class="mini-plus">+</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>
-          </div>
-          <div class="extra-clear"><button type="button" data-clear="detail" hidden>Убрать второе фото</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="references" hidden>Убрать референсы</button></div>
-        </div>
-        <div class="advanced-group">
-          <div class="group-title"><h3>Цена и контакты</h3></div>
-          <div class="price-grid"><label class="field" for="price"><span>Цена</span><input id="price" placeholder="229998" inputmode="decimal"></label><label class="field" for="currency"><span>Валюта</span><select id="currency"><option value="Br">Br</option><option value="BYN">BYN</option><option value="₽">₽</option><option value="€">€</option><option value="$">$</option></select></label></div>
-          <label class="check-field"><input id="vat" type="checkbox" checked><span>Указывать «с НДС»</span></label>
-          <label class="field" for="phones"><span>Телефоны <span class="field-hint">до двух, каждый с новой строки</span></span><textarea id="phones" rows="2" placeholder="+375 (29) 000-00-00"></textarea></label>
-        </div>
-        <div class="advanced-group">
-          <div class="group-title"><h3>Расчёт окупаемости</h3><p>Добавляйте только если исходные данные проверены.</p></div>
-          <label class="check-field"><input id="show-roi" type="checkbox"><span>Показать расчёт на промоматериале</span></label>
-          <div id="roi-fields" class="roi-fields" hidden>
-            <div class="two-fields"><label class="field" for="extra-payload"><span>Доп. загрузка, т</span><input id="extra-payload" value="2.5" inputmode="decimal"></label><label class="field" for="distance"><span>Плечо, км</span><input id="distance" value="300" inputmode="decimal"></label></div>
-            <div class="two-fields"><label class="field" for="rate"><span>Ставка за т/км</span><input id="rate" value="0.19" inputmode="decimal"></label><label class="field" for="trips"><span>Рейсов в год</span><input id="trips" value="240" inputmode="decimal"></label></div>
-            <div class="two-fields"><label class="field" for="years"><span>Горизонт, лет</span><input id="years" value="5" inputmode="decimal"></label><label class="field" for="baseline-price"><span>Цена аналога</span><input id="baseline-price" value="149499" inputmode="decimal"></label></div>
-            <div id="roi-preview" class="roi-preview">Заполните параметры для расчёта.</div>
-          </div>
-        </div>
-        <div class="advanced-group">
-          <div class="group-title"><h3>Точная настройка дизайна</h3></div>
-          <label class="field" for="accent"><span>Акцентный цвет</span><div class="color-control"><input id="accent" type="color" value="#e31b26"><span id="color-label">#E31B26</span></div></label>
-          <div class="two-fields"><label class="field" for="image-model"><span>Модель OpenAI</span><select id="image-model"><option value="gpt-image-2.5-flare">GPT Image 2.5 Flare</option><option value="gpt-image-2.5-sunburst">GPT Image 2.5 Sunburst</option></select></label><label class="field" for="image-quality"><span>Качество</span><select id="image-quality"><option value="low">Черновое</option><option value="medium" selected>Стандартное</option><option value="high">Высокое</option></select></label></div>
-          <label class="check-field"><input id="use-demo" type="checkbox"><span>Использовать демонстрационную иллюстрацию, если нет фото <small>Только в режиме без OpenAI. Демонстрация не является изображением вашего товара.</small></span></label>
-        </div>
-      </div>
-    </details>
-
-    <div id="loading" class="loading" hidden role="status" aria-live="polite"><span class="loader" aria-hidden="true"></span><div><strong>Создаём промоматериалы…</strong><small>Два формата рассчитываются отдельно. Не закрывайте вкладку.</small></div></div>
-
-    <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
-      <span class="success-icon" aria-hidden="true">✓</span>
-      <div class="result-heading"><div><span class="step-label">ГОТОВО</span><h2 id="download-title">Файлы готовы к скачиванию</h2></div><button type="button" id="download-all" class="primary-button" disabled>Скачать всё ZIP ↓</button></div>
-      <div class="file-results"><div><span class="filetype">PNG</span><div><strong>Горизонтальный 4:3</strong><small>1440 × 1080 px</small></div><button type="button" id="download-4x3" class="secondary-button" disabled>Скачать</button></div><div><span class="filetype">PNG</span><div><strong>Вертикальный 9:16</strong><small>1080 × 1920 px</small></div><button type="button" id="download-9x16" class="secondary-button" disabled>Скачать</button></div></div>
-      <p class="result-disclaimer">Перед публикацией проверьте ТТХ, рекламные утверждения и права на фотографии. Изображения не показываются на странице по вашему выбору.</p>
-    </section>
-
-    <footer class="footer">PromoEditor · Ваши исходные материалы не включаются в ZIP · API-ключ хранится только на сервере.</footer>
-  </main>
-  <script src="/static/app.js" defer></script>
+      <span class="bar-assist" title="При смене вида введённые данные и файлы сохраняются в открытой вкладке"><span aria-hidden="true">✓</span> Поля сохраняются при переключении</span>
+    </header>
+    <div id="switch-notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <main id="design-pages">
+      <section id="view-wizard" class="design-view" role="tabpanel" aria-labelledby="tab-wizard" hidden><iframe id="frame-wizard" title="Дизайн «По шагам»" src="/static/designs/wizard/index.html"></iframe></section>
+      <section id="view-studio" class="design-view" role="tabpanel" aria-labelledby="tab-studio" hidden><iframe id="frame-studio" title="Дизайн «Студия»" src="/static/designs/studio/index.html"></iframe></section>
+      <section id="view-compact" class="design-view" role="tabpanel" aria-labelledby="tab-compact"><iframe id="frame-compact" title="Дизайн «Компактный»" src="/static/designs/compact/index.html"></iframe></section>
+    </main>
+  </div>
 </body>
 </html>
