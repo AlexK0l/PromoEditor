@@ -18,6 +18,41 @@
     try { return Boolean(frame.contentWindow && frame.contentWindow.PromoEditorVariant); }
     catch { return false; }
   }
+  // Fetch markup as a same-origin resource and assign it to srcdoc.
+  // Caddy's X-Frame-Options: DENY correctly blocks network iframe navigations;
+  // srcdoc is created by the already-authorized parent and keeps that protection.
+  const loading = new Map();
+  async function ensureLoaded(name) {
+    const frame=frames[name];
+    if(isReady(frame))return;
+    if(loading.has(name))return loading.get(name);
+    const task=(async()=>{
+      const controller=new AbortController();
+      const abortTimer=setTimeout(()=>controller.abort(),12000);
+      let markup;
+      try {
+        const response=await fetch('/static/designs/'+name+'/index.html',{
+          credentials:'same-origin',cache:'no-store',signal:controller.signal
+        });
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        markup=await response.text();
+      }finally{clearTimeout(abortTimer);}
+      await new Promise((resolve,reject)=>{
+        const timeout=setTimeout(()=>{frame.removeEventListener('load',onLoad);reject(new Error('Загрузка интерфейса превысила 12 секунд'));},12000);
+        function onLoad(){
+          if(!isReady(frame))return;
+          clearTimeout(timeout);
+          frame.removeEventListener('load',onLoad);
+          resolve();
+        }
+        frame.addEventListener('load',onLoad);
+        frame.srcdoc=markup;
+      });
+    })();
+    loading.set(name,task);
+    try {await task;}finally {loading.delete(name);}
+  }
+
   function readState(frame) {
     const data = {fields:{},expanded:null,extracted:null};
     const doc=frame.contentDocument;
@@ -85,15 +120,16 @@
     remember(next);
     showNotice('');
     const target=frames[next];
-    if(!isReady(target)){
-      await new Promise(resolve=>{
-        const timeout=setTimeout(resolve,12000);
-        target.addEventListener('load',()=>{clearTimeout(timeout);resolve();},{once:true});
-      });
-    }
-    if(isReady(target))applyState(target,snapshot);
-    else showNotice('Не удалось загрузить этот вариант. Обновите страницу.');
-    switching=false;
+    try {
+      await ensureLoaded(next);
+      applyState(target,snapshot);
+    } catch(error) {
+      current=previous===frames.wizard?'wizard':previous===frames.studio?'studio':'compact';
+      updateTabs(current);
+      remember(current);
+      showNotice('Не удалось загрузить дизайн. Проверьте соединение и повторите переключение.');
+      console.error('PromoEditor variant load failed:',error);
+    } finally {switching=false;}
   }
   for(const name of names){
     tabs[name].addEventListener('click',()=>activate(name));
@@ -121,4 +157,8 @@
   try{saved=localStorage.getItem(STORE_KEY)||'compact';}catch(err){}
   updateTabs(current);
   if(names.includes(saved)&&saved!==current)activate(saved);
+  else ensureLoaded(current).catch(error=>{
+    showNotice('Не удалось загрузить редактор. Обновите страницу.');
+    console.error('PromoEditor initial variant load failed:',error);
+  });
 })();

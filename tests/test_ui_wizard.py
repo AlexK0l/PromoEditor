@@ -20,7 +20,8 @@ def test_all_design_versions_are_routed_and_loaded():
     assert 'id="frame-compact"' in shell
     for name in VARIANTS:
         assert f'data-variant="{name}"' in shell
-        assert f'src="/static/designs/{name}/index.html"' in shell
+        assert f'data-layout="{name}"' in shell
+        assert f'src="/static/designs/{name}/index.html"' not in shell
         for asset in ('index.html','app.js','app.css'):
             assert client.get(f'/static/designs/{name}/{asset}').status_code==200
 
@@ -36,7 +37,7 @@ def test_archived_layouts_keep_original_controls_and_api_routes():
         assert 'restoreResult:' in js
         assert f'/static/designs/{name}/app.js' in html
         assert f'/static/designs/{name}/app.css' in html
-        assert 'href="/"' not in html
+        assert 'href="/" target="_top"' in html
         assert 'id="preview-4x3"' not in html
         assert 'id="preview-9x16"' not in html
         assert 'id="download-panel"' in html
@@ -52,6 +53,9 @@ def test_shared_files_and_results_are_transferred_without_persisting_brief_to_st
     assert 'localStorage.setItem(STORE_KEY,JSON' not in js
     assert "snapshot=readState(previous)" in js
     assert "PromoEditorVariant.busy()" in js
+    assert 'frame.srcdoc=markup' in js
+    assert "credentials:'same-origin'" in js
+    assert 'src="/static/designs/' not in (ROOT/'index.html').read_text(encoding='utf-8')
     assert "promoeditor:cleared" in js
 
 def test_backend_and_downloads_stay_original():
