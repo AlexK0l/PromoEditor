@@ -22,7 +22,10 @@ jobs:
       - name: Run application tests
         run: python -m pytest -q
       - name: Check front-end JavaScript
-        run: node --check app/static/app.js
+        run: |
+          node --check app/static/design-switcher.js
+          node --check app/static/app.js
+          for layout in wizard studio compact; do node --check "app/static/designs/$layout/app.js"; done
       - name: Validate deployment compose syntax
         run: |
           cp deploy/app.env.example deploy/app.env

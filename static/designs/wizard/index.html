@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f6f7f9" />
+  <meta name="description" content="PromoEditor — создавайте рекламные материалы в форматах 4:3 и 9:16 из своих фотографий и характеристик." />
+  <title>PromoEditor — создание промоматериалов</title>
+  <link rel="stylesheet" href="/static/designs/wizard/app.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/static/designs/wizard/index.html" aria-label="PromoEditor — главная">
+        <span class="brand-symbol" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Promo<span class="brand-accent">Editor</span><small>СТУДИЯ ПРОМОМАТЕРИАЛОВ</small></span>
+      </a>
+      <div class="header-right">
+        <span class="format-tag">PNG · 4:3 и 9:16</span>
+        <span class="api-indicator" role="status"><i id="api-dot" class="api-dot"></i><span id="api-state">Проверяем подключение</span></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-shell">
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <div class="eyebrow"><span class="eyebrow-line"></span> ВАША РЕКЛАМА, В ВАШЕМ СТИЛЕ</div>
+        <h1 id="page-title">Создайте промоматериал <br/><em>за три простых шага</em></h1>
+        <p>Загрузите фото товара, добавьте характеристики и выберите оформление. На выходе — два готовых PNG без сложного редактора.</p>
+      </div>
+      <div class="intro-action">
+        <span class="little-label">ВПЕРВЫЕ ЗДЕСЬ?</span>
+        <button id="reset-btn" type="button" class="button button-light"><span aria-hidden="true">✧</span> Заполнить примером</button>
+        <span class="intro-action-hint">Можно начать и с пустой формы</span>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <main class="editor" aria-label="Мастер создания материалов">
+        <nav class="stepper" aria-label="Этапы создания">
+          <button type="button" class="step-link is-active" data-go-step="1" aria-current="step"><span class="step-number">01</span><span class="step-label">Материалы</span></button>
+          <span class="step-connector" aria-hidden="true"></span>
+          <button type="button" class="step-link" data-go-step="2"><span class="step-number">02</span><span class="step-label">Информация</span></button>
+          <span class="step-connector" aria-hidden="true"></span>
+          <button type="button" class="step-link" data-go-step="3"><span class="step-number">03</span><span class="step-label">Оформление</span></button>
+        </nav>
+        <div class="progress-track" aria-hidden="true"><div id="progress-fill" class="progress-fill"></div></div>
+
+        <div class="editor-inner">
+          <div id="error-box" class="error" role="alert" hidden></div>
+          <section class="wizard-step" id="step-1" data-step="1" aria-labelledby="title-step-1">
+            <div class="section-heading"><span class="step-eyebrow">ШАГ 1 / 3</span><h2 id="title-step-1">Добавьте свои материалы</h2><p>Сначала главное фото. Остальные файлы необязательны — их можно добавить для более подробного промо-листа.</p></div>
+            <div class="group-heading"><h3>Изображения продукта</h3><span>PNG, JPG, WEBP</span></div>
+            <div class="upload-grid">
+              <label class="upload-card upload-main">
+                <span class="upload-icon" aria-hidden="true">↥</span><strong>Главное фото</strong><small>Основной товар на макете</small><span class="upload-result" id="file-hero">Выбрать файл</span>
+                <input id="hero" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Загрузить главное фото товара" />
+              </label>
+              <label class="upload-card">
+                <span class="upload-icon" aria-hidden="true">▧</span><strong>Второе фото</strong><small>Дополнительный ракурс</small><span class="upload-result" id="file-detail">Выбрать файл</span>
+                <input id="detail" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Загрузить дополнительное фото" />
+              </label>
+              <label class="upload-card">
+                <span class="upload-icon" aria-hidden="true">◈</span><strong>Логотип</strong><small>Будет сохранён без перерисовки</small><span class="upload-result" id="file-logo">Выбрать файл</span>
+                <input id="logo" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Загрузить логотип" />
+              </label>
+              <label class="upload-card">
+                <span class="upload-icon" aria-hidden="true">⌗</span><strong>Чертёж</strong><small>Изображение или первая страница PDF</small><span class="upload-result" id="file-drawing">Выбрать файл</span>
+                <input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf" aria-label="Загрузить чертёж" />
+              </label>
+            </div>
+            <div class="section-divider"></div>
+            <div class="group-heading"><h3>Дополнительные материалы</h3><span>Необязательно</span></div>
+            <label class="attachment-row"><span class="attachment-icon" aria-hidden="true">▤</span><span class="attachment-desc"><strong>Документы с характеристиками</strong><small>PDF, Word, Excel, CSV, TXT, MD</small><em id="file-documents">Файлы не выбраны</em></span><span class="attachment-action">Добавить</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Добавить документы" /></label>
+            <label class="attachment-row"><span class="attachment-icon" aria-hidden="true">▧</span><span class="attachment-desc"><strong>Примеры понравившегося оформления</strong><small>До 2 изображений для OpenAI</small><em id="file-references">Файлы не выбраны</em></span><span class="attachment-action">Добавить</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Добавить референсы оформления" /></label>
+            <div class="inspect-card">
+              <div class="inspect-info"><strong>Есть файл с ТТХ?</strong><span>Извлечём данные, чтобы не перепечатывать их вручную. Перед применением вы сможете всё проверить.</span></div>
+              <label class="checkbox-line"><input id="parse-ai" type="checkbox" /> Использовать OpenAI для анализа <small>(платно)</small></label>
+              <button type="button" id="inspect-btn" class="button button-subtle" disabled>Извлечь характеристики <span aria-hidden="true">↗</span></button>
+            </div>
+            <div id="extract-box" class="extracted" hidden><div class="extracted-top"><strong>Данные из документов</strong><span>Проверьте значения</span></div><p id="extract-summary"></p><textarea id="extract-result" class="text-input" rows="6" readonly aria-label="Найденные характеристики"></textarea><button id="apply-extracted" type="button" class="button button-subtle">Перенести в форму</button><p class="field-help">Извлечение не подтверждает корректность значений.</p></div>
+          </section>
+
+          <section class="wizard-step" id="step-2" data-step="2" aria-labelledby="title-step-2" hidden>
+            <div class="section-heading"><span class="step-eyebrow">ШАГ 2 / 3</span><h2 id="title-step-2">Расскажите о продукте</h2><p>Эти данные появятся на готовом рекламном листе. Вносите только проверенные характеристики.</p></div>
+            <div class="group-heading"><h3>Основная информация</h3><span>Заголовок и ключевые тезисы</span></div>
+            <div class="field-grid">
+              <label class="field">Бренд<input class="text-input" id="brand" maxlength="70" placeholder="Например, ZUBR TRAIL" autocomplete="off" /></label>
+              <label class="field">Модель<input class="text-input" id="model" maxlength="80" placeholder="Например, ZubrTrail 500" autocomplete="off" /></label>
+            </div>
+            <label class="field">Категория товара<input class="text-input" id="category" maxlength="100" placeholder="Например, полуприцеп-зерновоз" /></label>
+            <label class="field">Главный рекламный тезис<textarea class="text-input" id="slogan" maxlength="250" rows="2" placeholder="Короткая фраза, которая объясняет главное преимущество"></textarea></label>
+            <label class="field">Ключевые преимущества <span class="field-help">Каждое преимущество — с новой строки (до 4)</span><textarea class="text-input" id="claims" rows="4" placeholder="Легче на 2,5 т&#10;Больше полезной нагрузки&#10;Устойчив к коррозии"></textarea></label>
+            <div class="section-divider"></div>
+            <div class="group-heading"><h3>Характеристики</h3><span>Проверяйте все цифры</span></div>
+            <label class="field">Технические характеристики <span class="field-help">Одна строка = «Название | Значение»</span><textarea class="text-input mono" id="specs" rows="6" placeholder="Грузоподъёмность | 44 т&#10;Объём кузова | 55 м³"></textarea></label>
+            <details class="disclosure"><summary>Дополнительные данные <span>Габариты, цена, контакты и другие плюсы</span></summary>
+              <div class="disclosure-body">
+                <label class="field">Другие преимущества <span class="field-help">До 4, по одному на строку</span><textarea class="text-input" id="benefits" rows="4" placeholder="Высокопрочный алюминиевый сплав&#10;Проверенные компоненты"></textarea></label>
+                <label class="field">Габариты <span class="field-help">Название | Значение</span><textarea class="text-input mono" id="dimensions" rows="3" placeholder="Длина | 12 360 мм&#10;Ширина | 2 550 мм"></textarea></label>
+                <div class="field-grid"><label class="field">Цена<input class="text-input" id="price" placeholder="229998" inputmode="decimal" /></label><label class="field">Валюта<select class="text-input" id="currency"><option value="Br">Br</option><option value="₽">₽</option><option value="€">€</option><option value="$">$</option><option value="BYN">BYN</option></select></label></div>
+                <label class="checkbox-line"><input id="vat" type="checkbox" checked /> Указывать «с НДС»</label>
+                <label class="field">Телефоны <span class="field-help">По одному номеру на строку, максимум 2</span><textarea class="text-input" id="phones" rows="2" placeholder="+375 (29) 000-00-00"></textarea></label>
+              </div>
+            </details>
+            <details class="disclosure"><summary>Экономический эффект <span>Необязательный расчёт окупаемости</span></summary>
+              <div class="disclosure-body">
+                <label class="checkbox-line"><input id="show-roi" type="checkbox" /> Добавить расчёт окупаемости на плакат</label>
+                <p class="field-help">Условный сценарий, не гарантия доходности. Дополнительный груз × плечо × ставка × рейсы.</p>
+                <div class="field-grid"><label class="field">Дополнительная загрузка, т<input class="text-input" id="extra-payload" inputmode="decimal" value="2.5" /></label><label class="field">Плечо, км<input class="text-input" id="distance" inputmode="decimal" value="300" /></label></div>
+                <div class="field-grid"><label class="field">Ставка за т/км<input class="text-input" id="rate" inputmode="decimal" value="0.19" /></label><label class="field">Рейсов в год<input class="text-input" id="trips" inputmode="decimal" value="240" /></label></div>
+                <div class="field-grid"><label class="field">Период, лет<input class="text-input" id="years" inputmode="decimal" value="5" /></label><label class="field">Цена аналога<input class="text-input" id="baseline-price" inputmode="decimal" value="149499" /></label></div>
+                <div class="formula" id="roi-preview" aria-live="polite">Заполните данные для расчёта</div>
+              </div>
+            </details>
+          </section>
+
+          <section class="wizard-step" id="step-3" data-step="3" aria-labelledby="title-step-3" hidden>
+            <div class="section-heading"><span class="step-eyebrow">ШАГ 3 / 3</span><h2 id="title-step-3">Настройте оформление</h2><p>Выберите общий характер дизайна. Оба формата будут сверстаны отдельно, без искажения ваших текстов и цифр.</p></div>
+            <div class="group-heading"><h3>Внешний вид</h3><span>Под вашу задачу</span></div>
+            <label class="field">Стиль промо-листа<select class="text-input" id="style"><option value="industrial">Яркий промышленный · Красный и белый</option><option value="graphite">Графитовый · Строгий и премиальный</option><option value="minimal">Минимализм · Чистый каталог</option></select></label>
+            <label class="field">Акцентный цвет<div class="accent-picker"><input type="color" id="accent" value="#e31b26" aria-label="Выбрать акцентный цвет" /><span id="color-label">#E31B26</span><span class="accent-help">Нажмите на цвет, чтобы изменить</span></div></label>
+            <label class="field">Пожелания к оформлению <span class="field-help">Например: много воздуха, крупное фото техники, выделить грузоподъёмность</span><textarea class="text-input" id="design-notes" rows="4" placeholder="Опишите, какой результат хотите получить..."></textarea></label>
+            <div class="section-divider"></div>
+            <div class="group-heading"><h3>Способ генерации</h3><span>Вы контролируете расходы</span></div>
+            <label class="generation-option"><span class="option-icon" aria-hidden="true">✦</span><span><strong>Использовать OpenAI</strong><small>Создать фон или товарную иллюстрацию через API. 2 платных запроса за комплект.</small></span><span class="switch"><input type="checkbox" id="use-openai" role="switch" aria-controls="ai-options" /><span class="switch-track"></span></span></label>
+            <div id="ai-options" class="ai-options" hidden>
+              <div class="field-grid"><label class="field">AI-модель<select class="text-input" id="image-model"><option value="gpt-image-2.5-flare">GPT Image 2.5 Flare</option><option value="gpt-image-2.5-sunburst">GPT Image 2.5 Sunburst</option></select></label><label class="field">Качество<select class="text-input" id="image-quality"><option value="low">Черновик</option><option value="medium" selected>Стандарт</option><option value="high">Высокое</option></select></label></div>
+            </div>
+            <label class="checkbox-line demo-checkbox"><input type="checkbox" id="use-demo" checked /> Если нет фото, использовать демонстрационную иллюстрацию <span class="field-help">Только при выключенном OpenAI</span></label>
+            <div class="note-card"><span class="note-icon" aria-hidden="true">ⓘ</span><p>Готовые изображения содержат ваши тексты без перерисовки нейросетью. Проверьте характеристики и рекламные заявления перед публикацией.</p></div>
+          </section>
+
+        </div>
+
+        <div class="editor-actions">
+          <button type="button" id="back-btn" class="button button-light" hidden>← Назад</button>
+          <span id="step-counter" class="step-counter">Шаг 1 из 3</span>
+          <button type="button" id="next-btn" class="button button-primary">Продолжить <span aria-hidden="true">→</span></button>
+          <button type="button" id="generate-btn" class="button button-primary" hidden>✦ Создать оба формата</button>
+        </div>
+      </main>
+
+      <aside class="help-sidebar" aria-label="Информация о результате">
+        <section class="output-card">
+          <div class="output-label">НА ВЫХОДЕ</div>
+          <h2>Один бриф.<br/><span>Два готовых файла.</span></h2>
+          <div class="format-row"><span class="format-icon ratio-wide" aria-hidden="true"></span><span><strong>Горизонтальный 4:3</strong><small>1440 × 1080 px · PNG</small></span><i aria-hidden="true">✓</i></div>
+          <div class="format-row"><span class="format-icon ratio-tall" aria-hidden="true"></span><span><strong>Вертикальный 9:16</strong><small>1080 × 1920 px · PNG</small></span><i aria-hidden="true">✓</i></div>
+          <p class="format-foot">Оба изображения создаются отдельно и сохраняют правильные пропорции.</p>
+        </section>
+        <div id="modebanner" class="status-card" role="status" aria-live="polite"><span class="status-icon" aria-hidden="true">●</span><span><b>Можно начать без API-ключа</b><small>Заполните поля и сформируйте два PNG бесплатно, без OpenAI.</small></span></div>
+        <div id="loading" class="loading" hidden role="status" aria-live="polite"><div class="loader"></div><div><b>Создаём ваши материалы...</b><small>Это может занять некоторое время. Не закрывайте страницу.</small></div></div>
+        <section id="download-panel" class="result-card" hidden aria-label="Скачать созданные материалы">
+          <div class="result-check" aria-hidden="true">✓</div><div class="result-eyebrow">ГОТОВО</div><h2>Ваши файлы готовы!</h2><p>Скачайте оба формата по отдельности или одним архивом.</p>
+          <button type="button" id="download-all" class="button button-primary result-primary" disabled>Скачать комплект ZIP <span aria-hidden="true">↓</span></button>
+          <div class="result-files">
+            <button type="button" id="download-4x3" class="file-download" disabled><span>4:3 · PNG <small>1440 × 1080</small></span><span aria-hidden="true">↓</span></button>
+            <button type="button" id="download-9x16" class="file-download" disabled><span>9:16 · PNG <small>1080 × 1920</small></span><span aria-hidden="true">↓</span></button>
+          </div>
+          <p class="result-warning">Перед публикацией проверьте технические данные.</p>
+        </section>
+        <div class="quiet-help"><span aria-hidden="true">🔒</span><p>Ваш OpenAI API-ключ хранится на сервере, а не в браузере. Фотографии и документы не сохраняются в готовом ZIP.</p></div>
+      </aside>
+    </div>
+    <footer class="site-footer">PromoEditor · Сначала проверенные данные, затем красивый промо-лист.</footer>
+  </div>
+  <script src="/static/designs/wizard/app.js" defer></script>
+</body>
+</html>
