@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 ROOT=Path(__file__).resolve().parents[1]/"app"/"static"
-VARIANTS=("wizard","studio","compact")
+VARIANTS=("wizard","studio","compact","dialog")
 CONTROLS=('hero','detail','logo','drawing','references','documents','parse-ai',
           'inspect-btn','extract-result','apply-extracted','brand','model','category',
           'slogan','claims','specs','benefits','dimensions','price','currency','vat',
@@ -67,3 +67,21 @@ def test_backend_and_downloads_stay_original():
             assert cid in js
         assert 'promoeditor:result' in js
         assert 'promoeditor:cleared' in js
+
+
+def test_dialog_ui_has_distinct_conversation_structure():
+    html=(ROOT/'designs'/'dialog'/'index.html').read_text(encoding='utf-8')
+    css=(ROOT/'designs'/'dialog'/'app.css').read_text(encoding='utf-8')
+    js=(ROOT/'designs'/'dialog'/'app.js').read_text(encoding='utf-8')
+    for section in ('conversation-product','conversation-files','conversation-idea','conversation-style'):
+        assert f'id="{section}"' in html
+    assert 'class="conversation"' in html
+    assert 'class="sidebar"' in html
+    assert 'class="chat-main"' in html
+    assert 'id="advanced-settings"' in html
+    assert "data-prompt=" in html
+    assert "document.querySelectorAll('[data-prompt]')" in js
+    assert 'color-scheme:dark' in css
+    assert '@media(max-width:620px)' in css
+    assert 'id="preview-4x3"' not in html
+    assert '<img ' not in html

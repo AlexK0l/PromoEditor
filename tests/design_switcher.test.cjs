@@ -43,7 +43,7 @@ function harness() {
   const activeResult={zip:'/files/'+('a'.repeat(32))+'/promo_kit.zip',
     images:{'4x3':'/files/abc/poster_4x3.png','9x16':'/files/abc/poster_9x16.png'}};
   const photo={name:'trailer.png',size:17000,type:'image/png'};
-  const contexts={wizard:mockDocument(),studio:mockDocument(),compact:mockDocument({
+  const contexts={wizard:mockDocument(),studio:mockDocument(),dialog:mockDocument(),compact:mockDocument({
     model:{value:'ZubrTrail 500'},slogan:{value:'Легче на 2,5 т'},
     hero:{files:[photo]}, 'use-demo':{checked:false},style:{value:'graphite'}
   })};
@@ -59,7 +59,7 @@ function harness() {
       throw Error('Unknown id '+id);
     }
   };
-  for(const name of ['wizard','studio','compact']){
+  for(const name of ['wizard','studio','compact','dialog']){
     tabs[name]=element('tab-'+name);
     views[name]=element('view-'+name,{hidden:name!=='compact'});
     bridges[name]={
@@ -123,10 +123,26 @@ test('switching is blocked while generation runs, without losing current form',a
 test('DENY-compatible layout loading uses same-origin fetch into srcdoc, not iframe navigation',()=>{
   const html=fs.readFileSync(path.join(__dirname,'../app/static/index.html'),'utf8');
   assert.doesNotMatch(html,/\bsrc="\/static\/designs\//);
-  for(const name of ['wizard','studio','compact']){
+  for(const name of ['wizard','studio','compact','dialog']){
     assert.match(html,new RegExp('data-layout="'+name+'"'));
   }
   assert.match(script,/frame\.srcdoc=markup/);
   assert.match(script,/credentials:'same-origin'/);
   assert.doesNotMatch(script,/target\.addEventListener\('load'/);
+});
+
+
+test('fourth dialog design receives uploaded files, brief and completed result',async()=>{
+  const h=harness();
+  await h.tabs.dialog.emit('click');
+  assert.equal(h.contexts.dialog.fields.model.value,'ZubrTrail 500');
+  assert.equal(h.contexts.dialog.fields.hero.files[0],h.photo);
+  assert.equal(h.bridges.dialog.current,h.activeResult);
+  assert.equal(h.views.dialog.hidden,false);
+  assert.equal(h.views.compact.hidden,true);
+  assert.equal(h.localRecord['promoeditor.design.selection.v1'],'dialog');
+  h.contexts.dialog.fields.model.value='Новая модель';
+  await h.tabs.wizard.emit('click');
+  assert.equal(h.contexts.wizard.fields.model.value,'Новая модель');
+  assert.equal(h.contexts.wizard.fields.hero.files[0],h.photo);
 });
