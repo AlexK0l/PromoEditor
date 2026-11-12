@@ -252,7 +252,7 @@
   // The UI keeps no copies in localStorage.
   function notifyParent(type, currentResult) {
     if (window.parent !== window)
-      window.parent.postMessage({type, result:currentResult||null}, window.location.origin);
+      window.parent.postMessage({type, result:currentResult||null}, window.parent.location.origin);
   }
   window.PromoEditorVariant = {
     busy: () => isBusy,

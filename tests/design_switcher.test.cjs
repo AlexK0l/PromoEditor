@@ -69,7 +69,7 @@ function harness() {
       refresh(){this.refreshCalls++;},
       busy(){return this.busyFlag;}
     };
-    frames[name]={contentDocument:contexts[name],
+    frames[name]={contentDocument:contexts[name],srcdoc:'',
       contentWindow:{PromoEditorVariant:bridges[name]}};
   }
   const localRecord={},handlers={};
@@ -118,4 +118,15 @@ test('switching is blocked while generation runs, without losing current form',a
   assert.equal(h.views.studio.hidden,true);
   assert.match(h.notice.textContent,/Дождитесь/);
   assert.equal(h.contexts.compact.fields.model.value,'ZubrTrail 500');
+});
+
+test('DENY-compatible layout loading uses same-origin fetch into srcdoc, not iframe navigation',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'../app/static/index.html'),'utf8');
+  assert.doesNotMatch(html,/\bsrc="\/static\/designs\//);
+  for(const name of ['wizard','studio','compact']){
+    assert.match(html,new RegExp('data-layout="'+name+'"'));
+  }
+  assert.match(script,/frame\.srcdoc=markup/);
+  assert.match(script,/credentials:'same-origin'/);
+  assert.doesNotMatch(script,/target\.addEventListener\('load'/);
 });
