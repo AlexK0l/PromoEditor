@@ -1,0 +1,68 @@
+name: promoeditor
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ./deploy/app.env
+    environment:
+      PROMO_DATA_DIR: /srv/promoeditor/instance/jobs
+    volumes:
+      - promo_results:/srv/promoeditor/instance/jobs
+    expose:
+      - "8000"
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 2g
+    cpus: 2.0
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file:
+      - ./deploy/caddy.env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  private:
+    driver: bridge
+
+volumes:
+  promo_results:
+  caddy_data:
+  caddy_config:
