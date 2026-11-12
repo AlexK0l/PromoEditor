@@ -87,3 +87,7 @@ node --check app/static/app.js   # при наличии Node.js
 - Нет OCR для сканированных PDF, нет извлечения графики с произвольной страницы, нет авторизации для публичного хостинга.
 - Логотип лучше загружать PNG с прозрачностью. SVG из недоверенных источников намеренно не принимается.
 - Оба файла PNG не являются послойными исходниками. Для полноценного редактирования нужен экспорт PPTX/SVG, который можно добавить следующим этапом.
+
+## Linux VPS (Docker Compose + Caddy HTTPS)
+
+Use the password-protected deployment recipe in [deploy/README_VPS.md](deploy/README_VPS.md). It keeps OpenAI API keys outside Git and uses automatic HTTPS with a domain name.

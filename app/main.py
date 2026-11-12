@@ -31,7 +31,6 @@ try:
 except ImportError:
     pass
 STATIC=BASE/'app'/'static'
-EXAMPLES=BASE/'examples'
 STORAGE=Path(os.getenv('PROMO_DATA_DIR',str(BASE/'instance'/'jobs')))
 STORAGE.mkdir(parents=True,exist_ok=True)
 
@@ -48,7 +47,6 @@ JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
 app.mount('/static',StaticFiles(directory=str(STATIC)),name='static')
-app.mount('/examples',StaticFiles(directory=str(EXAMPLES)),name='examples')
 
 
 @app.get('/')

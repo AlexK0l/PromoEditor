@@ -1,0 +1,28 @@
+# HTTPS is automatic when PROMO_DOMAIN points to this VPS and ports 80/443 are reachable.
+{$PROMO_DOMAIN} {
+    encode gzip zstd
+
+    # FastAPI imposes a 68 MiB total upload limit. Reject oversized bodies at the edge.
+    request_body {
+        max_size 72MB
+    }
+
+    # Access control is mandatory because generating images can incur API charges.
+    basic_auth {
+        {$PROMO_AUTH_USER} {$PROMO_AUTH_HASH}
+    }
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    reverse_proxy app:8000 {
+        transport http {
+            read_timeout 10m
+        }
+    }
+}
