@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#151a23" />
+  <title>Promo Studio — генератор промо-инфографики</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brandmark"><div class="brandicon">P<span>●</span></div><div><strong>PROMO<span class="r">STUDIO</span></strong><small>AI-ИНФОГРАФИКА · B2B</small></div></div>
+  <div class="headright"><span class="topnote">4:3 &nbsp; / &nbsp; 9:16</span><span class="dot" id="api-dot"></span><span id="api-state">Проверка API...</span></div>
+</header>
+<div class="workspace">
+  <aside class="sidebar">
+    <div class="sideintro"><span class="eyebrow">Мастер создания</span><h1>Новый промо-лист</h1><p>Добавьте материалы, заполните данные и получите два готовых формата.</p></div>
+    <div class="steps">
+      <details class="section" open><summary><span class="step">01</span><span>Исходные материалы</span><span class="chevron">⌄</span></summary>
+        <div class="sectioninner">
+          <p class="helper">Поддерживаются PNG, JPG, WEBP. Можно не загружать фото и создать иллюстрацию через OpenAI.</p>
+          <div class="upload-grid">
+            <label class="upload"><span class="uploadicon">▧</span><b>Фото товара</b><small>Основное изображение</small><input id="hero" type="file" accept="image/png,image/jpeg,image/webp"/><em id="file-hero">Выбрать</em></label>
+            <label class="upload"><span class="uploadicon">▣</span><b>Второе фото</b><small>Дополнительный ракурс</small><input id="detail" type="file" accept="image/png,image/jpeg,image/webp"/><em id="file-detail">Выбрать</em></label>
+            <label class="upload"><span class="uploadicon">◎</span><b>Логотип</b><small>Сохраняется оригинал</small><input id="logo" type="file" accept="image/png,image/jpeg,image/webp"/><em id="file-logo">Выбрать</em></label>
+            <label class="upload"><span class="uploadicon">⌗</span><b>Чертёж</b><small>PNG, JPG или PDF</small><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf"/><em id="file-drawing">Выбрать</em></label>
+          </div>
+          <label class="form-label">Референсы оформления <span>до 2 изображений для OpenAI</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp" class="fileline"/></label>
+          <label class="form-label">Документы с данными <span>PDF, DOCX, XLSX, CSV, TXT, MD</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" class="fileline"/></label>
+          <div class="checkline"><input id="parse-ai" type="checkbox"/><label for="parse-ai">AI-анализ документов <small>отдельный платный вызов API</small></label></div>
+          <button type="button" id="inspect-btn" class="btn secondary wide">Извлечь характеристики из файлов</button>
+          <div id="extract-box" class="extract-box" hidden><div class="extract-head"><b>Распознанные данные</b><span>Проверьте перед применением</span></div><div id="extract-summary"></div><textarea id="extract-result" rows="6" readonly></textarea><button type="button" id="apply-extracted" class="btn secondary wide">Применить выбранные ТТХ</button><p class="helper">Извлечение не подтверждает достоверность характеристик.</p></div>
+        </div>
+      </details>
+      <details class="section" open><summary><span class="step">02</span><span>Тексты и характеристики</span><span class="chevron">⌄</span></summary>
+        <div class="sectioninner">
+          <div class="twofields"><label>Бренд<input id="brand" maxlength="70" placeholder="ZUBR TRAIL"/></label><label>Модель<input id="model" maxlength="80" placeholder="ZubrTrail 500"/></label></div>
+          <label>Тип техники / продукта<input id="category" maxlength="100"/></label>
+          <label>Главный рекламный тезис<textarea id="slogan" rows="2" maxlength="250"></textarea></label>
+          <label>4 главных преимущества <span>по одному на строку</span><textarea id="claims" rows="4"></textarea></label>
+          <label>Технические характеристики <span>Формат: Название | Значение</span><textarea id="specs" rows="8" class="mono"></textarea></label>
+          <label>Преимущества <span>до четырёх пунктов на плакате</span><textarea id="benefits" rows="4"></textarea></label>
+          <label>Габариты <span>Название | Значение</span><textarea id="dimensions" rows="3" class="mono"></textarea></label>
+          <div class="twofields"><label>Цена<input id="price" placeholder="229998" inputmode="decimal"/></label><label>Валюта<select id="currency"><option value="Br">Br</option><option value="₽">₽</option><option value="€">€</option><option value="$">$</option><option value="BYN">BYN</option></select></label></div>
+          <div class="checkline compact"><input type="checkbox" id="vat" checked/><label for="vat">Указывать «с НДС»</label></div>
+          <label>Контакты <span>один номер на строку, до двух</span><textarea id="phones" rows="2"></textarea></label>
+        </div>
+      </details>
+      <details class="section"><summary><span class="step">03</span><span>Экономика и расчёт</span><span class="chevron">⌄</span></summary>
+        <div class="sectioninner">
+          <div class="checkline"><input type="checkbox" id="show-roi" checked/><label for="show-roi">Включить блок окупаемости</label></div>
+          <p class="helper">Расчётный сценарий: доп. груз × плечо × ставка × рейсы. Числа не проверяются независимо.</p>
+          <div class="twofields"><label>Доп. груз, т<input id="extra-payload" inputmode="decimal" value="2.5"/></label><label>Плечо, км<input id="distance" inputmode="decimal" value="300"/></label></div>
+          <div class="twofields"><label>Ставка за т/км<input id="rate" inputmode="decimal" value="0.19"/></label><label>Рейсов в год<input id="trips" inputmode="decimal" value="240"/></label></div>
+          <div class="twofields"><label>Горизонт, лет<input id="years" inputmode="decimal" value="5"/></label><label>Цена аналога<input id="baseline-price" inputmode="decimal" value="149499"/></label></div>
+          <div class="formula" id="roi-preview">Заполните данные для расчёта</div>
+        </div>
+      </details>
+      <details class="section"><summary><span class="step">04</span><span>Стиль и OpenAI API</span><span class="chevron">⌄</span></summary>
+        <div class="sectioninner">
+          <label>Визуальный стиль<select id="style"><option value="industrial">Industrial / красный-белый</option><option value="graphite">Graphite / премиальный</option><option value="minimal">Minimal / чистый каталог</option></select></label>
+          <label>Акцентный цвет<div class="colorline"><input type="color" id="accent" value="#e31b26"/><span id="color-label">#E31B26</span></div></label>
+          <label>Дополнительные требования к дизайну<textarea id="design-notes" rows="4" placeholder="Сдержанный B2B-дизайн, крупный продукт, много воздуха..."></textarea></label>
+          <div class="checkline"><input type="checkbox" id="use-openai"/><label for="use-openai">Генерировать визуальные материалы через OpenAI <small>две генерации, тарифицируются отдельно</small></label></div>
+          <div class="twofields"><label>Модель<select id="image-model"><option value="gpt-image-2.5-flare">GPT Image 2.5 Flare</option><option value="gpt-image-2.5-sunburst">GPT Image 2.5 Sunburst</option></select></label><label>Качество<select id="image-quality"><option value="low">Черновик</option><option value="medium" selected>Стандарт</option><option value="high">Высокое</option></select></label></div>
+          <div class="checkline"><input type="checkbox" id="use-demo" checked/><label for="use-demo">Использовать демонстрационное фото, если своё не загружено <small>только в режиме без OpenAI</small></label></div>
+          <p class="tip">OpenAI создаёт фон или иллюстрацию. Все тексты, логотип и цифры добавляются отдельно — без перерисовки AI. Иллюстрации без исходного фото помечаются как AI.</p>
+        </div>
+      </details>
+    </div>
+    <div class="controls"><button id="generate-btn" class="btn primary wide"><span class="spark">✧</span> Создать оба формата</button><button id="reset-btn" class="btn ghost wide">Вернуть демонстрационные данные</button><div id="error-box" class="error" role="alert" hidden></div></div>
+  </aside>
+  <main class="mainarea">
+    <div class="canvasheader"><div><span class="eyebrow">Производственная студия</span><h2>Предпросмотр макетов</h2><p>Два самостоятельных макета под разные пропорции. Растровый PNG готов к публикации.</p></div><div class="head-actions"><span class="confidence">ТТХ требуют проверки</span><button id="download-all" class="btn dark" disabled>Скачать комплект ZIP ↓</button></div></div>
+    <div class="modebanner" id="modebanner"><div class="pulse"></div><div><b>Демо-режим — без расходов на API</b><span>Готовые примеры ниже служат ориентиром. Нажмите «Создать оба формата», чтобы получить собственные PNG.</span></div></div>
+    <div id="loading" class="loading" hidden><div class="loader"></div><div><b>Создание изображений...</b><span>Визуальные материалы обрабатываются отдельно от проверяемого текста.</span></div></div>
+    <div class="previews">
+      <article class="previewcard landscape"><div class="cardtop"><div><span class="ratio">01 / LANDSCAPE</span><h3>Горизонтальный 4:3</h3><p>1440 × 1080 px · PNG</p></div><button class="btn tiny" id="download-4x3" disabled>PNG ↓</button></div><div class="artboard horizontal"><img id="preview-4x3" src="/static/demo_4x3.svg" alt="Пример демонстрационного макета 4 на 3"/><div class="watermark" id="watermark-4x3">ДЕМО</div></div></article>
+      <article class="previewcard portrait"><div class="cardtop"><div><span class="ratio">02 / PORTRAIT</span><h3>Вертикальный 9:16</h3><p>1080 × 1920 px · PNG</p></div><button class="btn tiny" id="download-9x16" disabled>PNG ↓</button></div><div class="artboard vertical"><img id="preview-9x16" src="/static/demo_9x16.svg" alt="Пример демонстрационного макета 9 на 16"/><div class="watermark" id="watermark-9x16">ДЕМО</div></div></article>
+    </div>
+    <div class="infotiles"><div><span class="tinyicon">▤</span><div><b>Исходные факты</b><p>Характеристики и цены всегда из подтверждённых пользователем полей.</p></div></div><div><span class="tinyicon">◈</span><div><b>Безопасность бренда</b><p>Логотип и исходное фото в стандартном режиме не заменяются моделью.</p></div></div><div><span class="tinyicon">⬡</span><div><b>Два исходных размера</b><p>Отдельная композиция для сайта, презентации, сторис и мессенджеров.</p></div></div></div>
+    <footer class="footnote">PROMO STUDIO · Local-first · OpenAI API · Перед коммерческим использованием проверьте паспортные ТТХ, права на фото и заявления о выгоде.</footer>
+  </main>
+</div>
+<script src="/static/app.js" defer></script>
+</body>
+</html>
