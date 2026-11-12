@@ -1,4 +1,4 @@
-"""UI contract: one-page composer, optional advanced settings, no poster preview."""
+"""User-oriented browser UI contract: a compact composer, not a wizard."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,20 +7,18 @@ JS = (ROOT / 'app/static/app.js').read_text(encoding='utf-8')
 CSS = (ROOT / 'app/static/app.css').read_text(encoding='utf-8')
 
 
-def test_one_page_composer_without_forced_wizard():
+def test_compact_composer_is_default():
+    assert 'class="composer"' in HTML
     assert 'id="hero-drop"' in HTML
-    assert 'id="advanced-settings"' in HTML
-    assert 'id="generate-btn"' in HTML
-    assert 'id="error-box"' in HTML
-    assert 'id="loading"' in HTML
-    assert 'id="modebanner"' in HTML
-    assert 'data-go-step' not in HTML
+    for element_id in ('model','slogan','design-notes','generate-btn','error-box','modebanner','loading'):
+        assert f'id="{element_id}"' in HTML
+    assert '<details id="advanced-settings" class="advanced">' in HTML
+    assert 'data-go-step=' not in HTML
     assert 'id="step-1"' not in HTML
-    assert 'next-btn' not in JS
     assert 'setStep(' not in JS
 
 
-def test_required_api_contract_ids_preserved():
+def test_backend_contract_fields_still_exist():
     controls = [
         'hero','detail','logo','drawing','references','documents','parse-ai',
         'inspect-btn','extract-result','apply-extracted','brand','model','category',
@@ -35,34 +33,39 @@ def test_required_api_contract_ids_preserved():
     assert 'formBrief()' in JS
 
 
-def test_optional_settings_and_file_access():
-    assert '<details id="advanced-settings"' in HTML
+def test_accessibility_and_responsive_uploads():
+    assert 'aria-label="Основное фото товара"' in HTML
+    assert 'aria-live="polite"' in HTML
     assert 'data-style="industrial"' in HTML
     assert 'data-style="graphite"' in HTML
     assert 'data-style="minimal"' in HTML
     assert "addEventListener('drop'" in JS
     assert 'new DataTransfer()' in JS
     assert 'validateFiles()' in JS
-    assert 'max-width:600px' in CSS.replace(' ','')
+    assert '@media (max-width:700px)' in CSS
+    assert '@media (max-width:460px)' in CSS
     assert 'prefers-reduced-motion:reduce' in CSS
     assert '[hidden]{display:none!important}' in CSS
 
 
-def test_no_layout_previews_download_after_generation():
-    assert 'id="preview-4x3"' not in HTML
-    assert 'id="preview-9x16"' not in HTML
+def test_downloads_only_after_generation_and_never_preview():
     assert '<img ' not in HTML
+    for field in ('preview-4x3','preview-9x16'):
+        assert f'id="{field}"' not in HTML
+        assert field not in JS
     for element in ('download-panel','download-all','download-4x3','download-9x16'):
         assert f'id="{element}"' in HTML
     assert 'id="download-panel" class="download-panel" hidden' in HTML
     assert "$('download-panel').hidden=false;" in JS
     assert "$('download-panel').hidden=true;" in JS
-    assert "latest=null;" in JS
-    assert 'preview-4x3' not in JS
+    assert 'latest=null;' in JS
 
 
-def test_api_and_demo_are_explicit_opt_in():
+def test_demo_and_billable_api_must_be_opted_into():
     assert 'async function resetDemo()' in JS
     assert 'resetDemo();' not in JS.split('async function init()',1)[1]
-    assert 'if(checked(\'use-openai\')&&!apiReady)' in JS
-    assert '2 платных запроса' in HTML
+    assert "$('use-openai').disabled=!apiReady" in JS
+    assert "if(checked('use-openai')&&!apiReady)" in JS
+    assert 'Два платных запроса' in HTML
+    assert 'if(!get(\'model\').trim())' in JS
+    assert 'if(!checked(\'use-openai\')&&!$(\'hero\').files.length&&!checked(\'use-demo\'))' in JS
