@@ -153,3 +153,19 @@ def test_fake_openai_generates_two_visuals(monkeypatch):
     assert api.images.calls[0][1]['size']=='1536x1024'
     assert api.images.calls[1][1]['size']=='1024x1536'
     assert all('logo' in x[1]['prompt'] for x in api.images.calls)
+
+
+def test_editor_without_layout_previews_keeps_downloads():
+    html=client.get('/').text
+    assert 'Предпросмотр макетов' not in html
+    assert 'id="preview-4x3"' not in html
+    assert 'id="preview-9x16"' not in html
+    assert 'demo_4x3.svg' not in html
+    assert 'demo_9x16.svg' not in html
+    for element_id in ('download-panel','download-4x3','download-9x16','download-all','generate-btn','modebanner'):
+        assert f'id="{element_id}"' in html
+    js=client.get('/static/app.js').text
+    assert "$('download-panel').hidden=false;" in js
+    assert "$('download-panel').hidden=true;" in js
+    assert 'preview-4x3' not in js
+    assert 'preview-9x16' not in js

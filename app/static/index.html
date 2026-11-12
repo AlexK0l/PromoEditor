@@ -70,16 +70,24 @@
     </div>
     <div class="controls"><button id="generate-btn" class="btn primary wide"><span class="spark">✧</span> Создать оба формата</button><button id="reset-btn" class="btn ghost wide">Вернуть демонстрационные данные</button><div id="error-box" class="error" role="alert" hidden></div></div>
   </aside>
-  <main class="mainarea">
-    <div class="canvasheader"><div><span class="eyebrow">Производственная студия</span><h2>Предпросмотр макетов</h2><p>Два самостоятельных макета под разные пропорции. Растровый PNG готов к публикации.</p></div><div class="head-actions"><span class="confidence">ТТХ требуют проверки</span><button id="download-all" class="btn dark" disabled>Скачать комплект ZIP ↓</button></div></div>
-    <div class="modebanner" id="modebanner"><div class="pulse"></div><div><b>Демо-режим — без расходов на API</b><span>Готовые примеры ниже служат ориентиром. Нажмите «Создать оба формата», чтобы получить собственные PNG.</span></div></div>
-    <div id="loading" class="loading" hidden><div class="loader"></div><div><b>Создание изображений...</b><span>Визуальные материалы обрабатываются отдельно от проверяемого текста.</span></div></div>
-    <div class="previews">
-      <article class="previewcard landscape"><div class="cardtop"><div><span class="ratio">01 / LANDSCAPE</span><h3>Горизонтальный 4:3</h3><p>1440 × 1080 px · PNG</p></div><button class="btn tiny" id="download-4x3" disabled>PNG ↓</button></div><div class="artboard horizontal"><img id="preview-4x3" src="/static/demo_4x3.svg" alt="Пример демонстрационного макета 4 на 3"/><div class="watermark" id="watermark-4x3">ДЕМО</div></div></article>
-      <article class="previewcard portrait"><div class="cardtop"><div><span class="ratio">02 / PORTRAIT</span><h3>Вертикальный 9:16</h3><p>1080 × 1920 px · PNG</p></div><button class="btn tiny" id="download-9x16" disabled>PNG ↓</button></div><div class="artboard vertical"><img id="preview-9x16" src="/static/demo_9x16.svg" alt="Пример демонстрационного макета 9 на 16"/><div class="watermark" id="watermark-9x16">ДЕМО</div></div></article>
+  <main class="mainarea" aria-label="Результат генерации">
+    <div class="canvasheader">
+      <div><span class="eyebrow">Результат</span><h2>Готовые файлы</h2><p>Сгенерированные изображения доступны для скачивания в двух форматах.</p></div>
+      <span class="confidence">Проверяйте ТТХ перед публикацией</span>
     </div>
-    <div class="infotiles"><div><span class="tinyicon">▤</span><div><b>Исходные факты</b><p>Характеристики и цены всегда из подтверждённых пользователем полей.</p></div></div><div><span class="tinyicon">◈</span><div><b>Безопасность бренда</b><p>Логотип и исходное фото в стандартном режиме не заменяются моделью.</p></div></div><div><span class="tinyicon">⬡</span><div><b>Два исходных размера</b><p>Отдельная композиция для сайта, презентации, сторис и мессенджеров.</p></div></div></div>
-    <footer class="footnote">PROMO STUDIO · Local-first · OpenAI API · Перед коммерческим использованием проверьте паспортные ТТХ, права на фото и заявления о выгоде.</footer>
+    <div class="modebanner" id="modebanner" role="status" aria-live="polite">
+      <div class="pulse"></div><div><b>Демо-режим — без расходов на API</b><span>Заполните форму и нажмите «Создать оба формата». Ссылки для скачивания появятся здесь.</span></div>
+    </div>
+    <div id="loading" class="loading" hidden role="status"><div class="loader"></div><div><b>Создание изображений...</b><span>Оба PNG формируются на сервере.</span></div></div>
+    <section id="download-panel" class="download-panel" hidden aria-label="Скачать созданные материалы">
+      <div class="download-panel-heading"><b>Материалы готовы</b><span>PNG в оригинальном разрешении и ZIP-комплект</span></div>
+      <div class="download-grid">
+        <button type="button" id="download-4x3" class="btn download-item" disabled><b>4:3 · PNG</b><small>1440 × 1080 px</small><span>Скачать ↓</span></button>
+        <button type="button" id="download-9x16" class="btn download-item" disabled><b>9:16 · PNG</b><small>1080 × 1920 px</small><span>Скачать ↓</span></button>
+        <button type="button" id="download-all" class="btn download-item all" disabled><b>Оба формата · ZIP</b><small>2 PNG + JSON-бриф</small><span>Скачать ↓</span></button>
+      </div>
+    </section>
+    <footer class="footnote">PROMO STUDIO · OpenAI API · Перед коммерческим использованием проверьте паспортные ТТХ, права на фото и заявления о выгоде.</footer>
   </main>
 </div>
 <script src="/static/app.js" defer></script>
