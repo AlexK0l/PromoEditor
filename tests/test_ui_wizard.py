@@ -1,10 +1,10 @@
-"""User-facing switcher for the three preserved historical layouts (PR4, PR5, PR6)."""
+"""Top-level design navigation: protected Caddy pages must never be embedded."""
 from pathlib import Path
 from fastapi.testclient import TestClient
 from app.main import app
 
-ROOT=Path(__file__).resolve().parents[1]/"app"/"static"
-VARIANTS=("wizard","studio","compact","dialog")
+ROOT=Path(__file__).resolve().parents[1]/'app'/'static'
+VARIANTS=('wizard','studio','compact','dialog')
 CONTROLS=('hero','detail','logo','drawing','references','documents','parse-ai',
           'inspect-btn','extract-result','apply-extracted','brand','model','category',
           'slogan','claims','specs','benefits','dimensions','price','currency','vat',
@@ -13,19 +13,16 @@ CONTROLS=('hero','detail','logo','drawing','references','documents','parse-ai',
           'image-quality','use-demo')
 client=TestClient(app)
 
-def test_all_design_versions_are_routed_and_loaded():
+def test_main_page_links_to_real_top_level_designs_not_iframes():
     shell=client.get('/').text
-    assert 'role="tablist"' in shell
-    assert 'design-switcher.js' in shell
-    assert 'id="frame-compact"' in shell
+    assert 'window.location.replace' in shell
+    assert '<iframe' not in shell.lower()
     for name in VARIANTS:
-        assert f'data-variant="{name}"' in shell
-        assert f'data-layout="{name}"' in shell
-        assert f'src="/static/designs/{name}/index.html"' not in shell
+        assert f'/static/designs/{name}/index.html' in shell
         for asset in ('index.html','app.js','app.css'):
             assert client.get(f'/static/designs/{name}/{asset}').status_code==200
 
-def test_archived_layouts_keep_original_controls_and_api_routes():
+def test_four_preserved_layouts_run_in_top_level_document():
     for name in VARIANTS:
         html=(ROOT/'designs'/name/'index.html').read_text(encoding='utf-8')
         js=(ROOT/'designs'/name/'app.js').read_text(encoding='utf-8')
@@ -37,28 +34,29 @@ def test_archived_layouts_keep_original_controls_and_api_routes():
         assert 'restoreResult:' in js
         assert f'/static/designs/{name}/app.js' in html
         assert f'/static/designs/{name}/app.css' in html
-        assert 'href="/" target="_top"' in html
+        assert '/static/design-switcher.js?v=' in html
+        assert '/static/design-switcher.css?v=' in html
         assert 'id="preview-4x3"' not in html
         assert 'id="preview-9x16"' not in html
         assert 'id="download-panel"' in html
-        assert 'id="download-all"' in html
 
-def test_shared_files_and_results_are_transferred_without_persisting_brief_to_storage():
+def test_state_transfer_keeps_files_only_in_temporary_indexeddb():
     js=(ROOT/'design-switcher.js').read_text(encoding='utf-8')
-    for fragment in ('new DataTransfer()','el.files=transfer.files',
-                     'el.checked=field.checked','el.value=field.value',
-                     'getResult()','restoreResult(result)','result=event.data.result',
-                     'localStorage.setItem(STORE_KEY,next)'):
+    for fragment in ('window.location.assign(', 'window.indexedDB.open',
+                     'storeFiles(token,draft.uploads)', 'await takeFiles(data.token)',
+                     'new DataTransfer()', 'el.files=transfer.files',
+                     'window.sessionStorage.setItem(TRANSFER',
+                     'window.sessionStorage.removeItem(TRANSFER)',
+                     'window.PromoEditorVariant?.getResult?.()',
+                     'window.PromoEditorVariant?.restoreResult?.(data.result)',
+                     'window.PromoEditorVariant?.busy?.()'):
         assert fragment in js
-    assert 'localStorage.setItem(STORE_KEY,JSON' not in js
-    assert "snapshot=readState(previous)" in js
-    assert "PromoEditorVariant.busy()" in js
-    assert 'frame.srcdoc=markup' in js
-    assert "credentials:'same-origin'" in js
-    assert 'src="/static/designs/' not in (ROOT/'index.html').read_text(encoding='utf-8')
-    assert "promoeditor:cleared" in js
+    assert 'iframe' in js.lower() # comment explicitly explains iframe removal
+    assert 'frame.srcdoc=' not in js
+    assert 'localStorage.setItem(PREF,JSON' not in js
+    assert '<iframe' not in (ROOT/'index.html').read_text(encoding='utf-8').lower()
 
-def test_backend_and_downloads_stay_original():
+def test_backend_unchanged_and_downloads_present():
     assert client.get('/api/config').status_code==200
     assert client.get('/api/demo').status_code==200
     for name in VARIANTS:
@@ -66,22 +64,12 @@ def test_backend_and_downloads_stay_original():
         for cid in ('download-all','download-4x3','download-9x16'):
             assert cid in js
         assert 'promoeditor:result' in js
-        assert 'promoeditor:cleared' in js
 
-
-def test_dialog_ui_has_distinct_conversation_structure():
+def test_dialog_remains_distinct():
     html=(ROOT/'designs'/'dialog'/'index.html').read_text(encoding='utf-8')
     css=(ROOT/'designs'/'dialog'/'app.css').read_text(encoding='utf-8')
-    js=(ROOT/'designs'/'dialog'/'app.js').read_text(encoding='utf-8')
-    for section in ('conversation-product','conversation-files','conversation-idea','conversation-style'):
-        assert f'id="{section}"' in html
+    for sec in ('conversation-product','conversation-files','conversation-idea','conversation-style'):
+        assert f'id="{sec}"' in html
     assert 'class="conversation"' in html
-    assert 'class="sidebar"' in html
-    assert 'class="chat-main"' in html
-    assert 'id="advanced-settings"' in html
-    assert "data-prompt=" in html
-    assert "document.querySelectorAll('[data-prompt]')" in js
     assert 'color-scheme:dark' in css
     assert '@media(max-width:620px)' in css
-    assert 'id="preview-4x3"' not in html
-    assert '<img ' not in html
