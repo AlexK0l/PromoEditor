@@ -28,6 +28,15 @@ jobs:
           cp deploy/app.env.example deploy/app.env
           cp deploy/caddy.env.example deploy/caddy.env
           docker compose -f compose.vps.yaml config --quiet
+      - name: Validate Caddyfile with a disposable test password
+        run: |
+          hash="$(docker run --rm caddy:2.10.2-alpine caddy hash-password --plaintext ci-test-only)"
+          {
+            echo 'PROMO_DOMAIN=promo.example.test'
+            echo 'PROMO_AUTH_USER=ci'
+            printf "PROMO_AUTH_HASH='%s'\n" "$hash"
+          } > deploy/caddy.env
+          docker compose -f compose.vps.yaml run --rm --no-deps --entrypoint caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Build production container
         run: docker build --pull -t promoeditor:ci .
       - name: Smoke test private application port
