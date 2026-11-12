@@ -1,33 +1,27 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f6f7f9">
-  <meta name="description" content="PromoEditor: выбор из трёх вариантов интерфейса для создания PNG 4:3 и 9:16.">
-  <title>PromoEditor — выберите удобный интерфейс</title>
-  <link rel="stylesheet" href="/static/design-switcher.css">
-  <script src="/static/design-switcher.js" defer></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PromoEditor — открываем редактор</title>
+<meta name="robots" content="noindex">
+<script>
+(() => {
+ const variants=['wizard','studio','compact','dialog'];
+ let chosen='compact';
+ try {const saved=localStorage.getItem('promoeditor.design.selection.v1');if(variants.includes(saved))chosen=saved;}catch(err){}
+ window.location.replace('/static/designs/'+chosen+'/index.html');
+})();
+</script>
 </head>
-<body>
-  <div class="app-shell">
-    <header class="design-bar">
-      <div class="bar-brand"><span class="brand-icon" aria-hidden="true">P</span><span><strong>PromoEditor</strong><small>Выберите удобный вид редактора</small></span></div>
-      <div class="switcher" role="tablist" aria-label="Варианты оформления интерфейса">
-        <button type="button" class="design-tab" role="tab" data-variant="wizard" id="tab-wizard" aria-controls="view-wizard" aria-selected="false"><span class="tab-icon" aria-hidden="true">①</span><span><strong>По шагам</strong><small>Мастер · версия 4</small></span></button>
-        <button type="button" class="design-tab" role="tab" data-variant="studio" id="tab-studio" aria-controls="view-studio" aria-selected="false"><span class="tab-icon" aria-hidden="true">▦</span><span><strong>Студия</strong><small>Карточки · версия 5</small></span></button>
-        <button type="button" class="design-tab" role="tab" data-variant="compact" id="tab-compact" aria-controls="view-compact" aria-selected="true"><span class="tab-icon" aria-hidden="true">≡</span><span><strong>Компактный</strong><small>Простая форма · версия 6</small></span></button>
-        <button type="button" class="design-tab" role="tab" data-variant="dialog" id="tab-dialog" aria-controls="view-dialog" aria-selected="false"><span class="tab-icon" aria-hidden="true">✦</span><span><strong>Диалог</strong><small>AI-бриф · новый</small></span></button>
-      </div>
-      <span class="bar-assist" title="При смене вида введённые данные и файлы сохраняются в открытой вкладке"><span aria-hidden="true">✓</span> Поля сохраняются при переключении</span>
-    </header>
-    <div id="switch-notice" class="notice" role="status" aria-live="polite" hidden></div>
-    <main id="design-pages">
-      <section id="view-wizard" class="design-view" role="tabpanel" aria-labelledby="tab-wizard" hidden><iframe id="frame-wizard" title="Дизайн «По шагам»" data-layout="wizard"></iframe></section>
-      <section id="view-studio" class="design-view" role="tabpanel" aria-labelledby="tab-studio" hidden><iframe id="frame-studio" title="Дизайн «Студия»" data-layout="studio"></iframe></section>
-      <section id="view-compact" class="design-view" role="tabpanel" aria-labelledby="tab-compact"><iframe id="frame-compact" title="Дизайн «Компактный»" data-layout="compact"></iframe></section>
-      <section id="view-dialog" class="design-view" role="tabpanel" aria-labelledby="tab-dialog" hidden><iframe id="frame-dialog" title="Дизайн «Диалог»" data-layout="dialog"></iframe></section>
-    </main>
-  </div>
+<body style="font:16px system-ui,sans-serif;max-width:640px;margin:70px auto;padding:20px;">
+<h1>PromoEditor</h1>
+<p>Открываем последний выбранный интерфейс. Если автоматический переход не произошёл, выберите вариант:</p>
+<nav aria-label="Варианты интерфейса">
+<a href="/static/designs/wizard/index.html">По шагам</a> ·
+<a href="/static/designs/studio/index.html">Студия</a> ·
+<a href="/static/designs/compact/index.html">Компактный</a> ·
+<a href="/static/designs/dialog/index.html">Диалог</a>
+</nav>
 </body>
 </html>

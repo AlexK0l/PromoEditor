@@ -3,146 +3,83 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
+const script=fs.readFileSync(path.join(__dirname,'../app/static/design-switcher.js'),'utf8');
+const all=['wizard','studio','compact','dialog'];
 
-const script = fs.readFileSync(path.join(__dirname, '../app/static/design-switcher.js'),'utf8');
-
-function element(id, props={}) {
-  const listeners={};
-  return {
-    id, type:'text', value:'', checked:false, files:[], hidden:false, open:false,
-    tabIndex:0, listeners,
-    ...props,
-    addEventListener(kind,fn){ (listeners[kind] ||= []).push(fn); },
-    setAttribute(name,value){ (this.attributes ||= {})[name]=value; },
-    focus(){},
-    async emit(kind,payload={}) {
-      for(const callback of listeners[kind]||[])await callback(payload);
-    }
-  };
+function harness(opts={}){
+ const handlers={},links={};
+ const files=opts.files===false?[]:[{name:'trailer.png',size:5000}];
+ const controls={
+   model:{id:'model',type:'text',value:'ZubrTrail 500'},
+   slogan:{id:'slogan',type:'textarea',value:'Больше груза'},
+   'use-demo':{id:'use-demo',type:'checkbox',checked:false},
+   style:{id:'style',type:'select-one',value:'graphite'},
+   hero:{id:'hero',type:'file',files}
+ };
+ const draftStore=opts.draftStore||{};
+ const persisted=opts.persisted||{};
+ const result={zip:'/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/promo_kit.zip',images:{'4x3':'/files/aaaa/poster_4x3.png'}};
+ const bridge={busy:()=>Boolean(opts.busy),getResult:()=>result,refresh:()=>{bridge.refreshed=true;},
+   restoreResult:data=>{bridge.restored=data;}};
+ const nav={
+   id:'pe-switchbar',listeners:{},
+   setAttribute(){},
+   set innerHTML(html){this.html=html;},
+   querySelectorAll(sel){
+     assert.equal(sel,'[data-variant]');
+     return all.map(name=>({dataset:{variant:name},addEventListener(k,fn){handlers[name]=fn;}}));
+   }
+ };
+ const message={setAttribute(){},classList:{toggle(){}}};
+ const body={firstChild:{},insertBefore(node){assert.equal(node,nav)},appendChild(node){assert.equal(node,message)}};
+ const document={
+   body,
+   createElement(tag){return tag==='header'?nav:message;},
+   querySelectorAll(){return Object.values(controls);},
+   getElementById(id){return controls[id]||null;}
+ };
+ const location={pathname:'/static/designs/'+(opts.variant||'compact')+'/index.html',
+   assign(url){location.target=url;}};
+ const window={location,PromoEditorVariant:bridge,
+   crypto:{randomUUID:()=> 'test-token'},
+   localStorage:{getItem:key=>persisted[key]||null,setItem:(key,val)=>{persisted[key]=val;}},
+   sessionStorage:{getItem:key=>draftStore[key]||null,setItem:(key,val)=>{draftStore[key]=val;},
+    removeItem:key=>{delete draftStore[key];}},
+   indexedDB:opts.indexedDB||null};
+ const ctx={window,document,location,DataTransfer:class{constructor(){this.files=[];this.items={add:f=>this.files.push(f)};}},
+   console,Date,Math,setTimeout,clearTimeout};
+ vm.runInNewContext(script,ctx);
+ return {handlers,window,location,controls,bridge,nav,files,draftStore,persisted};
 }
-
-function mockDocument(initial={}) {
-  const fields={
-    brand:element('brand'), model:element('model'), slogan:element('slogan'),
-    specs:element('specs'), 'use-openai':element('use-openai',{type:'checkbox'}),
-    'use-demo':element('use-demo',{type:'checkbox',checked:true}),
-    hero:element('hero',{type:'file'}), documents:element('documents',{type:'file'}),
-    style:element('style',{value:'industrial'})
-  };
-  for(const [key,vals] of Object.entries(initial)){
-    Object.assign(fields[key],vals);
-  }
-  const more={ 'advanced-settings':element('advanced-settings'), 'extract-box':element('extract-box',{hidden:true}) };
-  return {
-    fields,
-    getElementById(id){return fields[id]||more[id]||null;},
-    querySelectorAll(){return Object.values(fields);}
-  };
-}
-function harness() {
-  const activeResult={zip:'/files/'+('a'.repeat(32))+'/promo_kit.zip',
-    images:{'4x3':'/files/abc/poster_4x3.png','9x16':'/files/abc/poster_9x16.png'}};
-  const photo={name:'trailer.png',size:17000,type:'image/png'};
-  const contexts={wizard:mockDocument(),studio:mockDocument(),dialog:mockDocument(),compact:mockDocument({
-    model:{value:'ZubrTrail 500'},slogan:{value:'Легче на 2,5 т'},
-    hero:{files:[photo]}, 'use-demo':{checked:false},style:{value:'graphite'}
-  })};
-  const bridges={};
-  const tabs={},frames={},views={};
-  const notice=element('switch-notice',{hidden:true});
-  const document={
-    getElementById(id){
-      if(id==='switch-notice')return notice;
-      if(id.startsWith('tab-'))return tabs[id.slice(4)];
-      if(id.startsWith('frame-'))return frames[id.slice(6)];
-      if(id.startsWith('view-'))return views[id.slice(5)];
-      throw Error('Unknown id '+id);
-    }
-  };
-  for(const name of ['wizard','studio','compact','dialog']){
-    tabs[name]=element('tab-'+name);
-    views[name]=element('view-'+name,{hidden:name!=='compact'});
-    bridges[name]={
-      current:name==='compact'?activeResult:null, busyFlag:false, refreshCalls:0,
-      getResult(){return this.current;},
-      restoreResult(data){this.current=data;},
-      refresh(){this.refreshCalls++;},
-      busy(){return this.busyFlag;}
-    };
-    frames[name]={contentDocument:contexts[name],srcdoc:'',
-      contentWindow:{PromoEditorVariant:bridges[name]}};
-  }
-  const localRecord={},handlers={};
-  const window={location:{origin:'https://promo.example.com'},
-    addEventListener(kind,fn){handlers[kind]=fn;}};
-  class DataTransfer {
-    constructor(){
-      this.files=[];
-      this.items={add:file=>this.files.push(file)};
-    }
-  }
-  const localStorage={
-    getItem:key=>localRecord[key]||null,
-    setItem:(key,value)=>{localRecord[key]=value;}
-  };
-  vm.runInNewContext(script,{window,document,localStorage,DataTransfer,
-    setTimeout,clearTimeout,console});
-  return {tabs,views,bridges,contexts,photo,activeResult,localRecord,notice,handlers,frames};
-}
-
-test('switcher moves texts, checkboxes, styles, uploaded file objects and existing result', async()=>{
-  const h=harness();
-  await h.tabs.wizard.emit('click');
-  assert.equal(h.contexts.wizard.fields.model.value,'ZubrTrail 500');
-  assert.equal(h.contexts.wizard.fields.slogan.value,'Легче на 2,5 т');
-  assert.equal(h.contexts.wizard.fields['use-demo'].checked,false);
-  assert.equal(h.contexts.wizard.fields.style.value,'graphite');
-  assert.equal(h.contexts.wizard.fields.hero.files[0],h.photo);
-  assert.equal(h.bridges.wizard.current,h.activeResult);
-  assert.equal(h.views.wizard.hidden,false);
-  assert.equal(h.views.compact.hidden,true);
-  assert.equal(h.localRecord['promoeditor.design.selection.v1'],'wizard');
-  h.contexts.wizard.fields.model.value='Отредактированная модель';
-  await h.tabs.studio.emit('click');
-  assert.equal(h.contexts.studio.fields.model.value,'Отредактированная модель');
-  assert.equal(h.contexts.studio.fields.hero.files[0],h.photo);
-  assert.equal(h.bridges.studio.current,h.activeResult);
-  assert.equal(h.bridges.studio.refreshCalls,1);
+test('real top-level paths only, no iframe or srcdoc',()=>{
+ const root=fs.readFileSync(path.join(__dirname,'../app/static/index.html'),'utf8');
+ assert.doesNotMatch(root,/<iframe\b/i);
+ assert.doesNotMatch(script,/frame\.srcdoc=/);
+ for(const variant of all){
+  const html=fs.readFileSync(path.join(__dirname,'../app/static/designs/'+variant+'/index.html'),'utf8');
+  assert.match(html, /design-switcher\.js\?v=/);
+  assert.match(html, /design-switcher\.css\?v=/);
+ }
 });
-
-test('switching is blocked while generation runs, without losing current form',async()=>{
-  const h=harness();
-  h.bridges.compact.busyFlag=true;
-  await h.tabs.studio.emit('click');
-  assert.equal(h.views.compact.hidden,false);
-  assert.equal(h.views.studio.hidden,true);
-  assert.match(h.notice.textContent,/Дождитесь/);
-  assert.equal(h.contexts.compact.fields.model.value,'ZubrTrail 500');
+test('navigation transfers scalar fields and result via sessionStorage',async()=>{
+ const h=harness({files:false});
+ await h.handlers.dialog({preventDefault(){}});
+ assert.equal(h.location.target,'/static/designs/dialog/index.html');
+ const transfer=JSON.parse(h.draftStore['promoeditor.ui.transfer.v2']);
+ assert.equal(transfer.fields.model.value,'ZubrTrail 500');
+ assert.equal(transfer.fields['use-demo'].checked,false);
+ assert.equal(transfer.result.zip,'/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/promo_kit.zip');
+ assert.equal(h.persisted['promoeditor.design.selection.v1'],'dialog');
 });
-
-test('DENY-compatible layout loading uses same-origin fetch into srcdoc, not iframe navigation',()=>{
-  const html=fs.readFileSync(path.join(__dirname,'../app/static/index.html'),'utf8');
-  assert.doesNotMatch(html,/\bsrc="\/static\/designs\//);
-  for(const name of ['wizard','studio','compact','dialog']){
-    assert.match(html,new RegExp('data-layout="'+name+'"'));
-  }
-  assert.match(script,/frame\.srcdoc=markup/);
-  assert.match(script,/credentials:'same-origin'/);
-  assert.doesNotMatch(script,/target\.addEventListener\('load'/);
+test('switch is blocked while creation is active',async()=>{
+ const h=harness({files:false,busy:true});
+ await h.handlers.dialog({preventDefault(){}});
+ assert.equal(h.location.target,undefined);
+ assert.equal(h.controls.model.value,'ZubrTrail 500');
 });
-
-
-test('fourth dialog design receives uploaded files, brief and completed result',async()=>{
-  const h=harness();
-  await h.tabs.dialog.emit('click');
-  assert.equal(h.contexts.dialog.fields.model.value,'ZubrTrail 500');
-  assert.equal(h.contexts.dialog.fields.hero.files[0],h.photo);
-  assert.equal(h.bridges.dialog.current,h.activeResult);
-  assert.equal(h.views.dialog.hidden,false);
-  assert.equal(h.views.compact.hidden,true);
-  assert.equal(h.localRecord['promoeditor.design.selection.v1'],'dialog');
-  h.contexts.dialog.fields.model.value='Новая модель';
-  await h.tabs.wizard.emit('click');
-  assert.equal(h.contexts.wizard.fields.model.value,'Новая модель');
-  assert.equal(h.contexts.wizard.fields.hero.files[0],h.photo);
+test('top-level switch refuses to silently discard files when IndexedDB unavailable',async()=>{
+ const h=harness({files:[{name:'product.png',size:1200}]});
+ await h.handlers.wizard({preventDefault(){}});
+ assert.equal(h.location.target,undefined);
+ assert.equal(h.draftStore['promoeditor.ui.transfer.v2'],undefined);
 });
