@@ -79,9 +79,7 @@
       const response=await fetch('/api/generate',{method:'POST',body:fd});
       if (!response.ok) throw new Error(await parseError(response));
       latest=await response.json();
-      $('preview-4x3').src=latest.images['4x3']+'?v='+Date.now();
-      $('preview-9x16').src=latest.images['9x16']+'?v='+Date.now();
-      ['watermark-4x3','watermark-9x16'].forEach(id => $(id).hidden=true);
+      $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16'].forEach(id => $(id).disabled=false);
       $('modebanner').querySelector('b').textContent=latest.ai_used ? 'Готово: AI-визуалы и точная верстка' : 'Готово: оба PNG созданы локально';
       $('modebanner').querySelector('span').textContent=`Результат: 1440×1080 и 1080×1920. ${latest.warnings.join(' ')}`;
@@ -120,11 +118,10 @@
       for (const id of ['hero','detail','logo','drawing','references','documents']) {$(id).value='';}
       for (const id of ['hero','detail','logo','drawing']) {$('file-'+id).textContent='Выбрать';}
       $('extract-box').hidden=true;latest=null;
-      $('preview-4x3').src=d.reference_4x3;$('preview-9x16').src=d.reference_9x16;
-      $('watermark-4x3').hidden=false;$('watermark-9x16').hidden=false;
+      $('download-panel').hidden=true;
       ['download-all','download-4x3','download-9x16'].forEach(id=>$(id).disabled=true);
       $('modebanner').querySelector('b').textContent='Демо-режим — без расходов на API';
-      $('modebanner').querySelector('span').textContent='Готовые примеры ниже служат ориентиром. Нажмите «Создать оба формата», чтобы получить собственные PNG.';
+      $('modebanner').querySelector('span').textContent='Заполните форму и нажмите «Создать оба формата». Ссылки для скачивания появятся здесь.';
     } catch (e) {showError(e.message);}
   }
 
