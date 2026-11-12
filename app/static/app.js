@@ -3,6 +3,58 @@
   let latest = null;
   let extractedPairs = [];
   let apiReady = false;
+  let currentStep = 1;
+  let isBusy = false;
+  const stepCount = 3;
+  function setStep(next, {moveFocus = true} = {}) {
+    if (isBusy) return;
+    currentStep = Math.min(stepCount, Math.max(1, next));
+    for (let i=1; i<=stepCount; i++) {
+      $('step-'+i).hidden = i !== currentStep;
+    }
+    document.querySelectorAll('[data-go-step]').forEach(button => {
+      const n = Number(button.dataset.goStep);
+      button.classList.toggle('is-active', n === currentStep);
+      button.classList.toggle('is-done', n < currentStep);
+      if (n === currentStep) button.setAttribute('aria-current','step');
+      else button.removeAttribute('aria-current');
+    });
+    $('progress-fill').style.width = (currentStep / stepCount * 100) + '%';
+    $('back-btn').hidden = currentStep === 1;
+    $('next-btn').hidden = currentStep === stepCount;
+    $('generate-btn').hidden = currentStep !== stepCount;
+    $('step-counter').textContent = `Шаг ${currentStep} из ${stepCount}`;
+    clearError();
+    if (moveFocus) {
+      const h = $('title-step-'+currentStep);
+      h.setAttribute('tabindex','-1');
+      h.focus({preventScroll:true});
+      document.querySelector('.editor').scrollIntoView({behavior:'smooth', block:'start'});
+    }
+  }
+  function updateFileLabels() {
+    for (const id of ['hero','detail','logo','drawing']) {
+      const input = $(id);
+      const file = input.files[0];
+      $('file-'+id).textContent = file ? file.name : 'Выбрать файл';
+      input.closest('.upload-card').classList.toggle('has-file',Boolean(file));
+    }
+    for (const id of ['documents','references']) {
+      const count=$(id).files.length;
+      $('file-'+id).textContent=count ? `${count} файл(ов) выбрано` : 'Файлы не выбраны';
+    }
+    $('inspect-btn').disabled = !$('documents').files.length;
+  }
+  function setBanner(title,description,variant='') {
+    const el=$('modebanner');
+    el.classList.toggle('is-working',variant==='working');
+    el.classList.toggle('is-done',variant==='done');
+    el.querySelector('b').textContent=title;
+    el.querySelector('small').textContent=description;
+  }
+  function updateAiOptions() {
+    $('ai-options').hidden = !checked('use-openai');
+  }
   const get = id => $(id).value;
   const checked = id => $(id).checked;
   const set = (id,value) => { $(id).value = value ?? ''; };
@@ -62,7 +114,7 @@
     try { const b=await response.json(); return typeof b.detail==='string' ? b.detail : `Ошибка ${response.status}`; }
     catch { return `Ошибка ${response.status}. Проверьте подключение к серверу.`; }
   }
-  function busy(on) { $('generate-btn').disabled=on;$('inspect-btn').disabled=on;$('loading').hidden=!on; }
+  function busy(on) { isBusy=on; $('generate-btn').disabled=on; $('next-btn').disabled=on; $('back-btn').disabled=on; $('inspect-btn').disabled=on||!$('documents').files.length; $('loading').hidden=!on; }
   function download(path) {
     if (!path) return;
     const a=document.createElement('a');a.href=path;a.download=path.split('/').pop();document.body.appendChild(a);a.click();a.remove();
@@ -70,9 +122,16 @@
 
   async function generate() {
     clearError();busy(true);
-    $('modebanner').querySelector('b').textContent=checked('use-openai') ? 'Генерация визуальных материалов через OpenAI' : 'Сборка проверяемых макетов без внешнего API';
+    const brief = formBrief();
+    if (!brief.brand && !brief.model && !brief.category) {
+      busy(false);
+      setStep(2);
+      showError('Укажите бренд, модель или категорию товара, чтобы на макете был понятный заголовок.');
+      return;
+    }
+    setBanner(checked('use-openai') ? 'Генерируем визуалы через OpenAI' : 'Собираем ваши промо-листы','Подготавливаем два самостоятельных PNG.', 'working');
     try {
-      const fd=new FormData();fd.append('payload',JSON.stringify(formBrief()));
+      const fd=new FormData();fd.append('payload',JSON.stringify(brief));
       ['hero','detail','logo','drawing','references','documents'].forEach(id => appendFiles(fd,id));
       fd.append('use_openai',String(checked('use-openai')));fd.append('use_demo',String(checked('use-demo')));
       fd.append('model',get('image-model'));fd.append('quality',get('image-quality'));
@@ -81,10 +140,10 @@
       latest=await response.json();
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16'].forEach(id => $(id).disabled=false);
-      $('modebanner').querySelector('b').textContent=latest.ai_used ? 'Готово: AI-визуалы и точная верстка' : 'Готово: оба PNG созданы локально';
-      $('modebanner').querySelector('span').textContent=`Результат: 1440×1080 и 1080×1920. ${latest.warnings.join(' ')}`;
-      $('modebanner').scrollIntoView({behavior:'smooth',block:'nearest'});
+      setBanner('Оба формата готовы', `Сохранены PNG 1440×1080 и 1080×1920. ${(latest.warnings||[]).join(' ')}`, 'done');
+      $('download-panel').scrollIntoView({behavior:'smooth',block:'center'});
     } catch (e) {
+      setBanner('Не удалось завершить генерацию', 'Проверьте данные или соединение с сервером.');
       showError(e.message || 'Неизвестная ошибка создания изображений.');
     } finally {busy(false);}
   }
@@ -112,31 +171,47 @@
 
   async function resetDemo() {
     try {
-      const r=await fetch('/api/demo');if(!r.ok)throw new Error('Недоступен демонстрационный набор');
-      const d=await r.json();fillBrief(d.brief);clearError();
-      $('use-openai').checked=false;$('use-demo').checked=true;$('parse-ai').checked=false;
-      for (const id of ['hero','detail','logo','drawing','references','documents']) {$(id).value='';}
-      for (const id of ['hero','detail','logo','drawing']) {$('file-'+id).textContent='Выбрать';}
+      const response=await fetch('/api/demo');
+      if (!response.ok) throw new Error('Демонстрационный набор недоступен');
+      const d=await response.json();
+      fillBrief(d.brief);
+      clearError();
+      $('use-openai').checked=false; $('use-demo').checked=true; $('parse-ai').checked=false;
+      for (const id of ['hero','detail','logo','drawing','references','documents']) $(id).value='';
       $('extract-box').hidden=true;latest=null;
       $('download-panel').hidden=true;
       ['download-all','download-4x3','download-9x16'].forEach(id=>$(id).disabled=true);
-      $('modebanner').querySelector('b').textContent='Демо-режим — без расходов на API';
-      $('modebanner').querySelector('span').textContent='Заполните форму и нажмите «Создать оба формата». Ссылки для скачивания появятся здесь.';
-    } catch (e) {showError(e.message);}
+      updateFileLabels(); updateAiOptions();
+      setBanner('Пример ZubrTrail 500 загружен', 'Вы можете заменить тексты и изображения своими, затем создать комплект.');
+      setStep(2);
+    } catch(e){showError(e.message);}
   }
 
   async function init() {
     const resp=await fetch('/api/config').catch(()=>null);
     if (resp?.ok) {
-      const cfg=await resp.json();apiReady=cfg.openai_ready;
+      const cfg=await resp.json();apiReady=Boolean(cfg.openai_ready);
       $('api-dot').classList.toggle('good',apiReady);
-      $('api-state').textContent=apiReady?'OpenAI API подключён':'API ключ не задан';
-    } else {$('api-state').textContent='Нет связи с сервером';}
-    await resetDemo();
+      $('api-state').textContent=apiReady?'OpenAI подключён':'Без OpenAI API';
+    } else {
+      $('api-state').textContent='Нет связи с сервером';
+    }
+    // No automatic test brief: a new document starts with a blank form.
+    updateRoi(); updateFileLabels(); updateAiOptions(); setStep(1,{moveFocus:false});
   }
 
-  for (const id of ['hero','detail','logo','drawing']) {
-    $(id).addEventListener('change', () => {$('file-'+id).textContent=$(id).files[0]?.name || 'Выбрать';});
+  document.querySelectorAll('[data-go-step]').forEach(button=>{
+    button.addEventListener('click',()=>setStep(Number(button.dataset.goStep)));
+  });
+  $('back-btn').addEventListener('click',()=>setStep(currentStep-1));
+  $('next-btn').addEventListener('click',()=>setStep(currentStep+1));
+  for (const id of ['hero','detail','logo','drawing','references','documents']) {
+    $(id).addEventListener('change',()=>{
+      if (id==='references' && $(id).files.length>2)
+        showError('Для референсов выберите не более двух изображений.');
+      else clearError();
+      updateFileLabels();
+    });
   }
   $('accent').addEventListener('input',()=>{$('color-label').textContent=get('accent').toUpperCase();});
   for (const id of ['extra-payload','distance','rate','trips','years','baseline-price','price','currency','show-roi'])
@@ -148,14 +223,16 @@
     const val=$('extract-result').value.trim();
     if (!val) {showError('Нет распознанных характеристик для переноса.');return;}
     set('specs',val);$('extract-box').hidden=true;
-    showError('Характеристики перенесены. Сверьте каждое значение с первичными документами перед публикацией.');
+    setStep(2);
+    setBanner('Характеристики перенесены в форму', 'Проверьте каждое значение по исходным документам перед генерацией.');
   });
   $('download-all').addEventListener('click',()=>download(latest?.zip));
   $('download-4x3').addEventListener('click',()=>download(latest?.images?.['4x3']));
   $('download-9x16').addEventListener('click',()=>download(latest?.images?.['9x16']));
   $('use-openai').addEventListener('change',()=>{
+    updateAiOptions();
     if (checked('use-openai')&&!apiReady)
-      showError('На сервере пока нет OPENAI_API_KEY. Режим локальной генерации продолжает работать.');
+      showError('OpenAI пока не подключён на сервере. Выключите эту опцию для локальной генерации.');
     else clearError();
   });
   init();
