@@ -1,4 +1,4 @@
-"""Regression tests for the human-friendly 3-step editor."""
+"""UI contract: one-page composer, optional advanced settings, no poster preview."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,19 +7,20 @@ JS = (ROOT / 'app/static/app.js').read_text(encoding='utf-8')
 CSS = (ROOT / 'app/static/app.css').read_text(encoding='utf-8')
 
 
-def test_three_steps_have_accessible_navigation_and_feedback():
-    for n in range(1, 4):
-        assert f'id="step-{n}"' in HTML
-        assert f'data-go-step="{n}"' in HTML
-    for element_id in ('next-btn', 'back-btn', 'generate-btn', 'step-counter',
-                       'progress-fill', 'error-box', 'loading', 'modebanner'):
-        assert f'id="{element_id}"' in HTML
-    assert 'aria-current="step"' in HTML
-    assert 'function setStep(' in JS
-    assert 'No automatic test brief' in JS
+def test_one_page_composer_without_forced_wizard():
+    assert 'id="hero-drop"' in HTML
+    assert 'id="advanced-settings"' in HTML
+    assert 'id="generate-btn"' in HTML
+    assert 'id="error-box"' in HTML
+    assert 'id="loading"' in HTML
+    assert 'id="modebanner"' in HTML
+    assert 'data-go-step' not in HTML
+    assert 'id="step-1"' not in HTML
+    assert 'next-btn' not in JS
+    assert 'setStep(' not in JS
 
 
-def test_input_ids_match_form_and_backend_contract():
+def test_required_api_contract_ids_preserved():
     controls = [
         'hero','detail','logo','drawing','references','documents','parse-ai',
         'inspect-btn','extract-result','apply-extracted','brand','model','category',
@@ -31,21 +32,37 @@ def test_input_ids_match_form_and_backend_contract():
         assert f'id="{field}"' in HTML, f'Missing field {field}'
     assert "fetch('/api/generate'" in JS
     assert "fetch('/api/inspect'" in JS
+    assert 'formBrief()' in JS
 
 
-def test_no_preview_and_downloads_only_on_success():
+def test_optional_settings_and_file_access():
+    assert '<details id="advanced-settings"' in HTML
+    assert 'data-style="industrial"' in HTML
+    assert 'data-style="graphite"' in HTML
+    assert 'data-style="minimal"' in HTML
+    assert "addEventListener('drop'" in JS
+    assert 'new DataTransfer()' in JS
+    assert 'validateFiles()' in JS
+    assert 'max-width:600px' in CSS.replace(' ','')
+    assert 'prefers-reduced-motion:reduce' in CSS
+    assert '[hidden]{display:none!important}' in CSS
+
+
+def test_no_layout_previews_download_after_generation():
     assert 'id="preview-4x3"' not in HTML
     assert 'id="preview-9x16"' not in HTML
     assert '<img ' not in HTML
-    for element_id in ('download-panel','download-4x3','download-9x16','download-all'):
-        assert f'id="{element_id}"' in HTML
-    assert '<section id="download-panel" class="result-card" hidden' in HTML
+    for element in ('download-panel','download-all','download-4x3','download-9x16'):
+        assert f'id="{element}"' in HTML
+    assert 'id="download-panel" class="download-panel" hidden' in HTML
     assert "$('download-panel').hidden=false;" in JS
     assert "$('download-panel').hidden=true;" in JS
+    assert "latest=null;" in JS
+    assert 'preview-4x3' not in JS
 
 
-def test_mobile_responsive_and_hidden_states():
-    assert '@media (max-width:600px)' in CSS
-    assert '.workspace{grid-template-columns:1fr;' in CSS
-    assert '[hidden]{display:none!important}' in CSS
-    assert 'prefers-reduced-motion:reduce' in CSS
+def test_api_and_demo_are_explicit_opt_in():
+    assert 'async function resetDemo()' in JS
+    assert 'resetDemo();' not in JS.split('async function init()',1)[1]
+    assert 'if(checked(\'use-openai\')&&!apiReady)' in JS
+    assert '2 платных запроса' in HTML
