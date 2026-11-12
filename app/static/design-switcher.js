@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const names = ['wizard','studio','compact'];
+  const names = ['wizard','studio','compact','dialog'];
   const STORE_KEY = 'promoeditor.design.selection.v1';
   const frames = Object.fromEntries(names.map(name => [name, document.getElementById('frame-'+name)]));
   const tabs = Object.fromEntries(names.map(name => [name, document.getElementById('tab-'+name)]));

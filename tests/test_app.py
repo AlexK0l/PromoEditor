@@ -158,7 +158,7 @@ def test_fake_openai_generates_two_visuals(monkeypatch):
 def test_editor_without_layout_previews_keeps_downloads():
     html=client.get('/').text
     assert 'Предпросмотр макетов' not in html
-    for v in ('wizard','studio','compact'):
+    for v in ('wizard','studio','compact','dialog'):
         page=client.get(f'/static/designs/{v}/index.html')
         assert page.status_code==200
         assert 'id="preview-4x3"' not in page.text
