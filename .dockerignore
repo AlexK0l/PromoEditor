@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+!*.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+instance/
+examples/
+tests/
+deploy/app.env
+deploy/caddy.env
+*.zip
+*.log
+.DS_Store
