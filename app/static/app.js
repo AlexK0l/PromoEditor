@@ -8,6 +8,7 @@
   let apiReady = false;
   let isBusy = false;
   let hasDemo = false;
+  let promptDirty = true;
 
   const get = id => $(id).value;
   const checked = id => $(id).checked;
@@ -66,7 +67,7 @@
     if(isBusy||!latest)return;
     latest=null;
     $('download-panel').hidden=true;
-    ['download-all','download-4x3','download-9x16'].forEach(id=>$(id).disabled=true);
+    ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=true);
     setStatus('Параметры изменены','Создайте новый комплект, чтобы применить изменения.');
   }
   function updateFileLabels(){
@@ -114,12 +115,13 @@
   function busy(on){
     isBusy=on;
     $('generate-btn').disabled=on;
+    $('build-prompt-btn').disabled=on;
     $('reset-btn').disabled=on;
     $('inspect-btn').disabled=on||!$('documents').files.length;
     $('loading').hidden=!on;
     const button=$('generate-btn');
     if(on)button.textContent='Создаём изображения…';
-    else button.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Создать два формата <span aria-hidden="true">→</span>';
+    else button.textContent='Создать PNG · JPEG · SVG →';
   }
   function appendFiles(form,id){for(const file of $(id).files)form.append(id,file,file.name);}
   function download(path){
@@ -127,6 +129,26 @@
     const link=document.createElement('a');
     link.href=path;link.download=path.split('/').pop();document.body.appendChild(link);link.click();link.remove();
   }
+  function markPromptStale(){
+    promptDirty=true;
+    $('promo-prompt-status').classList.add('is-stale');
+    $('promo-prompt-status').textContent='Поля изменились. Сформируйте промпт заново, чтобы учесть актуальные данные.';
+  }
+  async function buildPrompt(){
+    if(!get('model').trim())throw new Error('Сначала укажите модель товара.');
+    const response=await fetch('/api/prompt',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(formBrief())
+    });
+    if(!response.ok)throw new Error(await readError(response));
+    const result=await response.json();
+    $('promo-prompt').value=result.prompt;
+    promptDirty=false;
+    $('promo-prompt-status').classList.remove('is-stale');
+    $('promo-prompt-status').textContent='Промпт собран из формы бесплатно. Можно дополнить его своими словами.';
+    return result.prompt;
+  }
+
   async function generate(){
     clearError();
     if(!get('model').trim()){
@@ -138,9 +160,11 @@
       showError('Сначала добавьте фото товара или нажмите «Заполнить пример» для пробного комплекта.');return;
     }
     invalidateResult();busy(true);
-    setStatus('Создаём изображения','Генерируем PNG 4:3 и 9:16.','working');
+    setStatus('Создаём промо','Генерируем два SVG-исходника, PNG и JPEG.','working');
     try {
+      const prompt=(promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim();
       const form=new FormData();form.append('payload',JSON.stringify(formBrief()));
+      form.append('prompt',prompt);
       fileIds.forEach(id=>appendFiles(form,id));
       form.append('use_openai',String(checked('use-openai')));
       form.append('use_demo',String(checked('use-demo')));
@@ -151,8 +175,8 @@
       latest=await response.json();
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
       $('download-panel').hidden=false;
-      ['download-all','download-4x3','download-9x16'].forEach(id=>$(id).disabled=false);
-      setStatus('Готово','Оба PNG и ZIP можно скачать ниже.','done');
+      ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
+      setStatus('Готово','PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
@@ -189,10 +213,12 @@
     const roi=data.roi||{};
     for(const [id,key] of [['extra-payload','extra_payload'],['distance','distance'],['rate','rate'],['trips','trips'],['years','years'],['baseline-price','baseline_price']])set(id,roi[key]??'');
     $('color-label').textContent=get('accent').toUpperCase();
+    markPromptStale();
     updateRoi();refreshStyle();
   }
   function clearForm(){
-    for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','dimensions','price','phones'])set(id,'');
+    for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','dimensions','price','phones','promo-prompt'])set(id,'');
+    markPromptStale();
     set('currency','Br');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
     for(const id of fileIds)$(id).value='';
@@ -202,7 +228,7 @@
     hasDemo=false;
     $('reset-btn').textContent='Заполнить пример';
     latest=null;$('download-panel').hidden=true;
-    ['download-all','download-4x3','download-9x16'].forEach(id=>$(id).disabled=true);
+    ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=true);
     clearError();updateRoi();refreshStyle();updateFileLabels();updateAi();
   }
   async function resetDemo(){
@@ -218,7 +244,8 @@
       hasDemo=true;
       $('reset-btn').textContent='Очистить форму';
       latest=null;$('download-panel').hidden=true;
-      ['download-all','download-4x3','download-9x16'].forEach(id=>$(id).disabled=true);
+      ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=true);
+      markPromptStale();
       updateAi();updateFileLabels();updateRoi();refreshStyle();
       setStatus('Пример заполнен','Создайте комплект без расходов на API.');
       $('model').focus({preventScroll:true});
@@ -240,7 +267,7 @@
   }
 
   for(const id of fileIds){
-    $(id).addEventListener('change',()=>{updateFileLabels();invalidateResult();clearError();});
+    $(id).addEventListener('change',()=>{updateFileLabels();markPromptStale();invalidateResult();clearError();});
   }
   for(const id of ['hero','documents','logo']){
     $('clear-'+id).addEventListener('click',()=>{$(id).value='';$(id).dispatchEvent(new Event('change',{bubbles:true}));});
@@ -252,15 +279,16 @@
     $(id).addEventListener('input',()=>{
       if(id==='accent')$('color-label').textContent=get('accent').toUpperCase();
       if(['show-roi','price','currency','extra-payload','distance','rate','trips','years','baseline-price'].includes(id))updateRoi();
+      markPromptStale();
       invalidateResult();
     });
-    $(id).addEventListener('change',()=>invalidateResult());
+    $(id).addEventListener('change',()=>{markPromptStale();invalidateResult();});
   }
   document.querySelectorAll('[data-style]').forEach(button=>button.addEventListener('click',()=>{
     set('style',button.dataset.style);
     const accents={industrial:'#e31b26',graphite:'#344054',minimal:'#315ddc'};
     set('accent',accents[button.dataset.style]);$('color-label').textContent=get('accent').toUpperCase();
-    refreshStyle();invalidateResult();
+    refreshStyle();markPromptStale();invalidateResult();
   }));
   $('use-openai').addEventListener('change',()=>{if(checked('use-openai')&&!apiReady){$('use-openai').checked=false;showError('OpenAI пока не подключён. Добавьте API-ключ на сервере.');}updateAi();invalidateResult();});
   $('show-roi').addEventListener('change',updateRoi);
@@ -274,6 +302,20 @@
     const transfer=new DataTransfer();transfer.items.add(file);$('hero').files=transfer.files;
     $('hero').dispatchEvent(new Event('change',{bubbles:true}));
   });
+  $('build-prompt-btn').addEventListener('click',async()=>{
+    clearError();
+    $('build-prompt-btn').disabled=true;
+    $('build-prompt-btn').textContent='Формируем промпт…';
+    try{await buildPrompt();}
+    catch(error){showError(error.message||'Не удалось сформировать промпт.');}
+    finally{$('build-prompt-btn').disabled=isBusy;$('build-prompt-btn').textContent='Сформировать промпт ↻';}
+  });
+  $('promo-prompt').addEventListener('input',()=>{
+    promptDirty=false;
+    $('promo-prompt-status').classList.remove('is-stale');
+    $('promo-prompt-status').textContent='Промпт изменён вручную. Он будет отправлен для AI-сцены и сохранён в ZIP.';
+    invalidateResult();
+  });
   $('reset-btn').addEventListener('click',resetDemo);
   $('generate-btn').addEventListener('click',generate);
   $('inspect-btn').addEventListener('click',inspect);
@@ -281,11 +323,15 @@
     const values=$('extract-result').value.trim();
     if(!values){showError('Нет характеристик для переноса.');return;}
     set('specs',values);$('advanced-settings').open=true;$('extract-box').hidden=true;
-    invalidateResult();setStatus('ТТХ перенесены','Проверьте каждую характеристику до публикации.');
+    markPromptStale();invalidateResult();setStatus('ТТХ перенесены','Проверьте каждую характеристику до публикации.');
     $('specs').scrollIntoView({behavior:'smooth',block:'center'});
   });
   $('download-all').addEventListener('click',()=>download(latest?.zip));
   $('download-4x3').addEventListener('click',()=>download(latest?.images?.['4x3']));
   $('download-9x16').addEventListener('click',()=>download(latest?.images?.['9x16']));
+  $('download-jpeg-4x3').addEventListener('click',()=>download(latest?.jpeg?.['4x3']));
+  $('download-jpeg-9x16').addEventListener('click',()=>download(latest?.jpeg?.['9x16']));
+  $('download-svg-4x3').addEventListener('click',()=>download(latest?.corel?.['4x3']));
+  $('download-svg-9x16').addEventListener('click',()=>download(latest?.corel?.['9x16']));
   init();
 })();
