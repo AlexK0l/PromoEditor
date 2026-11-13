@@ -69,7 +69,7 @@ def test_generate_png_jpeg_corel_svg_and_prompt_zip(monkeypatch):
     names={'poster_4x3.png','poster_9x16.png',
            'poster_4x3.jpg','poster_9x16.jpg',
            'corel_4x3.svg','corel_9x16.svg',
-           'promo_prompt.txt','brief.json','CORELDRAW_README.txt'}
+           'promo_prompt.txt','brief.json','asset_selection.json','CORELDRAW_README.txt'}
     archive=zipfile.ZipFile(io.BytesIO(client.get(result['zip']).content))
     assert set(archive.namelist())==names
     assert archive.read('promo_prompt.txt').decode('utf-8')==prompt
