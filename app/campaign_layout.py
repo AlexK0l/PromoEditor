@@ -249,7 +249,7 @@ def _stat_row(scene,x,y,w,h,title,value,index,accent):
         if dy:
             for icon_part in list(scene.groups['specs'])[before:]:
                 icon_part.set('transform',f'translate(0 {round(dy,2)})')
-    vx=x+w*.74
+    vx=x+w*.65  # reserve space for short fact values on a single line
     _rule(scene,'specs',vx-10,y+12,vx-10,y+h-12,'#E7EAF0',2,f'spec-separator-{index}')
     scene.text('specs',title,x+78,y+8,vx-x-95,h-15,
                23,13,'#17212F',True,f'spec-label-{index}',2)
