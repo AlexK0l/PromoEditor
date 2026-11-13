@@ -32,12 +32,16 @@ runuser -u promoeditor -- /opt/promoeditor/.venv/bin/python -m pip install --no-
 if [[ ! -f /etc/promoeditor/promoeditor.env ]]; then
   install -o root -g root -m 0600 /opt/promoeditor/deploy/time4vps/promoeditor.env.example /etc/promoeditor/promoeditor.env
 fi
+echo 'Set up password-only login before exposing the app to Caddy.'
+python3 /opt/promoeditor/deploy/time4vps/provision_auth.py /etc/promoeditor/promoeditor.env
 install -o root -g root -m 0644 /opt/promoeditor/deploy/time4vps/promoeditor.service /etc/systemd/system/promoeditor.service
 systemctl daemon-reload
 systemctl enable --now promoeditor.service
 sleep 2
 systemctl is-active --quiet promoeditor.service || { journalctl -u promoeditor -n 40 --no-pager; exit 1; }
-curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18080/api/config >/dev/null
+code=$(curl --silent --output /dev/null --max-time 10 --write-out '%{http_code}' http://127.0.0.1:18080/api/config)
+[[ "$code" == "401" ]] || { echo "Expected password protection (HTTP 401); received $code." >&2; exit 1; }
+curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18080/login >/dev/null
 
 echo 'PromoEditor runs locally on 127.0.0.1:18080.'
 echo 'Next: configure Caddy with deploy/time4vps/configure_caddy.sh.'
