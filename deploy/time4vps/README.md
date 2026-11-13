@@ -1,5 +1,49 @@
 # PromoEditor on the EXISTING Time4VPS (RegionalResearch is kept intact)
 
+## Editing the live server .env from Windows using PowerShell/SCP
+
+The active systemd environment is /etc/promoeditor/promoeditor.env (root-owned mode 0600), NOT the .env in the Git checkout. It holds OpenAI keys and authentication secrets. Never commit or share it, and avoid OneDrive-synced directories. You need Windows OpenSSH scp.exe and SSH access to the VPS.
+
+1. In **Windows PowerShell**, enter your actual VPS IP and download a copy. These commands assume SSH login as root is permitted.
+
+   ~~~powershell
+   $VPS_IP = "YOUR_VPS_IP"
+   $LOCAL_DIR = Join-Path $env:USERPROFILE "PromoEditor-secrets"
+   New-Item -ItemType Directory -Force $LOCAL_DIR | Out-Null
+   scp.exe "root@${VPS_IP}:/etc/promoeditor/promoeditor.env" "$LOCAL_DIR\promoeditor.env"
+   notepad.exe "$LOCAL_DIR\promoeditor.env"
+   ~~~
+
+   Edit as UTF-8 **without BOM**, preserving KEY=value lines. For changing the PromoEditor login password, use provision_auth.py on the VPS rather than manually altering PROMO_PASSWORD_HASH and PROMO_SESSION_SECRET.
+
+2. On the **VPS**, open SSH as root and create a non-world-readable staging directory plus a dated backup BEFORE upload:
+
+   ~~~bash
+   install -d -o root -g root -m 700 /root/promoeditor-secrets
+   cp -p /etc/promoeditor/promoeditor.env "/root/promoeditor-secrets/backup-$(date -u +%Y%m%d-%H%M%S).env"
+   ~~~
+
+3. In **Windows PowerShell**, upload to the **root-only staging directory**, not straight over the live file:
+
+   ~~~powershell
+   scp.exe "$LOCAL_DIR\promoeditor.env" "root@${VPS_IP}:/root/promoeditor-secrets/promoeditor.env.new"
+   ~~~
+
+4. On the **VPS**, atomically install as root:root, mode 0600, remove the staged copy, and restart **only** PromoEditor:
+
+   ~~~bash
+   install -o root -g root -m 600 /root/promoeditor-secrets/promoeditor.env.new /etc/promoeditor/promoeditor.env.next
+   mv -f /etc/promoeditor/promoeditor.env.next /etc/promoeditor/promoeditor.env
+   rm -f /root/promoeditor-secrets/promoeditor.env.new
+   systemctl restart promoeditor
+   systemctl is-active promoeditor
+   curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/login
+   ~~~
+
+   Expect active plus HTTP 200 for the login page. Anonymous /api/config returns HTTP 401 when auth is enabled. If the service fails, restore the latest dated backup using install -o root -g root -m 600 and restart only promoeditor. Caddy and RegionalResearch do not need to restart.
+
+5. After checking the site, delete the Windows secret file if it is no longer required. If your SSH account cannot log in as root, use a private 0700 directory in your SSH user's home for staging and sudo on the VPS for the protected original; NEVER place the secrets in world-readable /tmp.
+
 ## Migration on an existing VPS: password ONLY, no username
 
 PromoEditor now offers its own single-password login page. This is similar to RegionalResearch, but it uses a separate secret and cookie; you can enter the same password string if you wish. **Do not copy, read, or change RegionalResearch credentials.**

@@ -1,0 +1,106 @@
+/* PromoEditor selectable dark mode. Scoped to html[data-theme="dark"].
+   Colors and chrome only: never invert/transform the user's poster canvas. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0d1420;--surface:#192332;--surface-soft:#1d293b;--ink:#f0f4fb;
+  --muted:#abb9cd;--muted-dark:#c4d0e0;--line:#303f55;--line-dark:#455873;
+  --blue:#95b1ff;--blue-hover:#b8c9ff;--blue-light:#1d3153;--good:#51d8a3;
+  --shadow:0 14px 48px rgba(0,0,0,.25);
+}
+.theme-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;flex-shrink:0;white-space:nowrap}
+.theme-icon{font-size:17px;line-height:1}
+:root[data-theme="dark"] body{background:var(--bg);color:var(--ink)}
+:root[data-theme="dark"] .topbar{background:#141e2c;border-color:var(--line)}
+:root[data-theme="dark"] .brand-symbol{background:#263a5d}
+:root[data-theme="dark"] .quiet-button{background:#243550;border-color:#3c5272;color:#c4d5ff}
+:root[data-theme="dark"] .quiet-button:hover{background:#304567}
+:root[data-theme="dark"] .composer,
+:root[data-theme="dark"] .advanced,
+:root[data-theme="dark"] .edit-section{background:var(--surface);border-color:var(--line)}
+:root[data-theme="dark"] .error{background:#492631;border-color:#78394c;color:#ffd2d8}
+:root[data-theme="dark"] .dropzone{border-color:#506384;background:linear-gradient(135deg,#202e43,#1b293b);color:var(--muted-dark)}
+:root[data-theme="dark"] .dropzone:hover,
+:root[data-theme="dark"] .dropzone.is-dragging,
+:root[data-theme="dark"] .dropzone:focus-within{border-color:var(--blue);background:#263958}
+:root[data-theme="dark"] .dropzone.has-file{border-color:#46836b;background:#1d3b35}
+:root[data-theme="dark"] .dropzone .drop-icon{color:#b1caff;background:#2b3b54;border-color:#465977}
+:root[data-theme="dark"] .dropzone small,
+:root[data-theme="dark"] .field-tip,
+:root[data-theme="dark"] .file-feedback{color:#a4b2c8}
+:root[data-theme="dark"] .mini-upload{background:#202e41;border-color:var(--line)}
+:root[data-theme="dark"] .mini-upload:hover,
+:root[data-theme="dark"] .mini-upload:focus-within{background:#293c58;border-color:#6f88b0}
+:root[data-theme="dark"] .mini-upload.has-file{background:#1b3d33;border-color:#417a60}
+:root[data-theme="dark"] .mini-plus{color:#b6c4dd}
+:root[data-theme="dark"] .remove-link,
+:root[data-theme="dark"] .remove-uploads button,
+:root[data-theme="dark"] .extra-clear button{color:#beccea}
+:root[data-theme="dark"] .field input:not([type=color]),
+:root[data-theme="dark"] .field textarea,
+:root[data-theme="dark"] .field select,
+:root[data-theme="dark"] .extract-box textarea{color:var(--ink);background:#111c2b;border-color:#42536b}
+:root[data-theme="dark"] .field input::placeholder,
+:root[data-theme="dark"] .field textarea::placeholder,
+:root[data-theme="dark"] .edit-option-group textarea::placeholder{color:#9eadbf}
+:root[data-theme="dark"] .field input:hover,
+:root[data-theme="dark"] .field textarea:hover,
+:root[data-theme="dark"] .field select:hover{border-color:#7185a2}
+:root[data-theme="dark"] .field input:focus,
+:root[data-theme="dark"] .field textarea:focus,
+:root[data-theme="dark"] .field select:focus,
+:root[data-theme="dark"] .extract-box textarea:focus{box-shadow:0 0 0 3px #31518c}
+:root[data-theme="dark"] .composer-bottom,
+:root[data-theme="dark"] #edit-body{background:#161f2e;border-color:var(--line)}
+:root[data-theme="dark"] .style-pill{background:#202e41;color:#cad6ea;border-color:#43536b}
+:root[data-theme="dark"] .style-pill:hover{border-color:#829aca}
+:root[data-theme="dark"] .style-pill.is-active{background:#263d62;color:#d4e2ff;border-color:#7194db;box-shadow:inset 0 0 0 1px #5278c6}
+:root[data-theme="dark"] .toggle-track{background:#4b5c73}
+:root[data-theme="dark"] .primary-button{background:#355ed0;color:#fff;box-shadow:0 7px 20px rgba(0,0,0,.22)}
+:root[data-theme="dark"] .primary-button:hover:not(:disabled){background:#4571e3}
+:root[data-theme="dark"] .secondary-button{background:#26364c;color:#e2eaf7;border-color:#51627d}
+:root[data-theme="dark"] .secondary-button:hover:not(:disabled){background:#324762;border-color:#7086aa}
+:root[data-theme="dark"] .advanced>summary:hover{background:#202f43}
+:root[data-theme="dark"] .settings-icon{background:#2e405a;color:#c1d4fb}
+:root[data-theme="dark"] .document-tools,
+:root[data-theme="dark"] .extract-box{background:#1e2d42;border-color:#394c66}
+:root[data-theme="dark"] .roi-preview{background:#23344b;color:var(--muted-dark)}
+:root[data-theme="dark"] .color-control input{background:#29374b}
+:root[data-theme="dark"] .loading{background:#1f3150;border-color:#39598b}
+:root[data-theme="dark"] .loader{border-color:#4e668d;border-top-color:#a8bdff}
+:root[data-theme="dark"] .download-panel{background:var(--surface);border-color:#396454}
+:root[data-theme="dark"] .success-icon{background:#214f3d;color:#7eebbb}
+:root[data-theme="dark"] .filetype{color:#d0e0ff;background:#28416d}
+:root[data-theme="dark"] .file-results>div{background:#202d3f;border-color:var(--line)}
+:root[data-theme="dark"] .footer{color:#a2aec0}
+/* The edit workspace uses explicit colors; cover all editable controls and cards. */
+:root[data-theme="dark"] .edit-file-select{background:#243550;color:#d1e1ff;border-color:#526788}
+:root[data-theme="dark"] .edit-file-select:hover{background:#304566}
+:root[data-theme="dark"] .edit-status{background:#243b5a;color:#d4e5ff}
+:root[data-theme="dark"] .edit-status.is-error{background:#542b37;color:#ffcad0}
+:root[data-theme="dark"] .edit-tools button{background:#233247;color:#d8e5fa;border-color:#4b607f}
+:root[data-theme="dark"] .edit-tools button.is-selected{background:#315080;color:#f1f6ff;border-color:#83a5ec}
+:root[data-theme="dark"] .edit-stage{background:repeating-conic-gradient(#2a374a 0% 25%,#202d3d 0% 50%) 50%/22px 22px;border-color:#4a5d78}
+:root[data-theme="dark"] .edit-option-group{background:#1e2b3d;border-color:#394c65}
+:root[data-theme="dark"] .edit-option-group label{color:#d1def0}
+:root[data-theme="dark"] .edit-option-group textarea,
+:root[data-theme="dark"] .edit-option-group input[type=number],
+:root[data-theme="dark"] .edit-option-group select{background:#111d2b;color:var(--ink);border-color:#50627c}
+:root[data-theme="dark"] .edit-option-group input[type=color]{background:#28364b;border-color:#60728d}
+:root[data-theme="dark"] .edit-help{color:#adbad0}
+:root[data-theme="dark"] .edit-ai-option{background:linear-gradient(170deg,#22334f,#1b2a44);border-color:#536fa7}
+:root[data-theme="dark"] .edit-caption,
+:root[data-theme="dark"] .edit-helper{color:#b3bfd2}
+:root[data-theme="dark"] input, :root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select{accent-color:#95b1ff}
+@media(max-width:700px){
+  .topbar-inner{height:auto;min-height:62px;flex-wrap:wrap;padding-top:9px;padding-bottom:9px}
+  .topbar-right{flex-wrap:wrap;justify-content:flex-end}
+  .theme-button{padding:8px}
+}
+@media(max-width:460px){
+  .theme-label{display:none}
+  .topbar-right{gap:6px}
+  .theme-button{min-width:36px}
+}
+/* Posters are always drawn from source pixels: no filter, invert or color transform
+   on #edit-canvas, even when the UI uses the dark palette. */

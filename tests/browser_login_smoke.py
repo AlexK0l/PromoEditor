@@ -16,6 +16,12 @@ def main():
         assert initial.headers.get("referrer-policy")=="no-referrer"
         token=page.locator('input[name="csrf_token"]').get_attribute("value")
         assert token and token.startswith("login.")
+        toggle=page.locator("[data-theme-toggle]")
+        assert toggle.count()==1
+        toggle.click()
+        assert page.locator("html").get_attribute("data-theme")=="dark"
+        page.reload(wait_until="domcontentloaded")
+        assert page.locator("html").get_attribute("data-theme")=="dark"
         page.locator('input[name="password"]').fill(PASSWORD)
         with page.expect_response(lambda res:res.request.method=="POST" and res.url.endswith("/login")) as pending:
             page.get_by_role("button",name="Войти").click()
@@ -24,6 +30,8 @@ def main():
         assert origin=="null",f"Expected browser form Origin:null with no-referrer, got {origin!r}"
         assert response.status==303,f"Valid password was rejected (status {response.status})"
         assert "httponly" in response.all_headers().get("set-cookie","").lower()
+        assert page.locator("html").get_attribute("data-theme")=="dark"
+        assert page.locator("body").evaluate("(el)=>getComputedStyle(el).backgroundColor")!="rgb(246, 247, 251)"
         assert not errors,errors
         browser.close()
     print("Browser password-only login: Origin null accepted with valid signed CSRF token — PASS")

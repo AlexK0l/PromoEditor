@@ -176,7 +176,8 @@ def _clear_failures(ip:str):
 
 LOGIN_PAGE="""<!doctype html><html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex"><title>Вход — PromoEditor</title>
+<meta name="robots" content="noindex"><meta name="theme-color" content="#f6f7fb"><title>Вход — PromoEditor</title>
+<script src="/theme.js"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;
 background:linear-gradient(140deg,#edf3ff,#f6f8fb 55%,#fff);color:#192438;
@@ -196,6 +197,25 @@ button:hover{background:#244fbb}
 .note{margin-top:20px;color:#7b8798;font-size:12px}
 .error{padding:11px 13px;background:#fff0f2;color:#a02a40;border-radius:9px;
 border:1px solid #f5ced5;font-size:13px;margin-bottom:16px}
+/* Signed-in and login pages read the same browser-local appearance preference. */
+.theme-button{margin-top:14px;border:1px solid #cbd7ec;background:#f4f7ff;color:#3154a6;padding:10px 12px;font-size:12px}
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="dark"] body{background:linear-gradient(140deg,#101725,#0d1420 60%,#162136);color:#eef2fc}
+:root[data-theme="dark"] .card{background:#1c293a;border-color:#3b4b62;box-shadow:0 22px 70px rgba(0,0,0,.35)}
+:root[data-theme="dark"] .logo{background:#2b4065;color:#c6d9ff}
+:root[data-theme="dark"] p,:root[data-theme="dark"] .note{color:#b0bfd3}
+:root[data-theme="dark"] input{background:#111d2d;color:#f0f4fb;border-color:#5a6f8e}
+:root[data-theme="dark"] .error{background:#4e2b38;color:#ffd4dd;border-color:#845067}
+:root[data-theme="dark"] .theme-button{background:#283d58;color:#d7e5ff;border-color:#4f6890}
+:root[data-theme="dark"] button:not(.theme-button){background:#355ed0}
+:root[data-theme="dark"] button:not(.theme-button):hover{background:#4571e3}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){color-scheme:dark}
+  :root:not([data-theme="light"]) body{background:#0d1420;color:#eef2fc}
+  :root:not([data-theme="light"]) .card{background:#1c293a;border-color:#3b4b62}
+  :root:not([data-theme="light"]) p,:root:not([data-theme="light"]) .note{color:#b0bfd3}
+  :root:not([data-theme="light"]) input{background:#111d2d;color:#f0f4fb;border-color:#5a6f8e}
+}
 </style></head><body><main class="card">
 <span class="logo" aria-hidden="true">P</span>
 <h1>Вход в PromoEditor</h1><p>Введите пароль для доступа к генератору и редактору промоматериалов.</p>
@@ -208,6 +228,7 @@ autocomplete="current-password" minlength="8" maxlength="256">
 <div class="note">Минимум 8 символов.</div>
 <button type="submit">Войти</button></form>
 <div class="note">Без логина. Сессия в браузере действует до 12 часов.</div>
+<button type="button" class="theme-button" data-theme-toggle aria-pressed="false" aria-label="Включить тёмную тему"><span data-theme-icon aria-hidden="true">☾</span> <span data-theme-label>Тёмная тема</span></button>
 </main></body></html>"""
 
 
@@ -221,7 +242,7 @@ def login_html(error:str|None=None,code:int=200):
         "X-Frame-Options":"DENY",
         "X-Content-Type-Options":"nosniff",
         "Referrer-Policy":"no-referrer",
-        "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+        "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
     })
     # Bind the hidden signed token to THIS browser, so an attacker who can
     # independently GET /login cannot forge a victim's login POST.
@@ -237,6 +258,8 @@ async def guard(request:Request,call_next):
         return PlainTextResponse("Вход PromoEditor не настроен. Обратитесь к администратору.",
                                  status_code=503,headers={"Cache-Control":"no-store"})
     path=request.url.path
+    if path=="/theme.js" and request.method in ("GET","HEAD"):
+        return await call_next(request)
     if path=="/login" and request.method in ("GET","HEAD","POST"):
         return await call_next(request)
     if request.method in ("POST","PUT","PATCH","DELETE") and path!="/logout" and not _origin_ok(request):

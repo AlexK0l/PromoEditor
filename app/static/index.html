@@ -3,11 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f8fc">
+  <meta name="theme-color" content="#f6f7fb">
+  <script src="/static/theme.js?v=20261113-dark-1"></script>
   <meta name="description" content="PromoEditor — удобное создание рекламных PNG 4:3 и 9:16 из ваших материалов.">
   <title>PromoEditor — новый промо-материал</title>
   <link rel="stylesheet" href="/static/app.css?v=20261113-compact-only">
   <link rel="stylesheet" href="/static/editor.css?v=20261113-v1">
+  <link rel="stylesheet" href="/static/theme.css?v=20261113-dark-1">
 </head>
 <body>
   <header class="topbar">
@@ -18,6 +20,7 @@
       </a>
       <div class="topbar-right">
         <span class="api-pill" role="status"><span id="api-dot" class="api-dot"></span><span id="api-state">Проверяем сервер…</span></span>
+        <button type="button" class="quiet-button theme-button" data-theme-toggle aria-label="Включить тёмную тему" aria-pressed="false"><span class="theme-icon" data-theme-icon aria-hidden="true">☾</span><span class="theme-label" data-theme-label>Тёмная тема</span></button>
         <button type="button" id="reset-btn" class="quiet-button">Заполнить пример</button>
         <form action="/logout" method="post" id="logout-form" hidden><input type="hidden" id="logout-csrf" name="csrf_token"><button type="submit" class="quiet-button">Выйти</button></form>
       </div>
