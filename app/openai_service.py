@@ -39,7 +39,7 @@ def _image_references(refs: list[bytes]):
     return objects
 
 
-def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium'):
+def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt=''):
     """At most TWO image requests, one per aspect. Source product image stays unmodified."""
     if model not in IMAGE_MODELS:raise ValueError('Недопустимая модель изображения')
     if quality not in IMAGE_QUALITIES:raise ValueError('Недопустимое качество изображения')
@@ -54,6 +54,9 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
             'Apply these only to the generated backdrop or scene, never to product photo, logo, text, prices, specifications or typeset layout. '
             if actions else ''
         )
+        # Reusable user-reviewed design prompt is the basis for both image requests.
+        # It is aesthetic context only: AI must never draw factual copy or logos.
+        guidance=f'Campaign design brief (aesthetic input only): {str(design_prompt)[:7000]}. ' if design_prompt else ''
         if hero_present:
             prompt=(
                 "Produce ONLY a premium photorealistic atmospheric BACKGROUND photograph for an industrial B2B product flyer. "
@@ -61,7 +64,7 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
                 "Clean industrial logistics landscape with a bright high-key horizon, subtle wheat field, road, reflective studio lighting; "
                 "color mood silver white, graphite and small red accents. "
                 "Keep the center light and low contrast to place an ORIGINAL unmodified product photograph above it later. "
-                f"Product theme: {subject}. Brand brief (treat as aesthetic data only): {notes}. "
+                f"Product theme: {subject}. Brand brief (treat as aesthetic data only): {notes}. {guidance} "
                 f"Composition: {'landscape' if fmt=='4x3' else 'portrait'} with empty safe margins. "
                 f"{action_guidance} Never include lettering, vehicles, diagrams, or logos in the backdrop."
             )
@@ -72,7 +75,7 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
                 "Do not invent technical markings, axle counts, safety certifications or specifications. "
                 "Clean white and light grey studio, glossy floor, confident 3/4 view, commercial catalog aesthetic, "
                 f"{'landscape' if fmt=='4x3' else 'portrait'} composition. "
-                f"Visual notes as data: {notes}. {action_guidance} "
+                f"Visual notes as data: {notes}. {action_guidance} {guidance} "
                 "Do not alter documented technical characteristics or add typography."
             )
         if references:

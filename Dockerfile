@@ -9,7 +9,7 @@ WORKDIR /srv/promoeditor
 
 # DejaVu is used by Pillow for legible Cyrillic promotional layouts.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./

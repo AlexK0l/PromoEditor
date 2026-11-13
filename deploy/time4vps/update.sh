@@ -11,6 +11,10 @@ fi
 previous=$(runuser -u promoeditor -- git rev-parse HEAD)
 runuser -u promoeditor -- git fetch origin main
 runuser -u promoeditor -- git merge --ff-only origin/main
+if ! ldconfig -p | grep -q 'libcairo.so.2'; then
+  echo 'Installing the Cairo graphics runtime for editable SVG export.'
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libcairo2
+fi
 runuser -u promoeditor -- /opt/promoeditor/.venv/bin/python -m pip install --no-cache-dir -r requirements.txt
 systemctl restart promoeditor
 systemctl is-active --quiet promoeditor
