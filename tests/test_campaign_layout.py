@@ -97,8 +97,6 @@ def test_price_and_contacts_are_not_covered_by_footer_background():
     root=ET.fromstring(svg)
     names=[group.attrib['id'] for group in root.findall('s:g',NS)]
     assert names.index('cta_bg')<names.index('price')<names.index('contacts')
-    background=root.find(".//s:rect[@id='campaign-cta-001']",NS)
-    assert background is None or background is not None
     price=root.find("s:g[@id='price']",NS)
     assert price is not None
     assert '4 648 000' in ''.join(price.itertext())
@@ -156,3 +154,14 @@ def test_dense_verified_specs_fit_with_scalable_vector_icon_paths():
     assert len(badges)==7
     assert all('scale(' in node.attrib.get('transform','') for node in badges)
     assert not root.findall('.//s:image',NS) or len(root.findall('.//s:image',NS))>=1
+
+
+def test_category_specific_ai_background_is_not_one_generic_wheat_field():
+    from app.openai_service import _scene_for_category
+    quarry=_scene_for_category({'category':'Полуприцеп самосвал для инертных грузов','model':'ZUBRTRAIL 118'})
+    farm=_scene_for_category({'category':'Зерновоз','model':'Agro 500'})
+    other=_scene_for_category({'category':'Насос промышленный','model':'X2'})
+    assert 'quarry' in quarry and 'stone' in quarry
+    assert 'grain' in farm
+    assert 'logistics' in other
+    assert quarry!=farm and farm!=other
