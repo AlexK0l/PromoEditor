@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/app.css?v=20261113-compact-only">
   <link rel="stylesheet" href="/static/editor.css?v=20261113-v1">
   <link rel="stylesheet" href="/static/theme.css?v=20261113-smooth-1">
+  <link rel="stylesheet" href="/static/assets.css?v=20261113-multifiles-1">
 </head>
 <body>
   <header class="topbar">
@@ -46,19 +47,21 @@
         <div class="media-column">
           <label for="hero" id="hero-drop" class="dropzone">
             <span class="drop-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4 18V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="9" cy="9" r="1.5"/><path d="m5 17 5-5 3 3 3-3 3 3"/></svg></span>
-            <strong id="hero-label">Добавить фото товара</strong>
-            <span id="hero-hint">Перетащите сюда или выберите файл</span>
+            <strong id="hero-label">Добавить фотографии товара</strong>
+            <span id="hero-hint">Перетащите несколько фото или выберите файлы</span>
             <small>PNG / JPG / WEBP · до 20 МБ</small>
-            <input type="file" id="hero" accept="image/png,image/jpeg,image/webp" aria-label="Основное фото товара">
+            <input type="file" id="hero" multiple accept="image/png,image/jpeg,image/webp" aria-label="Фотографии товара, можно выбрать несколько">
           </label>
           <button type="button" id="clear-hero" class="remove-link" hidden>Убрать фотографию</button>
           <div class="mini-uploads">
-            <label for="documents" class="mini-upload"><span class="mini-icon" aria-hidden="true">▤</span><span><strong>Документы</strong><small id="file-documents">PDF, Excel, Word</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Документы с характеристиками"></label>
-            <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотип</strong><small id="file-logo">Необязательно</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Логотип бренда"></label>
+            <label for="documents" class="mini-upload"><span class="mini-icon" aria-hidden="true">▤</span><span><strong>Документы</strong><small id="file-documents">Можно загрузить несколько · PDF, Excel, Word</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Документы с характеристиками"></label>
+            <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотипы</strong><small id="file-logo">Можно загрузить несколько</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Логотипы и бренд-материалы, можно выбрать несколько"></label>
           </div>
           <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button></div>
           <button type="button" id="inspect-btn" class="quick-extract" hidden>Извлечь характеристики из документов <span aria-hidden="true">→</span></button>
-          <p id="file-feedback" class="file-feedback" role="status" aria-live="polite">Оригинальные файлы не добавляются в скачиваемый ZIP.</p>
+          <p class="asset-intro">Добавьте несколько фото, документов, логотипов и референсов. Система проанализирует их и выберет наиболее подходящие. <strong>Не все загруженные файлы попадут в промо.</strong></p>
+          <div id="asset-files-list" class="asset-files-list" role="list" aria-label="Загруженные материалы и приоритеты"></div>
+          <p id="file-feedback" class="file-feedback" role="status" aria-live="polite">Файлы не загружены.</p>
         </div>
 
         <div class="brief-column">
@@ -82,6 +85,44 @@
           </div>
           <label class="ai-choice" for="use-openai"><span class="ai-text"><strong>Генерировать фон с OpenAI</strong><small id="ai-description">Два платных запроса при включении</small></span><input id="use-openai" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span></label>
         </div>
+        <section id="asset-workflow" class="asset-workflow" aria-labelledby="asset-workflow-title">
+          <div class="asset-workflow-head">
+            <div>
+              <span class="step-label">ШАГ 1 · ОТБОР МАТЕРИАЛОВ</span>
+              <h3 id="asset-workflow-title">Что выберет система?</h3>
+              <p>Сначала проверяем все файлы, затем собираем промпт и макеты только из отобранных материалов.</p>
+            </div>
+            <button type="button" id="analyze-assets-btn" class="secondary-button">Проанализировать материалы</button>
+          </div>
+          <label class="check-field asset-ai-choice">
+            <input type="checkbox" id="assets-use-ai">
+            <span>AI-анализ всех изображений и документов
+              <small id="assets-ai-hint">Платные запросы только с подтверждения. Без OpenAI доступен бесплатный технический отбор.</small>
+            </span>
+          </label>
+          <p id="assets-analysis-status" class="asset-analysis-status" role="status" aria-live="polite">Добавьте файлы и нажмите «Проанализировать материалы».</p>
+          <div id="asset-selection" class="asset-selection" hidden>
+            <div class="asset-review-top">
+              <h4>Выбранные материалы</h4>
+              <span id="asset-analysis-method" class="asset-analysis-method">Технический отбор</span>
+            </div>
+            <div id="asset-picked" class="asset-picked" aria-live="polite"></div>
+            <h4>Не использованы в макете</h4>
+            <div id="asset-unused" class="asset-unused"></div>
+            <div id="asset-facts" class="asset-facts" hidden>
+              <h4>Сведения из документов — проверьте перед публикацией</h4>
+              <div id="asset-specs-list"></div>
+              <button type="button" id="asset-apply-specs" class="secondary-button">Перенести предложенные ТТХ в форму</button>
+              <p>Характеристики из файлов не добавляются в макет автоматически. Проверьте значения и источники.</p>
+            </div>
+            <div id="asset-analysis-warnings" class="asset-analysis-warnings"></div>
+            <div class="asset-selection-actions">
+              <button type="button" id="asset-approve" class="secondary-button">Оставить как есть</button>
+              <button type="button" id="asset-manual" class="secondary-button">Выбрать вручную</button>
+              <button type="button" id="asset-rebuild" class="secondary-button">Пересобрать выбор</button>
+            </div>
+          </div>
+        </section>
         <section id="prompt-workflow" class="prompt-workflow" aria-labelledby="prompt-title">
           <div class="prompt-head"><div>
             <span class="step-label">ШАГ 2 · ПРОМПТ</span>
@@ -119,7 +160,7 @@
           <div class="extra-uploads">
             <label class="mini-upload" for="detail"><span class="mini-icon">▣</span><span><strong>Второе фото</strong><small id="file-detail">Дополнительный ракурс</small></span><span class="mini-plus">+</span><input id="detail" type="file" accept="image/png,image/jpeg,image/webp"></label>
             <label class="mini-upload" for="drawing"><span class="mini-icon">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">PNG, JPG или PDF</small></span><span class="mini-plus">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf"></label>
-            <label class="mini-upload" for="references"><span class="mini-icon">▧</span><span><strong>Референсы</strong><small id="file-references">До 2 изображений</small></span><span class="mini-plus">+</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>
+            <label class="mini-upload" for="references"><span class="mini-icon">▧</span><span><strong>Референсы</strong><small id="file-references">Можно несколько; до 2 попадут в AI-сцену</small></span><span class="mini-plus">+</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>
           </div>
           <div class="extra-clear"><button type="button" data-clear="detail" hidden>Убрать второе фото</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="references" hidden>Убрать референсы</button></div>
         </div>
@@ -257,6 +298,7 @@
 
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
+  <script src="/static/assets.js?v=20261113-multifiles-1" defer></script>
   <script src="/static/app.js?v=20261113-prompt-corel" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
