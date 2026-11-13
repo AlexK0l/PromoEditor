@@ -33,6 +33,9 @@
   apply(chosen()); // before CSS parsing on the main page: avoids dark-mode flash
   function bind(){
     apply(chosen());
+    // First paint uses the saved/system theme without animation.
+    // Only subsequent user/system changes interpolate colors.
+    document.documentElement.classList.add('theme-ready');
     document.querySelectorAll('[data-theme-toggle]').forEach(button=>{
       button.addEventListener('click',()=>set(chosen()==='dark'?'light':'dark'));
     });

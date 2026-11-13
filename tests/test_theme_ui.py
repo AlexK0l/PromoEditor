@@ -54,6 +54,27 @@ def test_dark_mode_applies_to_nested_forms_and_editor_but_not_poster_pixels():
                 'DOMContentLoaded','theme-color'):
         assert key in js
 
+def test_theme_transition_is_accessible_and_never_animates_initial_theme():
+    css=(ROOT/'theme.css').read_text(encoding='utf-8')
+    js=(ROOT/'theme.js').read_text(encoding='utf-8')
+    from app.auth import LOGIN_PAGE
+    assert 'document.documentElement.classList.add(\'theme-ready\')' in js
+    assert js.index('apply(chosen()); // before CSS') < js.index("classList.add('theme-ready')")
+    assert 'transition-duration:320ms' in css
+    assert 'prefers-reduced-motion: reduce' in css
+    for item in ('.dropzone', '.edit-stage', '.edit-ai-option'):
+        assert item+'::before' in css
+    assert 'opacity 320ms' in css
+    assert 'transition-duration:0ms!important' in css
+    assert 'body::before' in LOGIN_PAGE
+    assert 'prefers-reduced-motion:reduce' in LOGIN_PAGE
+    assert 'transition:opacity 320ms' in LOGIN_PAGE
+    assert 'transition-duration:0ms!important' in LOGIN_PAGE
+    assert 'transform' not in css.split('/* Gentle palette interpolation')[1]
+    assert 'filter:invert' not in css
+    assert 'canvas.getContext' not in js
+
+
 def test_theme_is_pure_presentation_no_image_api_changes():
     js=(ROOT/'theme.js').read_text(encoding='utf-8')
     for forbidden in ('fetch(', 'canvas.getContext(', 'localStorage.clear(',

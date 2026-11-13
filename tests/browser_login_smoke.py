@@ -20,6 +20,15 @@ def main():
         assert toggle.count()==1
         toggle.click()
         assert page.locator("html").get_attribute("data-theme")=="dark"
+        # A protected login page disallows eval by CSP, so avoid
+        # wait_for_function (which evaluates a string in the page).
+        page.wait_for_timeout(420)
+        opacity=page.locator("body").evaluate("(el)=>getComputedStyle(el,'::before').opacity")
+        assert opacity=="1",opacity
+        assert page.locator(".card").evaluate("(el)=>getComputedStyle(el).transitionDuration").startswith("0.32s")
+        page.emulate_media(reduced_motion="reduce")
+        assert page.locator(".card").evaluate("(el)=>getComputedStyle(el).transitionDuration").startswith("0s")
+        page.emulate_media(reduced_motion="no-preference")
         page.reload(wait_until="domcontentloaded")
         assert page.locator("html").get_attribute("data-theme")=="dark"
         page.locator('input[name="password"]').fill(PASSWORD)

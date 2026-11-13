@@ -216,6 +216,36 @@ border:1px solid #f5ced5;font-size:13px;margin-bottom:16px}
   :root:not([data-theme="light"]) p,:root:not([data-theme="light"]) .note{color:#b0bfd3}
   :root:not([data-theme="light"]) input{background:#111d2d;color:#f0f4fb;border-color:#5a6f8e}
 }
+
+/* The login screen uses a gradient: fade a dark overlay rather than snapping.
+   Existing cards, text and controls interpolate their palette for 320ms. */
+body{position:relative;isolation:isolate}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+background:linear-gradient(140deg,#101725,#0d1420 60%,#162136);opacity:0}
+.card{position:relative;z-index:1}
+:root[data-theme="dark"] body,
+:root:not([data-theme="light"]) body{
+  background:linear-gradient(140deg,#edf3ff,#f6f8fb 55%,#fff)
+}
+:root[data-theme="dark"] body::before{opacity:1}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) body::before{opacity:1}
+}
+:root.theme-ready :is(body,.card,.logo,p,.note,input,button,.error){
+  transition:background-color 320ms cubic-bezier(.22,1,.36,1),
+             color 320ms cubic-bezier(.22,1,.36,1),
+             border-color 320ms cubic-bezier(.22,1,.36,1),
+             box-shadow 320ms cubic-bezier(.22,1,.36,1);
+}
+:root.theme-ready body::before{
+  transition:opacity 320ms cubic-bezier(.22,1,.36,1);
+}
+@media (prefers-reduced-motion:reduce){
+  :root.theme-ready :is(body,.card,.logo,p,.note,input,button,.error){
+    transition-duration:0ms!important
+  }
+  :root.theme-ready body::before{transition-duration:0ms!important}
+}
 </style></head><body><main class="card">
 <span class="logo" aria-hidden="true">P</span>
 <h1>Вход в PromoEditor</h1><p>Введите пароль для доступа к генератору и редактору промоматериалов.</p>
