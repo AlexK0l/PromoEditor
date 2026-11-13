@@ -25,6 +25,12 @@ jobs:
         run: |
           node --check app/static/app.js
           node --check app/static/editor.js
+      - name: Browser editor smoke test
+        run: |
+          python -m pip install playwright
+          python -m playwright install chromium
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 18200 > /tmp/promo-browser-app.log 2>&1 &
+          python tests/browser_editor_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
       - name: Validate deployment compose syntax
         run: |
           cp deploy/app.env.example deploy/app.env
