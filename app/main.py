@@ -24,7 +24,7 @@ from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_pn
 from .openai_service import analyze_documents, generate_visuals
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
-from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post
+from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
 BASE=Path(__file__).resolve().parent.parent
 try:
@@ -77,6 +77,7 @@ def home():
 def config():
     return {'openai_ready':bool(os.getenv('OPENAI_API_KEY')),
             'auth_enabled':auth_enabled(),
+            'logout_csrf_token':issue_form_token('logout') if auth_enabled() else None,
             'image_models':['gpt-image-2.5-flare','gpt-image-2.5-sunburst'],
             'max_file_mb':20,'max_files':MAX_FILES,'formats':[{'id':'4x3','size':[1440,1080]},{'id':'9x16','size':[1080,1920]}],
             'preview':True}

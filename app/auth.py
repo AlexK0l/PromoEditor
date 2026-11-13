@@ -94,6 +94,55 @@ def valid_cookie(token:str|None,*,now:int|None=None)->bool:
         return False
 
 
+def _form_key():
+    return hashlib.sha256(
+        (os.environ["PROMO_SESSION_SECRET"]+"|"+os.environ["PROMO_PASSWORD_HASH"]).encode()
+    ).digest()
+
+
+def issue_form_token(scope:str,*,now:int|None=None)->str:
+    """Short-lived signed anti-CSRF token embedded in a same-origin HTML form."""
+    if scope not in ("login","logout"):
+        raise ValueError("Unknown form scope.")
+    ts=int(time.time()) if now is None else now
+    message=f"{scope}.{ts}.{secrets.token_hex(12)}"
+    signature=hmac.new(_form_key(),("form."+message).encode("ascii"),hashlib.sha256).hexdigest()
+    return message+"."+signature
+
+
+def valid_form_token(scope:str,token:str|None,*,now:int|None=None)->bool:
+    if not isinstance(token,str) or len(token)>180 or not configured():
+        return False
+    parts=token.split(".")
+    if len(parts)!=4 or parts[0]!=scope or scope not in ("login","logout"):
+        return False
+    try:
+        issued=int(parts[1])
+        current=int(time.time()) if now is None else now
+        ttl=3600 if scope=="login" else SESSION_SECONDS
+        if issued<0 or issued>current+60 or current-issued>ttl:
+            return False
+        if len(parts[2])!=24 or len(parts[3])!=64:
+            return False
+        int(parts[2],16);int(parts[3],16)
+        message=".".join(parts[:3])
+        signature=hmac.new(_form_key(),("form."+message).encode("ascii"),hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature,parts[3])
+    except (ValueError,UnicodeEncodeError):
+        return False
+
+
+def _form_origin_ok(request:Request)->bool:
+    """Allows null Origin only for the signed native HTML forms.
+
+    Referrer-Policy: no-referrer causes native POST forms to send Origin: null.
+    General API POSTs keep strict Origin enforcement.
+    """
+    if _origin_ok(request):
+        return True
+    return request.headers.get("origin","").lower().strip()=="null" and not request.headers.get("referer")
+
+
 def _origin_ok(request:Request)->bool:
     host=request.headers.get("host","").lower().strip()
     for header in ("origin","referer"):
@@ -151,6 +200,7 @@ border:1px solid #f5ced5;font-size:13px;margin-bottom:16px}
 <h1>Вход в PromoEditor</h1><p>Введите пароль для доступа к генератору и редактору промоматериалов.</p>
 {{ERROR}}
 <form action="/login" method="post">
+<input type="hidden" name="csrf_token" value="{{CSRF_TOKEN}}">
 <label for="password">Пароль</label>
 <input id="password" name="password" type="password" required autofocus
 autocomplete="current-password" minlength="8" maxlength="256">
@@ -163,6 +213,7 @@ autocomplete="current-password" minlength="8" maxlength="256">
 def login_html(error:str|None=None,code:int=200):
     html=LOGIN_PAGE.replace("{{ERROR}}",
         '<div class="error" role="alert">'+error+'</div>' if error else "")
+    html=html.replace("{{CSRF_TOKEN}}",issue_form_token("login"))
     return HTMLResponse(html,status_code=code,headers={
         "Cache-Control":"no-store",
         "X-Frame-Options":"DENY",
@@ -181,7 +232,7 @@ async def guard(request:Request,call_next):
     path=request.url.path
     if path=="/login" and request.method in ("GET","HEAD","POST"):
         return await call_next(request)
-    if request.method in ("POST","PUT","PATCH","DELETE") and not _origin_ok(request):
+    if request.method in ("POST","PUT","PATCH","DELETE") and path!="/logout" and not _origin_ok(request):
         return JSONResponse({"detail":"Недопустимый источник запроса."},status_code=403)
     if valid_cookie(request.cookies.get(COOKIE_NAME)):
         result=await call_next(request)
@@ -203,18 +254,22 @@ async def login_get(request:Request):
 async def login_post(request:Request):
     if not enabled():
         return RedirectResponse("/",status_code=303)
-    if not _origin_ok(request):
-        return login_html("Некорректный запрос.",403)
     if int(request.headers.get("content-length") or 0)>2048:
         return login_html("Слишком длинный пароль.",413)
-    ip=request.client.host if request.client else "unknown"
-    if _fail_count(ip)>=FAILED_LIMIT:
-        return login_html("Слишком много попыток. Попробуйте через 15 минут.",429)
     try:
         form=await request.form()
         password=form.get("password","")
+        csrf=form.get("csrf_token","")
     except Exception:
         password=""
+        csrf=""
+    # An HTML form can report Origin: null with Referrer-Policy: no-referrer.
+    # The signed token protects login against cross-site forgery in that case.
+    if not valid_form_token("login",csrf) or not _form_origin_ok(request):
+        return login_html("Обновите страницу входа и повторите попытку.",403)
+    ip=request.client.host if request.client else "unknown"
+    if _fail_count(ip)>=FAILED_LIMIT:
+        return login_html("Слишком много попыток. Попробуйте через 15 минут.",429)
     if not isinstance(password,str) or not verify_password(password,os.getenv("PROMO_PASSWORD_HASH","")):
         _record_failure(ip)
         return login_html("Неверный пароль.",401)
@@ -226,6 +281,17 @@ async def login_post(request:Request):
 
 
 async def logout_post(request:Request):
+    # Native logout forms can also have Origin: null. Accept them only
+    # with a valid authenticated session and a signed logout CSRF token.
+    if enabled():
+        try:
+            form=await request.form()
+            csrf=form.get("csrf_token","")
+        except Exception:
+            csrf=""
+        if not valid_form_token("logout",csrf) or not _form_origin_ok(request):
+            return JSONResponse({"detail":"Обновите страницу и повторите выход."},
+                                status_code=403,headers={"Cache-Control":"no-store"})
     response=RedirectResponse("/login" if enabled() else "/",status_code=303,
                               headers={"Cache-Control":"no-store"})
     response.delete_cookie(COOKIE_NAME,path="/",secure=True,httponly=True,samesite="lax")
