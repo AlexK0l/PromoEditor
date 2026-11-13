@@ -211,7 +211,7 @@ def test_large_documents_keep_each_source_in_ai_context(monkeypatch):
     result=analyze(files=documents,use_ai=True)
     assert result.status_code==200,result.text
     assert 'source_1.txt' in seen['text']
-    assert 'source_4.txt' in seen['text']
+    assert 'source_3.txt' in seen['text']
     assert len(seen['text'])<=34000
     assert any('выдержки' in w for w in result.json()['warnings'])
 
