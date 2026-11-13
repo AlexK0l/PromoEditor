@@ -60,6 +60,7 @@
           <label class="field" for="model"><span>Название продукта <span class="required">*</span></span><input id="model" maxlength="80" autocomplete="off" placeholder="Например, ZubrTrail 500"></label>
           <label class="field" for="slogan"><span>Главное сообщение <span class="field-hint">то, что увидят покупатели</span></span><textarea id="slogan" rows="3" maxlength="250" placeholder="Например: Алюминиевый зерновоз, который перевозит больше за каждый рейс"></textarea></label>
           <label class="field" for="design-notes"><span>Пожелания к оформлению <span class="field-hint">необязательно</span></span><textarea id="design-notes" rows="3" maxlength="1800" placeholder="Например: светлый фон, крупная техника, красные акценты, современный стиль"></textarea><small class="field-tip">Пожелания учитываются при AI-генерации фона. Тексты и характеристики добавляются из заполненных полей.</small></label>
+          <label class="field" for="design-actions"><span>Дополнительные действия над дизайном <span class="field-hint">необязательно</span></span><textarea id="design-actions" rows="4" maxlength="1200" placeholder="Например: осветлить фон, добавить мягкое свечение, увеличить визуальную глубину и оставить свободное пространство справа"></textarea><small class="field-tip">Опишите желаемые изменения визуала своими словами. При включённом OpenAI эти инструкции передаются для обоих изображений. Без OpenAI сохраняются в брифе, но не применяются. Точное расположение текста, цены и ТТХ этим полем не изменяется.</small></label>
         </div>
       </div>
 
@@ -142,6 +143,6 @@
 
     <footer class="footer">PromoEditor · Ваши исходные материалы не включаются в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
-  <script src="/static/app.js?v=20261113-compact-only" defer></script>
+  <script src="/static/app.js?v=20261113-design-actions" defer></script>
 </body>
 </html>

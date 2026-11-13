@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const fileIds = ['hero','documents','logo','detail','drawing','references'];
-  const briefIds = ['model','slogan','design-notes','brand','category','claims','specs','benefits','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo'];
+  const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo'];
   const placeholders = {documents:'PDF, Excel, Word',logo:'Необязательно',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'До 2 изображений'};
   let latest = null;
   let apiReady = false;
@@ -28,7 +28,7 @@
   function formBrief(){
     return {
       brand:get('brand').trim(),model:get('model').trim(),category:get('category').trim(),
-      slogan:get('slogan').trim(),design_notes:get('design-notes').trim(),
+      slogan:get('slogan').trim(),design_notes:get('design-notes').trim(),design_actions:get('design-actions').trim(),
       style:get('style'),accent:get('accent'),
       hero_claims:lines('claims').slice(0,4),specs:pairs('specs'),benefits:lines('benefits'),dimensions:pairs('dimensions'),
       price:get('price').trim(),currency:get('currency'),vat:checked('vat'),phones:lines('phones').slice(0,2),
@@ -183,7 +183,7 @@
   }
   function fillBrief(data){
     for(const id of ['brand','model','category','slogan','price','currency','style','accent'])set(id,data[id]);
-    set('claims',asLines(data.hero_claims));set('specs',asLines(data.specs));set('benefits',asLines(data.benefits));set('dimensions',asLines(data.dimensions));set('phones',asLines(data.phones));set('design-notes',data.design_notes);
+    set('claims',asLines(data.hero_claims));set('specs',asLines(data.specs));set('benefits',asLines(data.benefits));set('dimensions',asLines(data.dimensions));set('phones',asLines(data.phones));set('design-notes',data.design_notes);set('design-actions',data.design_actions);
     $('vat').checked=Boolean(data.vat);$('show-roi').checked=Boolean(data.show_roi);
     const roi=data.roi||{};
     for(const [id,key] of [['extra-payload','extra_payload'],['distance','distance'],['rate','rate'],['trips','trips'],['years','years'],['baseline-price','baseline_price']])set(id,roi[key]??'');
@@ -191,7 +191,7 @@
     updateRoi();refreshStyle();
   }
   function clearForm(){
-    for(const id of ['brand','model','category','slogan','design-notes','claims','specs','benefits','dimensions','price','phones'])set(id,'');
+    for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','dimensions','price','phones'])set(id,'');
     set('currency','Br');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
     for(const id of fileIds)$(id).value='';

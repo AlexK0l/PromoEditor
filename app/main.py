@@ -113,7 +113,7 @@ async def _files(form,field,extensions,collection=False):
 def _normalize(data):
     if not isinstance(data,dict):raise HTTPException(400,detail='Некорректная форма данных')
     clean={}
-    for key,lim in [('brand',70),('category',100),('model',80),('slogan',250),('design_notes',1800),('price',30),('currency',12)]:
+    for key,lim in [('brand',70),('category',100),('model',80),('slogan',250),('design_notes',1800),('design_actions',1200),('price',30),('currency',12)]:
         clean[key]=str(data.get(key,''))[:lim].strip()
     clean['accent']=valid_hex(data.get('accent','#E31B26'))
     clean['style']=str(data.get('style','industrial')) if data.get('style') in {'industrial','graphite','minimal'} else 'industrial'
@@ -178,7 +178,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,use
             paths[key]=f'/files/{job_id}/{filename}'
         briefing=dict(brief)
         briefing['_metadata']={'generator':'Promo Studio 1.0','image_source':'OpenAI API' if use_openai else 'Исходное фото пользователя / демо',
-                  'ai_product_visualization':ai_product,'verified_specs':False,
+                  'ai_product_visualization':ai_product,'verified_specs':False,'design_actions_sent_to_ai':bool(use_openai and brief.get('design_actions')),
                   'note':'Технические характеристики, преимущества, экономику и права на материалы подтвердите до публикации.'}
         (folder/'brief.json').write_text(json.dumps(briefing,ensure_ascii=False,indent=2),encoding='utf-8')
         with zipfile.ZipFile(folder/'promo_kit.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
@@ -187,7 +187,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,use
         return {'job_id':job_id,'images':paths,'zip':f'/files/{job_id}/promo_kit.zip',
                 'brief':f'/files/{job_id}/brief.json',
                 'ai_used':use_openai,'visualization':ai_product,
-                'warnings':['Проверяйте каждую техническую цифру и сравнительное преимущество до публикации.']}
+                'warnings':['Проверяйте каждую техническую цифру и сравнительное преимущество до публикации.'] +
+                (['Дополнительные действия сохранены в брифе, но без OpenAI не применяются к визуалу.'] if brief.get('design_actions') and not use_openai else [])
     except Exception:
         shutil.rmtree(folder,ignore_errors=True)
         raise
