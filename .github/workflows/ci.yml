@@ -35,6 +35,17 @@ jobs:
             sleep 1
           done
           python tests/browser_editor_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
+      - name: Browser password form with Origin null
+        run: |
+          export PROMO_AUTH_ENABLED=1
+          export PROMO_PASSWORD_HASH="$(python -c "from app.auth import hash_password; print(hash_password('CiLoginPass1234!',iterations=300000))")"
+          export PROMO_SESSION_SECRET=ci-only-session-secret-2026-with-at-least-forty-characters
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 18201 > /tmp/promo-login-browser-app.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:18201/login > /dev/null; then break; fi
+            sleep 1
+          done
+          python tests/browser_login_smoke.py || (cat /tmp/promo-login-browser-app.log && exit 1)
       - name: Check password-only VPS deployment scripts
         run: |
           bash -n deploy/time4vps/install.sh
