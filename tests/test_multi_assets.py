@@ -75,6 +75,17 @@ def test_analyze_all_in_local_mode_and_show_unselected_with_sources(monkeypatch)
     assert 'CORELDRAW' not in data['suggested_prompt'] or 'CorelDRAW' in data['suggested_prompt']
 
 
+def test_different_flat_colors_are_not_near_duplicates():
+    groups={'photos':[('a.png',photo('red',(500,300),0)),
+                      ('b.png',photo('blue',(500,300),0))],
+            'logos':[],'documents':[],'references':[],'drawings':[]}
+    report,_=analyze_project(groups)
+    assert len(report['selected_assets']['references'])==0
+    assert report['selected_assets']['primary_photo'] is not None
+    assert report['selected_assets']['secondary_photo'] is not None
+    assert all(not row.get('duplicate_of') for row in report['project_assets'])
+
+
 def test_manual_include_exclude_and_cache_reuse(monkeypatch):
     report=analyze().json()
     prefs={'photo_1':'include','photo_2':'exclude','logo_1':'exclude','logo_2':'include',

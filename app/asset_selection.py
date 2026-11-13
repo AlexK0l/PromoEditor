@@ -52,7 +52,7 @@ def _tech_score(raw,kind):
                 for x in range(8):dh=(dh<<1)|int(pixels[y*9+x]>pixels[y*9+x+1])
             reason=f'{w}×{h} px; резкость {"выше средней" if sharp>.45 else "умеренная" if sharp>.19 else "низкая"}'
             if alpha and kind=='logo':reason+='; прозрачный фон'
-            return score,reason,w,h,alpha,dh
+            return score,reason,w,h,alpha,dh,ImageStat.Stat(img.convert('RGB')).mean
     except ValueError:raise
     except Exception as exc:raise ValueError('Не удалось проверить изображение.') from exc
 
@@ -98,16 +98,18 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     for i,r in enumerate(records):
         r.update(index=i,preference=prefs.get(r['id'],'auto'),score=50,quality='',selected=False,assignment='',reason='')
         if r['kind'] in ('photo','logo','reference') or (r['kind']=='drawing' and Path(r['name']).suffix.lower() in ('.png','.jpg','.jpeg','.webp')):
-            score,quality,w,h,alpha,dhash=_tech_score(r['raw'],r['kind'])
+            score,quality,w,h,alpha,dhash,tone=_tech_score(r['raw'],r['kind'])
             r.update(score=score,quality=quality,width=w,height=h,alpha=alpha)
             exact=(r['kind'],r['sha256'])
             if exact in seen:r['duplicate_of']=seen[exact]
             else:
                 seen[exact]=r['id']
                 for previous in visual_hashes:
-                    if previous[1]==r['kind'] and abs(w-previous[2])<=.2*max(w,previous[2]) and (dhash^previous[3]).bit_count()<=2:
+                    if (previous[1]==r['kind'] and abs(w-previous[2])<=.2*max(w,previous[2])
+                        and (dhash^previous[3]).bit_count()<=2
+                        and sum(abs(tone[j]-previous[4][j]) for j in range(3))<24):
                         r['duplicate_of']=previous[0];break
-                if not r.get('duplicate_of'):visual_hashes.append((r['id'],r['kind'],w,dhash))
+                if not r.get('duplicate_of'):visual_hashes.append((r['id'],r['kind'],w,dhash,tone))
             if r.get('duplicate_of'):r['score']=min(r['score'],20)
         elif r['kind']=='document':r['quality']='Документ: извлечение фактов требует проверки'
         else:r['quality']='Чертёж'
@@ -138,13 +140,15 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
                                         'source_id':r['id'],'source_file':r['name'],
                                         'source_excerpt':_clamp(key+': '+value,200)})
     joined='\n'.join(doc_text)[:34000]
-    ai_document=None;score_data=None;method='local'
+    ai_document=None;score_data=None;method='local';actual_ai=False
     if use_ai:
         from .openai_service import assess_asset_images,analyze_documents
         candidates=[x for x in records if x['kind'] in ('photo','logo','reference') and x['preference']!='exclude']
-        if candidates:score_data=assess_asset_images(candidates,str(requirements)[:1500],joined[:5000])
-        if joined.strip():ai_document=analyze_documents(joined,str(requirements)[:1500])
-        method='ai'
+        if candidates:
+            score_data=assess_asset_images(candidates,str(requirements)[:1500],joined[:5000]);actual_ai=True
+        if joined.strip():
+            ai_document=analyze_documents(joined,str(requirements)[:1500]);actual_ai=True
+        method='ai' if actual_ai else 'local'
     elif isinstance(cached_report,dict) and cached_report.get('analysis_method')=='ai':
         cached=[x for x in cached_report.get('project_assets',[])[:MAX_ITEMS]
                 if isinstance(x,dict) and x.get('id') in by_id and x.get('sha256')==by_id[x['id']]['sha256']
@@ -197,7 +201,7 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     if method=='local':
         warnings.append('Без AI оцениваются только разрешение, резкость и повторы; смысл фотографии и ракурс модель не оценивала.')
     report={'project_assets':public,'selected_assets':selected,'rejected_assets':rejected,
-            'extracted_data':extracted,'analysis_method':method,'ai_used':bool(use_ai),
+            'extracted_data':extracted,'analysis_method':method,'ai_used':actual_ai,
             'warnings':warnings,'total_files':len(records)}
     return report,by_id
 
