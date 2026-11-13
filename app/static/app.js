@@ -180,6 +180,13 @@
       const response=await fetch('/api/generate',{method:'POST',body:form});
       if(!response.ok)throw new Error(await readError(response));
       latest=await response.json();
+      const gaps=(latest.warnings||[]).filter(w=>/ТТХ|Габариты|Цена не указана/.test(w)).slice(0,4);
+      $('result-warnings').hidden=!gaps.length;
+      $('result-warning-items').replaceChildren();
+      for(const message of gaps){
+        const item=document.createElement('li');item.textContent=message;
+        $('result-warning-items').appendChild(item);
+      }
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
