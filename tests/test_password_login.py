@@ -143,7 +143,7 @@ def test_eight_characters_are_accepted_and_seven_rejected(protected):
         prepare_settings("", "a"*7)
 
     from app.auth import login_html
-    assert 'minlength="8"' in login_html().text
+    assert 'minlength="8"' in login_html().body.decode("utf-8")
 
 
 def test_provision_preserves_other_env_and_rotates_secret():
