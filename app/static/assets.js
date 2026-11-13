@@ -169,6 +169,24 @@
     }
     return source.slice(0,12);
   }
+  function extraFacts(){
+    const ai=report?.extracted_data?.ai_suggestions;
+    if(!ai||typeof ai!=='object')return null;
+    const result={};
+    for(const field of ['model','category','slogan','price']){
+      if(typeof ai[field]==='string'&&ai[field].trim())result[field]=ai[field].trim().slice(0,250);
+    }
+    for(const field of ['phones','benefits']){
+      if(Array.isArray(ai[field]))result[field]=ai[field].filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim().slice(0,160)).slice(0,8);
+    }
+    if(Array.isArray(ai.dimensions)){
+      result.dimensions=ai.dimensions.filter(v=>v&&v.label&&v.value).slice(0,8)
+        .map(v=>({label:String(v.label).slice(0,90),value:String(v.value).slice(0,160),
+                  excerpt:String(v.source_excerpt||'').slice(0,160)}));
+    }
+    return Object.keys(result).some(k=>Array.isArray(result[k])?result[k].length:!!result[k])?result:null;
+  }
+
   function renderReport(){
     const panel=$('asset-selection');
     panel.hidden=!report;
@@ -194,8 +212,20 @@
     }
     if(!unused.childElementCount)unused.appendChild(element('p','asset-fineprint','Все подходящие файлы распределены по ролям.'));
     const facts=extractedSpecs();
-    $('asset-facts').hidden=!facts.length;
+    const other=extraFacts();
+    $('asset-facts').hidden=!facts.length&&!other;
+    $('asset-apply-specs').hidden=!facts.length;
+    $('asset-apply-extra-facts').hidden=!other;
     const list=$('asset-specs-list');list.replaceChildren();
+    const extra=$('asset-extra-facts');extra.replaceChildren();
+    const titles={model:'Модель',category:'Категория',slogan:'Рекламный тезис',
+                  price:'Цена',phones:'Телефоны',benefits:'Преимущества',dimensions:'Габариты'};
+    if(other)for(const [key,value] of Object.entries(other)){
+      const body=Array.isArray(value)?value.map(v=>typeof v==='string'?v:
+        v.label+': '+v.value+(v.excerpt?' (источник: '+v.excerpt+')':'')).join('; '):value;
+      extra.appendChild(element('p','asset-fact',
+        (titles[key]||key)+': '+body+' · AI-предложение, требуется проверка'));
+    }
     for(const item of facts){
       list.appendChild(element('p','asset-fact',
         item.label+': '+item.value+' · источник: '+(item.source_file||'не подтверждён')+
@@ -290,7 +320,7 @@
   });
   renderFiles();
   window.PromoAssets={
-    append,analyze,reset,setAiReady,extractedSpecs,rows,
+    append,analyze,reset,setAiReady,extractedSpecs,extraFacts,rows,
     hasFiles:()=>fileCount()>0,isReady:()=>!dirty&&!!report,
     getReport:()=>!dirty?report:null,getPreviousReport:()=>report,
     totalCount:fileCount,

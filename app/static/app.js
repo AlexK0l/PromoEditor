@@ -350,6 +350,29 @@
     setStatus('ТТХ перенесены','Проверьте каждую характеристику по источникам перед публикацией.');
     $('specs').scrollIntoView({behavior:'smooth',block:'center'});
   });
+  $('asset-apply-extra-facts').addEventListener('click',()=>{
+    const facts=window.PromoAssets?.extraFacts();
+    if(!facts){showError('Нет других предложений из документов.');return;}
+    if(!window.confirm('Перенести предложенные модель, цену, телефоны и другие сведения? Данные AI не проверены; заполненные вручную поля не будут перезаписаны.'))return;
+    const values={model:'model',category:'category',slogan:'slogan',price:'price'};
+    let count=0;
+    for(const [key,id] of Object.entries(values)){
+      if(facts[key]&&!get(id).trim()){set(id,facts[key]);count++;}
+    }
+    for(const [key,id] of [['phones','phones'],['benefits','benefits']]){
+      if(Array.isArray(facts[key])&&facts[key].length&&!get(id).trim()){
+        set(id,asLines(facts[key]));count++;
+      }
+    }
+    if(Array.isArray(facts.dimensions)&&facts.dimensions.length&&!get('dimensions').trim()){
+      set('dimensions',asLines(facts.dimensions.map(row=>[row.label,row.value])));count++;
+    }
+    $('advanced-settings').open=true;
+    markPromptStale();invalidateResult();
+    setStatus('Предложения перенесены',count?
+      'Перенесено незаполненных полей: '+count+'. Проверьте каждый факт.':
+      'Заполненные поля не изменены. При необходимости отредактируйте их вручную.');
+  });
   window.addEventListener('promoeditor:assets-changed',()=>{
     markPromptStale();invalidateResult();clearError();
   });
