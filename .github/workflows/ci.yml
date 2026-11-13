@@ -24,6 +24,7 @@ jobs:
       - name: Check front-end JavaScript
         run: |
           node --check app/static/app.js
+          node --check app/static/editor.js
       - name: Validate deployment compose syntax
         run: |
           cp deploy/app.env.example deploy/app.env
