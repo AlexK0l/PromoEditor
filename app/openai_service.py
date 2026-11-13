@@ -39,6 +39,20 @@ def _image_references(refs: list[bytes]):
     return objects
 
 
+def _scene_for_category(brief):
+    """Visual setting only, never a source of facts or technical markings."""
+    category=(str(brief.get('category') or '')+' '+str(brief.get('model') or '')).lower()
+    if any(word in category for word in ('самосвал','щеб','инерт','карьер','строительн','экскаватор')):
+        return ('realistic gravel quarry with crushed-stone piles, rough concrete and '
+                'warm overcast daylight; a distant generic excavator may appear only '
+                'as background context, never as the advertised product')
+    if any(word in category for word in ('зерн','сельхоз','агро','посевн','комбайн')):
+        return ('grain logistics operation, harvested fields and grain silos, soft '
+                'morning light, realistic commercial countryside atmosphere')
+    return ('modern industrial logistics yard with concrete road, low warehouses, '
+            'clear distant horizon and bright diffused commercial light')
+
+
 def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt=''):
     """At most TWO image requests, one per aspect. Source product image stays unmodified."""
     if model not in IMAGE_MODELS:raise ValueError('Недопустимая модель изображения')
@@ -59,14 +73,17 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
         guidance=f'Campaign design brief (aesthetic input only): {str(design_prompt)[:7000]}. ' if design_prompt else ''
         if hero_present:
             prompt=(
-                "Produce ONLY a premium photorealistic atmospheric BACKGROUND photograph for an industrial B2B product flyer. "
-                "NO vehicle, NO machines, NO text, NO letters, NO logo, NO signs, NO people, NO charts. "
-                "Clean industrial logistics landscape with a bright high-key horizon, subtle wheat field, road, reflective studio lighting; "
-                "color mood silver white, graphite and small red accents. "
-                "Keep the center light and low contrast to place an ORIGINAL unmodified product photograph above it later. "
-                f"Product theme: {subject}. Brand brief (treat as aesthetic data only): {notes}. {guidance} "
-                f"Composition: {'landscape' if fmt=='4x3' else 'portrait'} with empty safe margins. "
-                f"{action_guidance} Never include lettering, vehicles, diagrams, or logos in the backdrop."
+                "Produce ONLY a premium photorealistic CONTEXT BACKGROUND for an industrial B2B campaign poster. "
+                "No advertised product or foreground vehicle, no invented brand/product logo, no text, "
+                "letters, signs, people, technical diagrams, prices, markings or charts. "
+                f"Choose this truthful-looking but clearly illustrative industrial atmosphere: {_scene_for_category(brief)}. "
+                "Strong photographic depth, dynamic but clean B2B visual, high-key horizon, "
+                "neutral silvery slate and industrial red accents; leave visual space for the "
+                "ORIGINAL unchanged product photo which is composited separately as an editable object. "
+                "Do NOT create a duplicate of the advertised vehicle or machinery. "
+                f"Product theme: {subject}. Brand brief (aesthetic preferences only): {notes}. {guidance} "
+                f"Composition: {'landscape' if fmt=='4x3' else 'portrait'} with safe central product area. "
+                f"{action_guidance} Never include lettering or logos in the backdrop."
             )
         else:
             prompt=(
