@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw
 
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
 from .openai_service import analyze_documents, generate_visuals
+from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 
 BASE=Path(__file__).resolve().parent.parent
@@ -42,7 +43,7 @@ LIMIT=int(os.getenv('PROMO_REQUESTS_PER_HOUR','20'))
 RATE=defaultdict(list)
 LOCK=threading.Lock()
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
-FILES={'poster_4x3.png','poster_9x16.png','promo_kit.zip','brief.json'}
+FILES={'poster_4x3.png','poster_9x16.png','promo_kit.zip','brief.json','edit.png'}
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
@@ -236,6 +237,49 @@ async def generate(request:Request):
         # Strip secrets, upstream credentials, and prompt text from server error output.
         raise HTTPException(502,detail=f'Не удалось создать изображения. Проверьте файлы и доступность OpenAI API. ({type(exc).__name__})')
     return result
+
+
+@app.post('/api/edit')
+async def edit_existing_promo(request: Request):
+    """One paid edit of an uploaded promo. Existing generated jobs remain unchanged."""
+    _guard_rate(request)
+    if int(request.headers.get('content-length') or 0) > MAX_ALL:
+        raise HTTPException(413, detail='Слишком большой запрос для редактирования.')
+    form = await request.form()
+    instruction = form.get('instruction', '')
+    if not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 2500:
+        raise HTTPException(400, detail='Опишите изменение (от 1 до 2500 символов).')
+    if not os.getenv('OPENAI_API_KEY'):
+        raise HTTPException(400, detail='Для AI-редактирования требуется OPENAI_API_KEY на сервере. Ручные правки работают без ключа.')
+    source = await _files(form, 'image', ALLOWED_IMAGES)
+    if not source:
+        raise HTTPException(400, detail='Загрузите PNG, JPG или WEBP для изменения.')
+    masks = await _files(form, 'mask', {'.png'})
+    mask = masks[0][1] if masks else None
+    if mask is not None and len(mask) >= 4 * 1024 * 1024:
+        raise HTTPException(413, detail='Маска должна быть PNG менее 4 МБ.')
+    try:
+        edited = await asyncio.to_thread(
+            edit_promotional_image, source[0][1], instruction.strip(),
+            mask_raw=mask, model=str(form.get('model', 'gpt-image-2.5-flare')),
+            quality=str(form.get('quality', 'medium'))
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(502, detail=f'AI-редактирование не удалось ({type(exc).__name__}). Проверьте доступность OpenAI.')
+    _clean_jobs()
+    job_id = secrets.token_hex(16)
+    folder = STORAGE / job_id
+    folder.mkdir(mode=0o700)
+    try:
+        (folder / 'edit.png').write_bytes(image_bytes(edited))
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+    return {'image': f'/files/{job_id}/edit.png', 'width': edited.width,
+            'height': edited.height, 'ai_used': True,
+            'warning': 'Проверьте текст, цифры, логотип и детали техники после AI-правки.'}
 
 
 @app.post('/api/inspect')
