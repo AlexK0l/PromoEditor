@@ -306,11 +306,52 @@
   $('hero-drop').addEventListener('dragleave',event=>{if(!$('hero-drop').contains(event.relatedTarget))$('hero-drop').classList.remove('is-dragging');});
   $('hero-drop').addEventListener('drop',event=>{
     event.preventDefault();$('hero-drop').classList.remove('is-dragging');
-    const file=Array.from(event.dataTransfer?.files||[]).find(f=>/\.(png|jpe?g|webp)$/i.test(f.name));
-    if(!file){showError('Основное фото должно быть PNG, JPG или WEBP. Документы загружайте через кнопку ниже.');return;}
-    if(file.size>20*1024*1024){showError('Фото больше 20 МБ. Выберите файл меньшего размера.');return;}
-    const transfer=new DataTransfer();transfer.items.add(file);$('hero').files=transfer.files;
+    const files=Array.from(event.dataTransfer?.files||[]);
+    if(!files.length||files.some(f=>!/\.(png|jpe?g|webp)$/i.test(f.name))){
+      showError('Перетащите только PNG, JPG или WEBP. Документы загружайте отдельно.');return;
+    }
+    if(files.some(f=>f.size>20*1024*1024)){showError('Каждое фото должно быть не больше 20 МБ.');return;}
+    const transfer=new DataTransfer();
+    for(const file of files)transfer.items.add(file);
+    $('hero').files=transfer.files;
     $('hero').dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  $('analyze-assets-btn').addEventListener('click',async()=>{
+    clearError();
+    try {
+      const report=await window.PromoAssets.analyze(formBrief());
+      if(report){markPromptStale();invalidateResult();}
+    }catch(error){showError(error.message||'Не удалось проверить материалы.');}
+  });
+  $('asset-rebuild').addEventListener('click',async()=>{
+    clearError();
+    try {
+      // Content-matched earlier AI assessments can be reused without a paid call.
+      const report=await window.PromoAssets.analyze(formBrief(),{freeOnly:true});
+      if(report){markPromptStale();invalidateResult();}
+    }catch(error){showError(error.message||'Не удалось пересобрать выбор.');}
+  });
+  $('asset-apply-specs').addEventListener('click',()=>{
+    const entries=window.PromoAssets?.extractedSpecs()||[];
+    if(!entries.length){showError('Нет предложенных характеристик.');return;}
+    if(!window.confirm('Перенести данные из документов в поля ТТХ? Проверьте все значения и источники перед публикацией.'))return;
+    const old=pairs('specs');
+    const used=new Set(old.map(row=>row[0].toLowerCase()+'|'+row[1].toLowerCase()));
+    const combined=[...old];
+    for(const entry of entries){
+      const key=(entry.label+'|'+entry.value).toLowerCase();
+      if(entry.label&&entry.value&&!used.has(key)&&combined.length<12){
+        combined.push([entry.label,entry.value]);used.add(key);
+      }
+    }
+    set('specs',asLines(combined));
+    $('advanced-settings').open=true;
+    markPromptStale();invalidateResult();
+    setStatus('ТТХ перенесены','Проверьте каждую характеристику по источникам перед публикацией.');
+    $('specs').scrollIntoView({behavior:'smooth',block:'center'});
+  });
+  window.addEventListener('promoeditor:assets-changed',()=>{
+    markPromptStale();invalidateResult();clearError();
   });
   $('build-prompt-btn').addEventListener('click',async()=>{
     clearError();
