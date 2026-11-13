@@ -17,7 +17,7 @@ if ss -ltn | grep -Eq '^LISTEN[[:space:]].*127\.0\.0\.1:18080[[:space:]]'; then
 fi
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git python3 python3-venv python3-pip fonts-dejavu-core ca-certificates curl
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git python3 python3-venv python3-pip fonts-dejavu-core libcairo2 ca-certificates curl
 if ! getent passwd promoeditor >/dev/null; then
   useradd --system --create-home --home-dir /var/lib/promoeditor --shell /usr/sbin/nologin promoeditor
 fi

@@ -42,7 +42,7 @@ def test_preview_without_api_generates_exact_sizes_and_zip(monkeypatch):
         assert im.getpixel((2,2)) != (255,0,255)
     zdata=client.get(result['zip']).content
     with zipfile.ZipFile(io.BytesIO(zdata)) as z:
-        assert set(z.namelist())=={'poster_4x3.png','poster_9x16.png','brief.json'}
+        assert {'poster_4x3.png','poster_9x16.png','brief.json','corel_4x3.svg','corel_9x16.svg','poster_4x3.jpg','poster_9x16.jpg','promo_prompt.txt'}.issubset(set(z.namelist()))
         b=json.loads(z.read('brief.json'))
         assert b['_metadata']['verified_specs'] is False
         assert b['phones']==default_brief()['phones']

@@ -24,6 +24,7 @@ from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_pn
 from .openai_service import analyze_documents, generate_visuals
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
+from .editable_export import build_promo_prompt, create_editable_svg, rasterize_svg
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
 BASE=Path(__file__).resolve().parent.parent
@@ -44,7 +45,8 @@ LIMIT=int(os.getenv('PROMO_REQUESTS_PER_HOUR','20'))
 RATE=defaultdict(list)
 LOCK=threading.Lock()
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
-FILES={'poster_4x3.png','poster_9x16.png','promo_kit.zip','brief.json','edit.png'}
+FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
+       'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','edit.png'}
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
@@ -86,7 +88,7 @@ def config():
             'logout_csrf_token':issue_form_token('logout') if auth_enabled() else None,
             'image_models':['gpt-image-2.5-flare','gpt-image-2.5-sunburst'],
             'max_file_mb':20,'max_files':MAX_FILES,'formats':[{'id':'4x3','size':[1440,1080]},{'id':'9x16','size':[1080,1920]}],
-            'preview':True}
+            'preview':False,'export_formats':['png','jpeg','svg'],'editable_format':'svg'}
 
 
 @app.get('/api/demo')
@@ -180,7 +182,8 @@ def _demo_hero():
     return im
 
 
-def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,use_demo,use_openai,model,quality):
+def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
+                   use_demo,use_openai,model,quality,design_prompt):
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
@@ -191,34 +194,97 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,use
         drawing=load_image(drawing_raw)
         if hero is None and use_demo and not use_openai:
             hero=_demo_hero()
-        visuals={};ai_product=False
+        visuals={}
+        ai_product=False
         if use_openai:
-            visuals=generate_visuals(brief,hero_present=(hero is not None),references=references,model=model,quality=quality)
+            visuals=generate_visuals(brief,hero_present=(hero is not None),
+                                     references=references,model=model,
+                                     quality=quality,design_prompt=design_prompt)
             ai_product=hero is None
-        paths={}
-        for key,filename in [('4x3','poster_4x3.png'),('9x16','poster_9x16.png')]:
-            atmosphere=visuals.get(key)
-            product=atmosphere if ai_product else hero
-            bg=None if ai_product else atmosphere
-            img=render_poster(brief,key,hero=product,detail=detail,logo=logo,drawing=drawing,backdrop=bg,ai_product=ai_product)
-            (folder/filename).write_bytes(image_bytes(img))
-            paths[key]=f'/files/{job_id}/{filename}'
+        paths={};jpeg_paths={};corel_paths={}
+        for key in ('4x3','9x16'):
+            visual=visuals.get(key)
+            photo=visual if ai_product else hero
+            scene=None if ai_product else visual
+            svg=create_editable_svg(brief,key,hero=photo,detail=detail,logo=logo,
+                                    drawing=drawing,backdrop=scene,ai_product=ai_product)
+            # The SVG is the master. PNG and JPEG are rendered from the SAME
+            # vector scene, so opening the SVG in CorelDRAW has matching layout.
+            png,jpeg=rasterize_svg(svg)
+            png_name=f'poster_{key}.png'
+            jpg_name=f'poster_{key}.jpg'
+            svg_name=f'corel_{key}.svg'
+            (folder/png_name).write_bytes(png)
+            (folder/jpg_name).write_bytes(jpeg)
+            (folder/svg_name).write_bytes(svg)
+            paths[key]=f'/files/{job_id}/{png_name}'
+            jpeg_paths[key]=f'/files/{job_id}/{jpg_name}'
+            corel_paths[key]=f'/files/{job_id}/{svg_name}'
+        (folder/'promo_prompt.txt').write_text(design_prompt,encoding='utf-8')
         briefing=dict(brief)
-        briefing['_metadata']={'generator':'Promo Studio 1.0','image_source':'OpenAI API' if use_openai else 'Исходное фото пользователя / демо',
-                  'ai_product_visualization':ai_product,'verified_specs':False,'design_actions_sent_to_ai':bool(use_openai and brief.get('design_actions')),
-                  'note':'Технические характеристики, преимущества, экономику и права на материалы подтвердите до публикации.'}
+        briefing['_metadata']={
+            'generator':'PromoEditor SVG scene 2.0',
+            'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
+            'ai_product_visualization':ai_product,
+            'verified_specs':False,
+            'design_actions_sent_to_ai':bool(use_openai and brief.get('design_actions')),
+            'editable_source':'CorelDRAW-compatible SVG; each text/shape is a vector object',
+            'bitmap_limit':'A photo or AI-generated image remains one individually replaceable bitmap, not editable vector parts.',
+            'prompt_file':'promo_prompt.txt',
+            'note':'Проверяйте технические данные, цены и права на иллюстрации перед публикацией.'
+        }
         (folder/'brief.json').write_text(json.dumps(briefing,ensure_ascii=False,indent=2),encoding='utf-8')
-        with zipfile.ZipFile(folder/'promo_kit.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
-            for file in ['poster_4x3.png','poster_9x16.png','brief.json']:
-                z.write(folder/file,arcname=file)
-        return {'job_id':job_id,'images':paths,'zip':f'/files/{job_id}/promo_kit.zip',
-                'brief':f'/files/{job_id}/brief.json',
-                'ai_used':use_openai,'visualization':ai_product,
-                'warnings':['Проверяйте каждую техническую цифру и сравнительное преимущество до публикации.'] +
-                (['Дополнительные действия сохранены в брифе, но без OpenAI не применяются к визуалу.'] if brief.get('design_actions') and not use_openai else [])}
+        readme=(
+            'PROMOEDITOR — ИСХОДНИКИ ДЛЯ CORELDRAW\n'
+            'Откройте corel_4x3.svg или corel_9x16.svg в CorelDRAW через Файл → Импорт/Открыть.\n'
+            'При необходимости разгруппируйте SVG-объекты. Текст, фигуры, фото и логотипы — отдельные объекты.\n'
+            'Сохраните импортированный файл как CDR в самой программе CorelDRAW.\n'
+            'Фотографии и AI-изображения — отдельные растровые объекты. '
+            'Их внутренние детали НЕ становятся независимыми векторными объектами.\n'
+            'Для соответствия типографике установите или замените DejaVu Sans.\n'
+            'JPEG/PNG получены из тех же SVG, поэтому компоновка совпадает.\n'
+            'Проверьте тексты и цифры перед публикацией.\n'
+        )
+        (folder/'CORELDRAW_README.txt').write_text(readme,encoding='utf-8')
+        names=[
+            'poster_4x3.png','poster_9x16.png',
+            'poster_4x3.jpg','poster_9x16.jpg',
+            'corel_4x3.svg','corel_9x16.svg',
+            'promo_prompt.txt','brief.json','CORELDRAW_README.txt'
+        ]
+        with zipfile.ZipFile(folder/'promo_kit.zip','w',
+                            compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
+            for filename in names:
+                archive.write(folder/filename,arcname=filename)
+        warnings=['Проверьте технические данные, цены и права на изображения перед публикацией.']
+        if brief.get('design_actions') and not use_openai:
+            warnings.append('Дополнительные действия сохранены в промпте, но без OpenAI не применяются к AI-фону и произвольному изменению дизайна.')
+        return {
+            'job_id':job_id,'images':paths,'jpeg':jpeg_paths,'corel':corel_paths,
+            'prompt_file':f'/files/{job_id}/promo_prompt.txt',
+            'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
+            'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
+        }
     except Exception:
         shutil.rmtree(folder,ignore_errors=True)
         raise
+
+
+@app.post('/api/prompt')
+async def preview_promo_prompt(request:Request):
+    """Free, deterministic and inspectable intermediate step: form -> prompt."""
+    if int(request.headers.get('content-length') or 0)>48000:
+        raise HTTPException(413,detail='Слишком большой бриф.')
+    try:
+        raw=await request.body()
+        if len(raw)>48000:raise HTTPException(413,detail='Слишком большой бриф.')
+        brief=_normalize(json.loads(raw))
+    except json.JSONDecodeError:
+        raise HTTPException(400,detail='Некорректный JSON.')
+    try:prompt=build_promo_prompt(brief)
+    except ValueError as exc:raise HTTPException(400,detail=str(exc))
+    return {'prompt':prompt,'formats':['4x3','9x16'],'ai_required':False,
+            'notice':'Промпт сформирован из формы без платного вызова. При включённом OpenAI он передаётся для генерации сцены, а тексты и векторные элементы компонуются программно.'}
 
 
 @app.post('/api/generate')
@@ -244,6 +310,13 @@ async def generate(request:Request):
     use_demo=str(form.get('use_demo','false')).lower()=='true'
     if use_openai and not os.getenv('OPENAI_API_KEY'):
         raise HTTPException(400,detail='Для AI-генерации укажите OPENAI_API_KEY на сервере. Доступен предпросмотр без API.')
+    supplied_prompt=form.get('prompt','')
+    if not isinstance(supplied_prompt,str) or len(supplied_prompt)>8000:
+        raise HTTPException(400,detail='Промпт не должен превышать 8000 символов.')
+    try:design_prompt=supplied_prompt.strip() if supplied_prompt.strip() else build_promo_prompt(brief)
+    except ValueError as exc:raise HTTPException(400,detail=str(exc))
+    if len(design_prompt)<5:
+        raise HTTPException(400,detail='Добавьте описание для генерации.')
     drawing_raw=pairs['drawing'][0][1] if pairs['drawing'] else None
     if drawing_raw and pairs['drawing'][0][0].lower().endswith('.pdf'):
         try:drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
@@ -256,7 +329,7 @@ async def generate(request:Request):
             pairs['logo'][0][1] if pairs['logo'] else None,
             drawing_raw,
             [x[1] for x in refs],use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
-            str(form.get('quality','medium')))
+            str(form.get('quality','medium')),design_prompt)
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:
@@ -347,4 +420,5 @@ def get_file(job_id:str,filename:str):
     if time.time()-(STORAGE/job_id).stat().st_mtime>TTL_SECONDS:
         shutil.rmtree(STORAGE/job_id,ignore_errors=True)
         raise HTTPException(410,detail='Срок хранения результата истёк; создайте файл снова.')
-    return FileResponse(path,headers={'Cache-Control':'private, no-store'},filename=filename if filename.endswith('.zip') else None)
+    return FileResponse(path,headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'},
+                        filename=filename if filename.endswith(('.zip','.svg','.txt')) else None)
