@@ -1,5 +1,9 @@
 # Promo Studio — веб-генератор промышленной инфографики
 
+## One-password sign-in for Time4VPS
+
+On a configured Time4VPS server, replace Caddy's browser username+password dialog with one independent PromoEditor password. After updating the app, run `bash /opt/promoeditor/deploy/time4vps/switch_to_password_login.sh` as root. The script activates fail-closed FastAPI login, verifies protected API access, then safely removes only PromoEditor's old Caddy Basic Auth. Session cookies are signed and HttpOnly Secure (12-hour expiry); passwords and signing secrets are kept in the root-owned `/etc/promoeditor/promoeditor.env` file. RegionalResearch is unchanged. See `deploy/time4vps/README.md` for backups and steps.
+
 ## Интерфейс PromoEditor
 
 Доступен только **«Компактный»** вариант интерфейса. Главная страница `/` сразу открывает одностраничную форму; переключателя между дизайнами, дополнительных вариантов и вложенных страниц больше нет. Введите название продукта, прикрепите фото и при необходимости документы, укажите рекламный тезис и стиль. Остальные поля размещены в «Дополнительных настройках».

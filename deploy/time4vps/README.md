@@ -1,5 +1,25 @@
 # PromoEditor on the EXISTING Time4VPS (RegionalResearch is kept intact)
 
+## Migration on an existing VPS: password ONLY, no username
+
+PromoEditor now offers its own single-password login page. This is similar to RegionalResearch, but it uses a separate secret and cookie; you can enter the same password string if you wish. **Do not copy, read, or change RegionalResearch credentials.**
+
+An EXISTING Time4VPS deployment with a Caddy popup asking for username `promo` requires this migration after the app update. Run as root on the VPS:
+
+    bash /opt/promoeditor/deploy/time4vps/update.sh
+    bash /opt/promoeditor/deploy/time4vps/switch_to_password_login.sh
+
+Enter a password of at least 12 characters when asked (twice, hidden). The script stores only a PBKDF2 password hash and a new HMAC session signing secret in `/etc/promoeditor/promoeditor.env` (mode 0600). It backs up this environment file and the imported `/etc/caddy/promoeditor.caddy`. Then it enables FastAPI session protection and **proves** that anonymous `/api/config` returns HTTP 401 and `/login` returns HTTP 200. **Only after these checks** is the OLD `basic_auth` block removed from the imported PromoEditor Caddy file. Caddy configuration is validated before reload; any validation/reload failure restores the previous PromoEditor site. The existing RegionalResearch service and Caddy host block are never edited.
+
+After migration open the normal PromoEditor HTTPS URL in a private/incognito browser tab. You should see a page with one password field, not a username popup. A successful login grants a signed Secure HttpOnly cookie valid for up to 12 hours; the top menu has «Выйти». The app checks every API request, static asset and generated file. If password-only auth cannot be configured, it fails closed and Caddy Basic Auth remains active.
+
+Changing the password later (root only; rotates the signing secret and invalidates previous sessions):
+
+    python3 /opt/promoeditor/deploy/time4vps/provision_auth.py /etc/promoeditor/promoeditor.env
+    systemctl restart promoeditor
+
+Never publish your password, its hash, server session secret or OpenAI API key. Note that local non-VPS/dev runs can keep PROMO_AUTH_ENABLED=0; production must use PROMO_AUTH_ENABLED=1. Fresh installations in step 2 now prompt for the password before the service is exposed through Caddy. The step 4 initial configure_caddy.sh refuses to publish a site until app-level auth is working. Do NOT rerun initial configure_caddy.sh for an existing site.
+
 This is the recommended deployment method for the owner's **already configured** Ubuntu Time4VPS server. It is **different** from `deploy/README_VPS.md`: that older Docker Compose recipe starts a second Caddy container and therefore **must not be run on this VPS**, where the existing system Caddy already owns ports 80/443.
 
 ## Existing host (historical, from 2026-11-09 records; verify before acting)
@@ -11,7 +31,7 @@ This is the recommended deployment method for the owner's **already configured**
 | Internal listener | `127.0.0.1:10000` | `127.0.0.1:18080` |
 | Browser address | `https://<DASHED_VPS_IP>.sslip.io/` | `https://promoeditor.<DASHED_VPS_IP>.sslip.io/` |
 | HTTPS | **Existing host Caddy** `/etc/caddy/Caddyfile` | Additive imported Caddy site, **no second proxy** |
-| Authentication | RegionalResearch's own one-password session form | Caddy HTTP Basic Auth (`promo` + an independent password) |
+| Authentication | RegionalResearch's own one-password session form | FastAPI password-only form (independent session) |
 | App files | `/opt/regionalresearch` | `/opt/promoeditor` |
 | Data | RegionalResearch SQLite/checkpoints/results | `/var/lib/promoeditor/jobs`, entirely separate |
 | Secrets | Existing RegionalResearch `.env` (do not read/change) | `/etc/promoeditor/promoeditor.env`, mode `0600` |
@@ -62,10 +82,11 @@ Read the preflight report. If `/root/promoeditor-bootstrap` is not empty, do not
 cd /root/promoeditor-bootstrap
 bash deploy/time4vps/install.sh
 systemctl status promoeditor --no-pager -l
-curl -fsS http://127.0.0.1:18080/api/config
+# /login should be HTTP 200 and anonymous /api/config HTTP 401
+curl -sSI http://127.0.0.1:18080/login | head -n 10
 ```
 
-The installer sets up `/opt/promoeditor`, a dedicated non-login account, a virtualenv, and `/etc/systemd/system/promoeditor.service`. It uses **one Uvicorn worker**, port **18080 bound to loopback**, a dedicated output directory and a memory ceiling (`MemoryMax=800M`). Existing Caddy, RegionalResearch, SQLite, SSH and firewall are not modified. No API call to OpenAI is made during installation.
+The installer sets up `/opt/promoeditor`, a dedicated non-login account, a virtualenv, and `/etc/systemd/system/promoeditor.service`. It uses **one Uvicorn worker**, port **18080 bound to loopback**, a dedicated output directory and a memory ceiling (`MemoryMax=800M`). Existing Caddy, RegionalResearch, SQLite, SSH and firewall are not modified. A new installation prompts for a password, which is stored only as a hash. No API call to OpenAI is made during installation.
 
 Try the local demo **without an OpenAI key first**. Only if this works, continue to HTTPS.
 
@@ -89,23 +110,22 @@ No new reverse proxy or public ports. On the VPS:
 bash /opt/promoeditor/deploy/time4vps/configure_caddy.sh
 ```
 
-The script checks the PromoEditor local endpoint and DNS; asks for the hostname, expected public IPv4, and a **new password** directly on the VPS; hashes it with the *already installed host Caddy*; backs up the existing Caddyfile under `/root/promoeditor-backups`; creates `/etc/caddy/promoeditor.caddy` with HTTP Basic Auth, `72MB` upload limit and upstream `127.0.0.1:18080`; then **adds only** `import /etc/caddy/promoeditor.caddy` to the existing Caddyfile. It validates before reloading. If validation/reload fails, it attempts to restore the original Caddyfile. The existing RegionalResearch host block remains as-is; its own password-only login is **not** changed.
+The fresh-install script verifies FastAPI password protection (anonymous `/api/config` must be HTTP 401, `/login` must be HTTP 200). It asks for a hostname and expected IP, adds only an imported Caddy site for that hostname with HTTPS and the 72 MB body limit, and **does not add Caddy Basic Auth**. This is possible because the FastAPI application now protects the entire page, its files and API.
 
-**Important:** PromoEditor uses Caddy's standard login prompt (username `promo` plus the password you choose). This does not share the RegionalResearch session. A custom single-field password page would be a separate enhancement, not assumed present.
-
+Already installed? Use `switch_to_password_login.sh` described above, NOT the initial configure script.
 ## 5. Verify both apps after setup
 
 ```bash
 systemctl is-active regionalresearch caddy promoeditor
 curl -fsS http://127.0.0.1:18080/api/config
-# No credentials: expected HTTP 401 after certificate issuance.
+# Anonymous public website should redirect HTTP 303 to /login after certificate issuance.
 curl -sSI https://promoeditor.YOUR-DASHED-VPS-IP.sslip.io/ | head -n 10
 # Check that the original RegionalResearch remains accessible.
 curl -sSI https://YOUR-DASHED-VPS-IP.sslip.io/ | head -n 10
 ss -ltnp | grep -E ':(80|443|10000|18080)[[:space:]]' || true
 ```
 
-In a browser, open `https://promoeditor.<DASHED_VPS_IP>.sslip.io/`, enter `promo` and your new password, run a **non-AI** demo, and download 4:3 and 9:16 PNG. Open original RegionalResearch in a separate tab to confirm it still works. If DNS or TLS issuance fails, check firewall/Caddy logs; do not turn off authentication or replace the original Caddy config as a workaround.
+In a browser, open `https://promoeditor.<DASHED_VPS_IP>.sslip.io/`, enter only the password you set on the VPS, run a **non-AI** demo, and download 4:3 and 9:16 PNG. Open original RegionalResearch in a separate tab to confirm it still works. If DNS or TLS issuance fails, check firewall/Caddy logs; do not turn off authentication or replace the original Caddy config as a workaround.
 
 ## Updates, diagnostics and backup
 
