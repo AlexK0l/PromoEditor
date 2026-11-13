@@ -281,7 +281,8 @@ async def preview_promo_prompt(request:Request):
         brief=_normalize(json.loads(raw))
     except json.JSONDecodeError:
         raise HTTPException(400,detail='Некорректный JSON.')
-    prompt=build_promo_prompt(brief)
+    try:prompt=build_promo_prompt(brief)
+    except ValueError as exc:raise HTTPException(400,detail=str(exc))
     return {'prompt':prompt,'formats':['4x3','9x16'],'ai_required':False,
             'notice':'Промпт сформирован из формы без платного вызова. При включённом OpenAI он передаётся для генерации сцены, а тексты и векторные элементы компонуются программно.'}
 
@@ -312,7 +313,8 @@ async def generate(request:Request):
     supplied_prompt=form.get('prompt','')
     if not isinstance(supplied_prompt,str) or len(supplied_prompt)>8000:
         raise HTTPException(400,detail='Промпт не должен превышать 8000 символов.')
-    design_prompt=supplied_prompt.strip() if supplied_prompt.strip() else build_promo_prompt(brief)
+    try:design_prompt=supplied_prompt.strip() if supplied_prompt.strip() else build_promo_prompt(brief)
+    except ValueError as exc:raise HTTPException(400,detail=str(exc))
     if len(design_prompt)<5:
         raise HTTPException(400,detail='Добавьте описание для генерации.')
     drawing_raw=pairs['drawing'][0][1] if pairs['drawing'] else None
