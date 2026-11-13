@@ -156,7 +156,9 @@ def test_time4vps_migration_proves_protection_before_removing_basic_auth():
     assert script.index("provision_auth.py")<script.index("python3 - \"$SITE\"")
     assert script.index('local_status \'/api/config\'')<script.index("python3 - \"$SITE\"")
     assert "caddy validate" in script and "systemctl reload caddy" in script
-    assert "regionalresearch" not in script.lower()
+    assert "systemctl restart regionalresearch" not in script.lower()
+    assert "systemctl stop regionalresearch" not in script.lower()
+    assert "rm -rf /opt/regionalresearch" not in script.lower()
     assert "basic_auth" not in setup
     assert "provision_auth.py" in installer
     assert 'code=$(curl' in updater

@@ -36,7 +36,7 @@ stamp=$(date -u +%Y%m%dT%H%M%SZ)
 backup="/root/promoeditor-backups/Caddyfile-before-promoeditor-${stamp}"
 cp -p /etc/caddy/Caddyfile "$backup"
 
-# The hash is inserted from a shell variable only on the VPS. No plaintext secret is stored.
+# FastAPI password auth is already active; Caddy publishes only a protected upstream.
 {
   printf '%s {\n' "$HOST"
   cat <<'CADDYHEAD'
