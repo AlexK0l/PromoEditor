@@ -157,15 +157,20 @@ def test_fake_openai_generates_two_visuals(monkeypatch):
 
 def test_editor_without_layout_previews_keeps_downloads():
     html=client.get('/').text
-    assert 'Предпросмотр макетов' not in html
-    for v in ('wizard','studio','compact','dialog'):
-        page=client.get(f'/static/designs/{v}/index.html')
-        assert page.status_code==200
-        assert 'id="preview-4x3"' not in page.text
-        assert 'id="preview-9x16"' not in page.text
-        for element_id in ('download-panel','download-4x3','download-9x16','download-all','generate-btn','modebanner'):
-            assert f'id="{element_id}"' in page.text
-        script=client.get(f'/static/designs/{v}/app.js').text
-        assert "('download-panel').hidden=false;" in script
-        assert 'preview-4x3' not in script
-        assert 'preview-9x16' not in script
+    assert 'id="model"' in html
+    assert '<details id="advanced-settings"' in html
+    assert 'id="hero-drop"' in html
+    assert 'id="generate-btn"' in html
+    assert 'id="download-panel"' in html
+    for element_id in ('download-4x3','download-9x16','download-all'):
+        assert f'id="{element_id}"' in html
+    assert 'id="preview-4x3"' not in html
+    assert 'id="preview-9x16"' not in html
+    assert 'design-switcher' not in html
+    assert 'src="/static/app.js?v=' in html
+    assert 'href="/static/app.css?v=' in html
+    js=client.get('/static/app.js').text
+    assert "$('download-panel').hidden=false;" in js
+    assert "$('download-panel').hidden=true;" in js
+    assert 'preview-4x3' not in js
+    assert 'preview-9x16' not in js
