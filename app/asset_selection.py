@@ -139,11 +139,18 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
                     suggestions.append({'label':_clamp(key,90),'value':_clamp(value,160),
                                         'source_id':r['id'],'source_file':r['name'],
                                         'source_excerpt':_clamp(key+': '+value,200)})
-    joined='\n'.join(doc_text)[:34000]
+    # Preserve context from EVERY document, rather than letting the first
+    # lengthy PDF consume the entire vision/text model context budget.
+    per_doc=max(1500,30000//max(1,len(doc_text)))
+    joined='\n'.join(part[:per_doc] for part in doc_text)[:34000]
+    if any(len(part)>per_doc for part in doc_text):
+        warnings.append('Для AI использованы выдержки из каждого документа (ограничение контекста). Локальные предложения получены из всех обработанных строк.')
     ai_document=None;score_data=None;method='local';actual_ai=False
     if use_ai:
         from .openai_service import assess_asset_images,analyze_documents
-        candidates=[x for x in records if x['kind'] in ('photo','logo','reference') and x['preference']!='exclude']
+        candidates=[x for x in records if x['kind'] in ('photo','logo','reference')
+                    or (x['kind']=='drawing' and Path(x['name']).suffix.lower() in ('.png','.jpg','.jpeg','.webp'))]
+        candidates=[x for x in candidates if x['preference']!='exclude']
         if candidates:
             score_data=assess_asset_images(candidates,str(requirements)[:1500],joined[:5000]);actual_ai=True
         if joined.strip():
