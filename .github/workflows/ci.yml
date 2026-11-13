@@ -26,6 +26,7 @@ jobs:
           node --check app/static/app.js
           node --check app/static/editor.js
           node --check app/static/theme.js
+          node --check app/static/assets.js
       - name: Browser editor smoke test
         run: |
           python -m pip install playwright
@@ -36,6 +37,7 @@ jobs:
             sleep 1
           done
           python tests/browser_editor_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
+          python tests/browser_assets_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
       - name: Browser password form with Origin null
         run: |
           export PROMO_AUTH_ENABLED=1

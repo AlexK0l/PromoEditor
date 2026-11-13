@@ -25,6 +25,7 @@ from .openai_service import analyze_documents, generate_visuals
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .editable_export import build_promo_prompt, create_editable_svg, rasterize_svg
+from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
 BASE=Path(__file__).resolve().parent.parent
@@ -39,14 +40,14 @@ STORAGE.mkdir(parents=True,exist_ok=True)
 
 MAX_FILE=20*1024*1024
 MAX_ALL=68*1024*1024
-MAX_FILES=16
+MAX_FILES=16  # Across photos, documents, logos, references and drawings
 TTL_SECONDS=int(os.getenv('PROMO_JOB_TTL_SECONDS','7200'))
 LIMIT=int(os.getenv('PROMO_REQUESTS_PER_HOUR','20'))
 RATE=defaultdict(list)
 LOCK=threading.Lock()
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
 FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
-       'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','edit.png'}
+       'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','edit.png'}
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
@@ -87,7 +88,7 @@ def config():
             'auth_enabled':auth_enabled(),
             'logout_csrf_token':issue_form_token('logout') if auth_enabled() else None,
             'image_models':['gpt-image-2.5-flare','gpt-image-2.5-sunburst'],
-            'max_file_mb':20,'max_files':MAX_FILES,'formats':[{'id':'4x3','size':[1440,1080]},{'id':'9x16','size':[1080,1920]}],
+            'max_file_mb':20,'max_files':MAX_FILES,'multi_assets':True,'asset_analysis':True,'formats':[{'id':'4x3','size':[1440,1080]},{'id':'9x16','size':[1080,1920]}],
             'preview':False,'export_formats':['png','jpeg','svg'],'editable_format':'svg'}
 
 
@@ -163,6 +164,76 @@ def _normalize(data):
     return clean
 
 
+async def _asset_groups(form):
+    """New plural API with legacy single-file field compatibility.
+
+    The same ID order is built in both /api/analyze-assets and /api/generate:
+    photo_1... from photos/hero followed by optional detail, logo_1...,
+    document_1..., reference_1..., drawing_1.
+    """
+    photos=await _files(form,'photos',ALLOWED_IMAGES,collection=True)
+    legacy_photos=await _files(form,'hero',ALLOWED_IMAGES,collection=True)
+    photos+=legacy_photos
+    photos+=await _files(form,'detail',ALLOWED_IMAGES,collection=True)
+    logos=await _files(form,'logos',ALLOWED_IMAGES,collection=True)
+    logos+=await _files(form,'logo',ALLOWED_IMAGES,collection=True)
+    docs=await _files(form,'documents',ALLOWED_DOCS,collection=True)
+    refs=await _files(form,'references',ALLOWED_IMAGES,collection=True)
+    drawings=await _files(form,'drawings',ALLOWED_IMAGES|{'.pdf'},collection=True)
+    drawings+=await _files(form,'drawing',ALLOWED_IMAGES|{'.pdf'},collection=True)
+    groups={'photos':photos,'logos':logos,'documents':docs,
+            'references':refs,'drawings':drawings}
+    all_items=sum(groups.values(),[])
+    if len(all_items)>MAX_FILES:
+        raise HTTPException(400,detail=f'Не более {MAX_FILES} файлов в проекте.')
+    if sum(len(raw) for _,raw in all_items)>MAX_ALL:
+        raise HTTPException(413,detail='Общий объём вложений превышает лимит 68 МБ.')
+    return groups
+
+
+def _asset_review(form):
+    preferences=form.get('asset_preferences','{}')
+    cached=form.get('asset_report')
+    if not isinstance(preferences,str) or len(preferences)>6000:
+        raise HTTPException(400,detail='Слишком много настроек материалов.')
+    if cached is not None and (not isinstance(cached,str) or len(cached)>55000):
+        raise HTTPException(400,detail='Слишком большой отчёт анализа.')
+    return preferences,cached
+
+
+@app.post('/api/analyze-assets')
+async def analyze_assets(request:Request):
+    """Analyze ALL source uploads first; user reviews choices before generation."""
+    if int(request.headers.get('content-length') or 0)>MAX_ALL:
+        raise HTTPException(413,detail='Общий размер загрузки превышает 68 МБ.')
+    form=await request.form()
+    groups=await _asset_groups(form)
+    if not any(groups.values()):
+        raise HTTPException(400,detail='Добавьте хотя бы один файл для анализа.')
+    prefs,cached=_asset_review(form)
+    use_ai=str(form.get('use_ai','false')).lower()=='true'
+    if use_ai:
+        _guard_rate(request)
+        if not os.getenv('OPENAI_API_KEY'):
+            raise HTTPException(400,detail='Для AI-анализа необходим OPENAI_API_KEY на VPS. Бесплатная техническая оценка доступна без ключа.')
+    raw=form.get('payload','{}')
+    if not isinstance(raw,str) or len(raw)>48000:
+        raise HTTPException(400,detail='Слишком большой бриф проекта.')
+    try:brief=_normalize(json.loads(raw))
+    except json.JSONDecodeError:raise HTTPException(400,detail='Некорректный JSON брифа.')
+    try:
+        report,_=await asyncio.to_thread(
+            analyze_project,groups,prefs,cached_report=cached,use_ai=use_ai,
+            requirements=brief.get('design_notes','')+' '+brief.get('design_actions',''))
+        prompt=build_promo_prompt(brief,report) if brief.get('model') else ''
+    except ValueError as exc:
+        raise HTTPException(400,detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(502,detail=f'Анализ материалов не удался ({type(exc).__name__}). Проверьте входные файлы и OpenAI.')
+    report['suggested_prompt']=prompt
+    return report
+
+
 def _demo_hero():
     """Original geometric demo trailer; contains no client artwork."""
     im=Image.new('RGBA',(1150,600),(0,0,0,0))
@@ -183,7 +254,7 @@ def _demo_hero():
 
 
 def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
-                   use_demo,use_openai,model,quality,design_prompt):
+                   use_demo,use_openai,model,quality,design_prompt,asset_report=None):
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
@@ -221,6 +292,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             jpeg_paths[key]=f'/files/{job_id}/{jpg_name}'
             corel_paths[key]=f'/files/{job_id}/{svg_name}'
         (folder/'promo_prompt.txt').write_text(design_prompt,encoding='utf-8')
+        (folder/'asset_selection.json').write_text(json.dumps(asset_report or {},ensure_ascii=False,indent=2),encoding='utf-8')
         briefing=dict(brief)
         briefing['_metadata']={
             'generator':'PromoEditor SVG scene 2.0',
@@ -231,6 +303,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'editable_source':'CorelDRAW-compatible SVG; each text/shape is a vector object',
             'bitmap_limit':'A photo or AI-generated image remains one individually replaceable bitmap, not editable vector parts.',
             'prompt_file':'promo_prompt.txt',
+            'asset_selection_file':'asset_selection.json',
             'note':'Проверяйте технические данные, цены и права на иллюстрации перед публикацией.'
         }
         (folder/'brief.json').write_text(json.dumps(briefing,ensure_ascii=False,indent=2),encoding='utf-8')
@@ -250,7 +323,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'poster_4x3.png','poster_9x16.png',
             'poster_4x3.jpg','poster_9x16.jpg',
             'corel_4x3.svg','corel_9x16.svg',
-            'promo_prompt.txt','brief.json','CORELDRAW_README.txt'
+            'promo_prompt.txt','brief.json','asset_selection.json','CORELDRAW_README.txt'
         ]
         with zipfile.ZipFile(folder/'promo_kit.zip','w',
                             compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
@@ -263,6 +336,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'job_id':job_id,'images':paths,'jpeg':jpeg_paths,'corel':corel_paths,
             'prompt_file':f'/files/{job_id}/promo_prompt.txt',
             'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
+            'asset_selection':f'/files/{job_id}/asset_selection.json',
+            'selected_assets':(asset_report or {}).get('selected_assets',{}),
             'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
         }
     except Exception:
@@ -278,10 +353,12 @@ async def preview_promo_prompt(request:Request):
     try:
         raw=await request.body()
         if len(raw)>48000:raise HTTPException(413,detail='Слишком большой бриф.')
-        brief=_normalize(json.loads(raw))
+        original=json.loads(raw)
+        brief=_normalize(original)
+        report=original.get('asset_report') if isinstance(original,dict) else None
     except json.JSONDecodeError:
         raise HTTPException(400,detail='Некорректный JSON.')
-    try:prompt=build_promo_prompt(brief)
+    try:prompt=build_promo_prompt(brief,report)
     except ValueError as exc:raise HTTPException(400,detail=str(exc))
     return {'prompt':prompt,'formats':['4x3','9x16'],'ai_required':False,
             'notice':'Промпт сформирован из формы без платного вызова. При включённом OpenAI он передаётся для генерации сцены, а тексты и векторные элементы компонуются программно.'}
@@ -297,39 +374,43 @@ async def generate(request:Request):
     if not isinstance(raw,str) or len(raw)>48000:raise HTTPException(400,detail='Некорректные данные формы')
     try:brief=_normalize(json.loads(raw))
     except json.JSONDecodeError:raise HTTPException(400,detail='Некорректный JSON')
-    pairs={k:(await _files(form,k,ALLOWED_IMAGES | ({'.pdf'} if k=='drawing' else set()))) for k in ['hero','detail','logo','drawing']}
-    refs=await _files(form,'references',ALLOWED_IMAGES,collection=True)
-    docs=await _files(form,'documents',ALLOWED_DOCS,collection=True)
-    if len(refs)+len(docs)+sum(len(v) for v in pairs.values())>MAX_FILES:
-        raise HTTPException(400,detail=f'Не более {MAX_FILES} файлов за запрос')
-    all_files=refs+docs+sum(pairs.values(),[])
-    if sum(len(content) for _,content in all_files)>MAX_ALL:
-        raise HTTPException(413,detail='Общий объём файлов не должен превышать 68 МБ')
-    # Documents are intentionally never auto-trusted as copy; extract/approve in /api/inspect first.
+    groups=await _asset_groups(form)
+    prefs,cached=_asset_review(form)
     use_openai=str(form.get('use_openai','false')).lower()=='true'
     use_demo=str(form.get('use_demo','false')).lower()=='true'
     if use_openai and not os.getenv('OPENAI_API_KEY'):
-        raise HTTPException(400,detail='Для AI-генерации укажите OPENAI_API_KEY на сервере. Доступен предпросмотр без API.')
+        raise HTTPException(400,detail='Для AI-генерации укажите OPENAI_API_KEY на сервере.')
     supplied_prompt=form.get('prompt','')
     if not isinstance(supplied_prompt,str) or len(supplied_prompt)>8000:
         raise HTTPException(400,detail='Промпт не должен превышать 8000 символов.')
-    try:design_prompt=supplied_prompt.strip() if supplied_prompt.strip() else build_promo_prompt(brief)
-    except ValueError as exc:raise HTTPException(400,detail=str(exc))
-    if len(design_prompt)<5:
-        raise HTTPException(400,detail='Добавьте описание для генерации.')
-    drawing_raw=pairs['drawing'][0][1] if pairs['drawing'] else None
-    if drawing_raw and pairs['drawing'][0][0].lower().endswith('.pdf'):
+    try:
+        report,records=await asyncio.to_thread(
+            analyze_project,groups,prefs,cached_report=cached,use_ai=False)
+        # Approved user edits to the prompt are kept. Asset choices are still
+        # appended as non-instructional, real file-derived context.
+        assets_prompt=build_promo_prompt(brief,report)
+        design_prompt=supplied_prompt.strip() if supplied_prompt.strip() else assets_prompt
+        if supplied_prompt.strip() and records:
+            from .editable_export import asset_prompt_section
+            suffix=asset_prompt_section(report)
+            design_prompt=(design_prompt+'\n'+suffix)[:8000]
+        if len(design_prompt)<5:raise ValueError('Добавьте описание для генерации.')
+    except ValueError as exc:
+        raise HTTPException(400,detail=str(exc))
+    hero_raw=chosen_bytes(report,records,'primary_photo')
+    detail_raw=chosen_bytes(report,records,'secondary_photo')
+    logo_raw=chosen_bytes(report,records,'logo')
+    drawing_raw=chosen_bytes(report,records,'drawing')
+    references=chosen_bytes(report,records,'references')
+    drawing_id=report['selected_assets']['drawing']
+    if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
         try:drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
         except ValueError as exc:raise HTTPException(400,detail=str(exc))
     try:
         result=await asyncio.to_thread(
-            _generate_sync,brief,
-            pairs['hero'][0][1] if pairs['hero'] else None,
-            pairs['detail'][0][1] if pairs['detail'] else None,
-            pairs['logo'][0][1] if pairs['logo'] else None,
-            drawing_raw,
-            [x[1] for x in refs],use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
-            str(form.get('quality','medium')),design_prompt)
+            _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
+            references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
+            str(form.get('quality','medium')),design_prompt,report)
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:

@@ -43,7 +43,7 @@ def test_single_page_has_styles_accessibility_and_downloads():
     html=(ROOT/'index.html').read_text(encoding='utf-8')
     css=(ROOT/'app.css').read_text(encoding='utf-8')
     js=(ROOT/'app.js').read_text(encoding='utf-8')
-    assert 'aria-label="Основное фото товара"' in html
+    assert 'aria-label="Фотографии товара, можно выбрать несколько"' in html
     assert 'aria-live="polite"' in html
     for style in ('industrial','graphite','minimal'):
         assert f'data-style="{style}"' in html
