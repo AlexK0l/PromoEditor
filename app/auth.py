@@ -31,8 +31,8 @@ def enabled():
 
 
 def hash_password(password:str,*,salt:bytes|None=None,iterations:int=_ITERATIONS)->str:
-    if not isinstance(password,str) or not 12<=len(password)<=256:
-        raise ValueError("Пароль должен содержать 12–256 символов.")
+    if not isinstance(password,str) or not 8<=len(password)<=256:
+        raise ValueError("Пароль должен содержать от 8 до 256 символов.")
     salt=salt or secrets.token_bytes(24)
     digest=hashlib.pbkdf2_hmac("sha256",password.encode("utf-8"),salt,iterations)
     return f"pbkdf2_sha256:{iterations}:{salt.hex()}:{digest.hex()}"
@@ -153,7 +153,8 @@ border:1px solid #f5ced5;font-size:13px;margin-bottom:16px}
 <form action="/login" method="post">
 <label for="password">Пароль</label>
 <input id="password" name="password" type="password" required autofocus
-autocomplete="current-password" maxlength="256">
+autocomplete="current-password" minlength="8" maxlength="256">
+<div class="note">Минимум 8 символов.</div>
 <button type="submit">Войти</button></form>
 <div class="note">Без логина. Сессия в браузере действует до 12 часов.</div>
 </main></body></html>"""
