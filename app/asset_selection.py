@@ -195,7 +195,17 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     for r in records:
         keys=('id','kind','name','size','sha256','preference','score','quality','selected','assignment','reason',
               'width','height','alpha','ai_score','ai_reason','ai_role','duplicate_of')
-        public.append({key:r[key] for key in keys if key in r})
+        row={key:r[key] for key in keys if key in r}
+        suffix=Path(r['name']).suffix.lower()
+        row['mime']={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg',
+                     '.webp':'image/webp','.pdf':'application/pdf',
+                     '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                     '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     '.csv':'text/csv','.txt':'text/plain','.md':'text/markdown'}.get(suffix,'application/octet-stream')
+        row['role']=r['assignment'] or r['kind']
+        row['forced_include']=r['preference']=='include'
+        row['forced_exclude']=r['preference']=='exclude'
+        public.append(row)
     rejected=[{'id':r['id'],'name':r['name'],'reason':r['reason']}
               for r in records if not r['selected']]
     if method=='local':
