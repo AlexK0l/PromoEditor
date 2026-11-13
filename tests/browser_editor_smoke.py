@@ -62,8 +62,9 @@ def main():
         page.wait_for_function("!document.getElementById('edit-workspace').hidden")
         assert "Проект открыт" in page.locator("#edit-status").inner_text()
         # Open a freshly generated portrait in the same editor.
-        from app.render import default_brief
-        form=urlencode({"payload":json.dumps(default_brief(),ensure_ascii=False),
+        with urlopen(BASE+"/api/demo",timeout=10) as response:
+            demo=json.load(response)["brief"]
+        form=urlencode({"payload":json.dumps(demo,ensure_ascii=False),
                         "use_openai":"false","use_demo":"true"}).encode()
         req=Request(BASE+"/api/generate",data=form,method="POST")
         with urlopen(req,timeout=50) as response:
