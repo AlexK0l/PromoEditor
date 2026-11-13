@@ -35,6 +35,13 @@ jobs:
             sleep 1
           done
           python tests/browser_editor_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
+      - name: Check password-only VPS deployment scripts
+        run: |
+          bash -n deploy/time4vps/install.sh
+          bash -n deploy/time4vps/update.sh
+          bash -n deploy/time4vps/configure_caddy.sh
+          bash -n deploy/time4vps/switch_to_password_login.sh
+          python -m py_compile deploy/time4vps/provision_auth.py app/auth.py
       - name: Validate deployment compose syntax
         run: |
           cp deploy/app.env.example deploy/app.env
