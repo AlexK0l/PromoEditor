@@ -188,7 +188,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,use
                 'brief':f'/files/{job_id}/brief.json',
                 'ai_used':use_openai,'visualization':ai_product,
                 'warnings':['Проверяйте каждую техническую цифру и сравнительное преимущество до публикации.'] +
-                (['Дополнительные действия сохранены в брифе, но без OpenAI не применяются к визуалу.'] if brief.get('design_actions') and not use_openai else [])
+                (['Дополнительные действия сохранены в брифе, но без OpenAI не применяются к визуалу.'] if brief.get('design_actions') and not use_openai else [])}
     except Exception:
         shutil.rmtree(folder,ignore_errors=True)
         raise
