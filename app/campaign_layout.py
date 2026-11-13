@@ -233,7 +233,22 @@ def _stat_row(scene,x,y,w,h,title,value,index,accent):
     scene.el('specs','rect',f'spec-row-outline-{index}',{
         'x':x+.8,'y':y+.8,'width':w-1.6,'height':h-1.6,
         'rx':12,'fill':'none','stroke':accent,'stroke-width':1.8})
-    _spec_symbol(scene,x+7,y+(h-60)/2,index,accent)
+    # Dense fact lists need scalable SVG icons; never overlap adjacent rows.
+    before=len(scene.groups['specs'])
+    icon_left=x+7
+    icon_top=y+6
+    _spec_symbol(scene,icon_left,icon_top,index,accent)
+    scale=min(1.0,max(.4,(h-12)/60))
+    if scale<.999:
+        # Preserve each icon's editable paths while scaling the group as a unit.
+        transform=f'translate({round(icon_left*(1-scale),3)} {round(icon_top*(1-scale),3)}) scale({round(scale,4)})'
+        for icon_part in list(scene.groups['specs'])[before:]:
+            icon_part.set('transform',transform)
+    else:
+        dy=max(0,(h-72)/2)
+        if dy:
+            for icon_part in list(scene.groups['specs'])[before:]:
+                icon_part.set('transform',f'translate(0 {round(dy,2)})')
     vx=x+w*.74
     _rule(scene,'specs',vx-10,y+12,vx-10,y+h-12,'#E7EAF0',2,f'spec-separator-{index}')
     scene.text('specs',title,x+78,y+8,vx-x-95,h-15,
