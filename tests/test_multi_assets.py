@@ -45,7 +45,7 @@ def analyze(files=None,prefs=None,use_ai=False,report=None):
           'asset_preferences':json.dumps(prefs or {}),
           'use_ai':str(use_ai).lower()}
     if report:data['asset_report']=json.dumps(report,ensure_ascii=False)
-    return client.post('/api/analyze-assets',data=data,files=files or project_files())
+    return client.post('/api/analyze-assets',data=data,files=project_files() if files is None else files)
 
 
 def generate(files=None,prefs=None,report=None):
@@ -53,7 +53,7 @@ def generate(files=None,prefs=None,report=None):
           'asset_preferences':json.dumps(prefs or {}),
           'use_openai':'false','use_demo':'false'}
     if report:data['asset_report']=json.dumps(report,ensure_ascii=False)
-    return client.post('/api/generate',data=data,files=files or project_files())
+    return client.post('/api/generate',data=data,files=project_files() if files is None else files)
 
 
 def test_analyze_all_in_local_mode_and_show_unselected_with_sources(monkeypatch):
