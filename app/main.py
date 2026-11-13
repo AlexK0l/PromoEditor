@@ -330,6 +330,18 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             for filename in names:
                 archive.write(folder/filename,arcname=filename)
         warnings=['Проверьте технические данные, цены и права на изображения перед публикацией.']
+        if not brief.get('specs'):
+            warnings.append('Подтверждённые ТТХ не заполнены: таблица характеристик не показана. Проверьте предложения из документов и перенесите нужные в форму.')
+        if not brief.get('dimensions'):
+            warnings.append('Габариты отсутствуют в форме: векторная схема размеров без данных не создавалась.')
+        if not brief.get('price'):
+            warnings.append('Цена не указана: вместо числа используется общий призыв запросить предложение.')
+        if len(brief.get('specs') or [])>7:
+            warnings.append('Горизонтальный макет содержит первые 7 подтверждённых ТТХ; весь список сохранён в JSON-брифе.')
+        if len(brief.get('dimensions') or [])>4:
+            warnings.append('В макете используются первые 4 габарита; остальные сохранены в JSON-брифе.')
+        if len(brief.get('benefits') or [])>5:
+            warnings.append('В рекламной полосе показаны первые 5 преимуществ; остальные сохранены в JSON-брифе.')
         if brief.get('design_actions') and not use_openai:
             warnings.append('Дополнительные действия сохранены в промпте, но без OpenAI не применяются к AI-фону и произвольному изменению дизайна.')
         return {

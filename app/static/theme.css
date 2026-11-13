@@ -186,3 +186,7 @@
 :root[data-theme="dark"] .prompt-status.is-stale{color:#ffc17d}
 :root.theme-ready .prompt-workflow{transition:background-color 320ms,border-color 320ms}
 @media(prefers-reduced-motion:reduce){:root.theme-ready .prompt-workflow{transition:none}}
+
+:root[data-theme="dark"] .result-warnings{
+  background:#3d3024;border-color:#745337;color:#ffddb3
+}

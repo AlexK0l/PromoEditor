@@ -200,3 +200,10 @@ button:disabled{cursor:not-allowed;opacity:.48}
 @media(max-width:650px){.prompt-head{flex-direction:column;align-items:stretch}
   .prompt-head .secondary-button{align-self:flex-start}.file-results{grid-template-columns:minmax(0,1fr)}
   .prompt-workflow{padding:14px}}
+
+/* Source-accuracy guidance is visible after download; never synthesize facts. */
+.result-warnings{margin:15px 0 10px;padding:15px 18px;border:1px solid #f1c9a3;
+  border-radius:13px;background:#fff8ee;color:#865120;font-size:12px}
+.result-warnings strong{display:block;margin-bottom:6px;font-size:13px}
+.result-warnings ul{margin:4px 0 0;padding-left:19px}
+.result-warnings li{margin:5px 0;line-height:1.52}

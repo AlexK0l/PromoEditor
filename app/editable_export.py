@@ -21,7 +21,7 @@ ET.register_namespace("xlink",XLINK)
 ET.register_namespace("inkscape",INK)
 SIZES={"4x3":(1440,1080),"9x16":(1080,1920)}
 STYLES={
-    "industrial":"светлая индустриальная инфографика, акцентные плашки, чистый фон",
+    "industrial":"яркий высококонтрастный рекламный постер в красно-белой палитре; крупная техника, сильный заголовок, выразительные карточки подтверждённых ТТХ, широкая полоса с преимуществами и заметный CTA",
     "graphite":"премиальный графитовый промышленный дизайн, чистая типографика",
     "minimal":"воздушный минималистичный дизайн с выразительными заголовками",
 }
@@ -83,8 +83,11 @@ def build_promo_prompt(brief:dict, asset_report:dict|None=None)->str:
         f"Пожелания: {field('design_notes',1200)}.",
         f"Дополнительные действия с дизайном: {field('design_actions',1200)}.",
         "Горизонтальный макет: 1440×1080 (4:3). Вертикальный: 1080×1920 (9:16).",
-        "Обязательные независимые элементы: фон; фото товара; логотип; "
-        "заголовки; тезисы; ТТХ; графика; габариты; цена; контакты.",
+        "Независимые объекты: фон, главное фото товара, заголовки, визуальная графика; "
+        "логотип, тезисы, ТТХ, чертежи, габариты, цена и контакты только если они реально предоставлены.",
+        "Композиция должна быть плотной и рекламной, а не пустым техническим шаблоном: "
+        "крупное фото товара как главный фокус, выразительная шапка, наглядные характеристики "
+        "и убедительный, но фактически корректный нижний рекламный блок.",
         "Не придумывать характеристики, факты, цены, телефоны, лицензии и брендовые знаки.",
         "Оригинальные фотографии и логотипы должны остаться неизменными.",
         "При OpenAI генерировать ТОЛЬКО фото-сцену/атмосферу без надписей и логотипов. "
@@ -153,7 +156,7 @@ class Scene:
             "logo":"04 Логотип","heading":"05 Заголовки","claims":"06 Тезисы",
             "specs":"07 Технические характеристики","benefits":"08 Преимущества",
             "dimensions":"09 Габариты и чертёж","roi":"10 Экономика",
-            "price":"11 Цена","contacts":"12 Контакты",
+            "cta_bg":"11 Фон рекламного блока","price":"12 Цена","contacts":"13 Контакты",
         }
         for name,title in titles.items():
             self.groups[name]=ET.SubElement(self.root,f"{{{NS}}}g",{
@@ -229,6 +232,12 @@ class Scene:
 def create_editable_svg(brief,key,hero=None,detail=None,logo=None,drawing=None,
                         backdrop=None,ai_product=False):
     """Return fully embedded SVG. Raster assets are independent replaceable objects."""
+    # SVG is an editable campaign scene, not a blank fixed spec-card grid.
+    # Keep the legacy implementation below temporarily for compatibility,
+    # while routing all existing styles through the redesigned layout.
+    from .campaign_layout import create_campaign_svg
+    return create_campaign_svg(brief,key,hero=hero,detail=detail,logo=logo,
+                               drawing=drawing,backdrop=backdrop,ai_product=ai_product)
     s=Scene(key,brief.get("accent"),brief.get("style"))
     v=key=="9x16"
     w,h=s.w,s.h
