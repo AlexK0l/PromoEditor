@@ -104,3 +104,79 @@
 }
 /* Posters are always drawn from source pixels: no filter, invert or color transform
    on #edit-canvas, even when the UI uses the dark palette. */
+
+
+/* Gentle palette interpolation starts only AFTER DOMContentLoaded, so restored
+   dark mode appears immediately on first paint instead of flashing light. */
+:root.theme-ready :is(
+  body,.topbar,.brand-symbol,.quiet-button,
+  .composer,.advanced,.advanced>summary,.settings-icon,
+  .dropzone,.dropzone .drop-icon,.mini-upload,.mini-icon,.mini-plus,
+  .field input,.field select,.field textarea,.extract-box textarea,
+  .composer-bottom,.style-pill,.toggle-track,.primary-button,.secondary-button,
+  .document-tools,.extract-box,.roi-preview,.color-control input,
+  .loading,.download-panel,.success-icon,.filetype,.file-results>div,
+  .edit-section,.edit-file-select,.edit-status,.edit-tools button,
+  .edit-stage,.edit-option-group,.edit-option-group label,
+  .edit-option-group textarea,.edit-option-group input,.edit-option-group select,
+  .edit-ai-option,.heading p,.api-pill,.field-tip,.file-feedback,
+  .modebanner,.footer,.edit-helper,.edit-caption,.edit-help,.error
+){
+  transition-property:background-color,color,border-color,box-shadow;
+  transition-duration:320ms;
+  transition-timing-function:cubic-bezier(.22,1,.36,1);
+}
+
+/* Background images/gradients cannot interpolate as ordinary colors.
+   Crossfade only the three decorated panels, behind all controls and canvas. */
+:root .dropzone,
+:root[data-theme="dark"] .dropzone{
+  background:linear-gradient(150deg,#f8faff 3%,#f9fafc 96%);
+}
+:root .dropzone::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(135deg,#202e43,#1b293b);
+  opacity:0;z-index:0;
+}
+:root[data-theme="dark"] .dropzone::before{opacity:1}
+:root .dropzone>:not(input){position:relative;z-index:1}
+:root .dropzone>input{z-index:2}
+:root .edit-stage,
+:root[data-theme="dark"] .edit-stage{
+  background:repeating-conic-gradient(#e4e8ed 0% 25%,#f8f9fc 0% 50%) 50%/22px 22px;
+}
+:root .edit-stage::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-conic-gradient(#2a374a 0% 25%,#202d3d 0% 50%) 50%/22px 22px;
+  opacity:0;z-index:0;
+}
+:root[data-theme="dark"] .edit-stage::before{opacity:1}
+:root .edit-stage>#edit-canvas{position:relative;z-index:1}
+:root .edit-ai-option,
+:root[data-theme="dark"] .edit-ai-option{
+  background:linear-gradient(170deg,#fff,#f4f7ff);position:relative;
+}
+:root .edit-ai-option::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(170deg,#22334f,#1b2a44);pointer-events:none;
+  opacity:0;z-index:0;
+}
+:root[data-theme="dark"] .edit-ai-option::before{opacity:1}
+:root .edit-ai-option>*{position:relative;z-index:1}
+:root.theme-ready :is(.dropzone,.edit-stage,.edit-ai-option)::before{
+  transition:opacity 320ms cubic-bezier(.22,1,.36,1);
+}
+/* Honor OS accessibility preference: switch immediately when motion is reduced. */
+@media (prefers-reduced-motion: reduce){
+  :root.theme-ready :is(
+    body,.topbar,.brand-symbol,.quiet-button,.composer,.advanced,
+    .dropzone,.mini-upload,.field input,.field select,.field textarea,
+    .composer-bottom,.style-pill,.toggle-track,.primary-button,.secondary-button,
+    .document-tools,.extract-box,.loading,.download-panel,.file-results>div,
+    .edit-section,.edit-file-select,.edit-status,.edit-tools button,.edit-stage,
+    .edit-option-group,.edit-ai-option,.error,.heading p,.footer
+  ){transition-duration:0ms!important}
+  :root.theme-ready :is(.dropzone,.edit-stage,.edit-ai-option)::before{
+    transition-duration:0ms!important
+  }
+}

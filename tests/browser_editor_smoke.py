@@ -32,14 +32,27 @@ def main():
         assert toggle.count()==1
         toggle.click()
         assert page.locator("html").get_attribute("data-theme")=="dark"
+        page.wait_for_function(
+            "getComputedStyle(document.body).backgroundColor==='rgb(13, 20, 32)'",
+            timeout=2000)
         background=page.locator("body").evaluate("(el)=>getComputedStyle(el).backgroundColor")
-        assert background!="rgb(246, 247, 251)",background
+        assert background=="rgb(13, 20, 32)",background
+        transition=page.locator(".topbar").evaluate("(el)=>getComputedStyle(el).transitionDuration")
+        assert "0.32s" in transition,transition
         page.reload(wait_until="domcontentloaded")
         assert page.locator("html").get_attribute("data-theme")=="dark"
         page.locator("[data-theme-toggle]").click()
         assert page.locator("html").get_attribute("data-theme")=="light"
         page.locator("[data-theme-toggle]").click()
         assert page.locator("html").get_attribute("data-theme")=="dark"
+        # Accessibility setting: no animated transition.
+        page.emulate_media(reduced_motion="reduce")
+        assert page.locator(".topbar").evaluate("(el)=>getComputedStyle(el).transitionDuration")=="0s"
+        page.locator("[data-theme-toggle]").click()
+        assert page.locator("html").get_attribute("data-theme")=="light"
+        page.locator("[data-theme-toggle]").click()
+        assert page.locator("html").get_attribute("data-theme")=="dark"
+        page.emulate_media(reduced_motion="no-preference")
         assert page.locator("#edit-body").is_hidden()
         assert page.locator("#edit-workspace").is_hidden()
         page.locator("#edit-toggle").click()

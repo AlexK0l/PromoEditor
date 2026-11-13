@@ -20,6 +20,11 @@ def main():
         assert toggle.count()==1
         toggle.click()
         assert page.locator("html").get_attribute("data-theme")=="dark"
+        page.wait_for_function("getComputedStyle(document.body,'::before').opacity==='1'",timeout=2000)
+        assert page.locator(".card").evaluate("(el)=>getComputedStyle(el).transitionDuration").startswith("0.32s")
+        page.emulate_media(reduced_motion="reduce")
+        assert page.locator(".card").evaluate("(el)=>getComputedStyle(el).transitionDuration").startswith("0s")
+        page.emulate_media(reduced_motion="no-preference")
         page.reload(wait_until="domcontentloaded")
         assert page.locator("html").get_attribute("data-theme")=="dark"
         page.locator('input[name="password"]').fill(PASSWORD)
