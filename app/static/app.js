@@ -230,6 +230,7 @@
       const response=await fetch('/api/config');if(!response.ok)throw new Error('API недоступен');
       const config=await response.json();apiReady=Boolean(config.openai_ready);
       $('logout-form').hidden=!config.auth_enabled;
+      $('logout-csrf').value=config.logout_csrf_token||'';
       $('api-dot').classList.toggle('good',apiReady);
       $('api-state').textContent=apiReady?'OpenAI подключён':'Без OpenAI';
     }catch{
