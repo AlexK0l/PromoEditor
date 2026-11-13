@@ -180,3 +180,9 @@
     transition-duration:0ms!important
   }
 }
+
+:root[data-theme="dark"] .prompt-workflow{background:#1b293d;border-color:#40516a}
+:root[data-theme="dark"] .prompt-workflow #promo-prompt{background:#121c2b;color:#eff5ff;border-color:#50627e}
+:root[data-theme="dark"] .prompt-status.is-stale{color:#ffc17d}
+:root.theme-ready .prompt-workflow{transition:background-color 320ms,border-color 320ms}
+@media(prefers-reduced-motion:reduce){:root.theme-ready .prompt-workflow{transition:none}}

@@ -82,9 +82,20 @@
           </div>
           <label class="ai-choice" for="use-openai"><span class="ai-text"><strong>Генерировать фон с OpenAI</strong><small id="ai-description">Два платных запроса при включении</small></span><input id="use-openai" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span></label>
         </div>
+        <section id="prompt-workflow" class="prompt-workflow" aria-labelledby="prompt-title">
+          <div class="prompt-head"><div>
+            <span class="step-label">ШАГ 2 · ПРОМПТ</span>
+            <h3 id="prompt-title">Промпт для создания промо</h3>
+            <p>Составляется из формы бесплатно. Проверьте, исправьте при необходимости и создайте два формата.</p>
+          </div><button type="button" id="build-prompt-btn" class="secondary-button">Сформировать промпт ↻</button></div>
+          <label class="field" for="promo-prompt"><span>Промпт <span class="field-hint">можно редактировать · до 8000 символов</span></span>
+            <textarea id="promo-prompt" rows="7" maxlength="8000" placeholder="Заполните форму и нажмите «Сформировать промпт». Перед генерацией он будет создан автоматически, если ещё пуст."></textarea>
+          </label>
+          <p id="promo-prompt-status" class="prompt-status" aria-live="polite">Промпт будет сформирован из данных формы. Изменение исходных полей делает его устаревшим.</p>
+        </section>
         <div class="generate-row">
           <span id="modebanner" class="modebanner" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span><strong>Без расходов на API</strong><small>Обычная сборка изображений</small></span></span>
-          <button type="button" id="generate-btn" class="primary-button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Создать два формата <span aria-hidden="true">→</span></button>
+          <button type="button" id="generate-btn" class="primary-button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Создать PNG · JPEG · SVG <span aria-hidden="true">→</span></button>
         </div>
       </div>
     </section>
@@ -137,13 +148,21 @@
       </div>
     </details>
 
-    <div id="loading" class="loading" hidden role="status" aria-live="polite"><span class="loader" aria-hidden="true"></span><div><strong>Создаём промоматериалы…</strong><small>Два формата рассчитываются отдельно. Не закрывайте вкладку.</small></div></div>
+    <div id="loading" class="loading" hidden role="status" aria-live="polite"><span class="loader" aria-hidden="true"></span><div><strong>Создаём промоматериалы…</strong><small>Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.</small></div></div>
 
     <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
       <span class="success-icon" aria-hidden="true">✓</span>
       <div class="result-heading"><div><span class="step-label">ГОТОВО</span><h2 id="download-title">Файлы готовы к скачиванию</h2></div><button type="button" id="download-all" class="primary-button" disabled>Скачать всё ZIP ↓</button></div>
-      <div class="file-results"><div><span class="filetype">PNG</span><div><strong>Горизонтальный 4:3</strong><small>1440 × 1080 px</small></div><button type="button" id="download-4x3" class="secondary-button" disabled>Скачать</button></div><div><span class="filetype">PNG</span><div><strong>Вертикальный 9:16</strong><small>1080 × 1920 px</small></div><button type="button" id="download-9x16" class="secondary-button" disabled>Скачать</button></div></div>
-      <p class="result-disclaimer">Перед публикацией проверьте ТТХ, рекламные утверждения и права на фотографии. Изображения не показываются на странице по вашему выбору.</p>
+      <div class="file-results">
+        <div><span class="filetype">PNG</span><div><strong>Горизонтальный 4:3</strong><small>1440 × 1080 px</small></div><button type="button" id="download-4x3" class="secondary-button" disabled>Скачать</button></div>
+        <div><span class="filetype">JPEG</span><div><strong>Горизонтальный 4:3</strong><small>1440 × 1080 px</small></div><button type="button" id="download-jpeg-4x3" class="secondary-button" disabled>Скачать</button></div>
+        <div><span class="filetype">SVG</span><div><strong>CorelDRAW · 4:3</strong><small>Редактируемые объекты</small></div><button type="button" id="download-svg-4x3" class="secondary-button" disabled>Скачать SVG</button></div>
+        <div><span class="filetype">PNG</span><div><strong>Вертикальный 9:16</strong><small>1080 × 1920 px</small></div><button type="button" id="download-9x16" class="secondary-button" disabled>Скачать</button></div>
+        <div><span class="filetype">JPEG</span><div><strong>Вертикальный 9:16</strong><small>1080 × 1920 px</small></div><button type="button" id="download-jpeg-9x16" class="secondary-button" disabled>Скачать</button></div>
+        <div><span class="filetype">SVG</span><div><strong>CorelDRAW · 9:16</strong><small>Редактируемые объекты</small></div><button type="button" id="download-svg-9x16" class="secondary-button" disabled>Скачать SVG</button></div>
+        </div>
+        <p class="prompt-download-note">В ZIP включены оба SVG для CorelDRAW, PNG, JPEG, промпт, JSON-бриф и инструкция. Текст и фигуры остаются векторными; фотографии и AI-фоны являются отдельными растровыми объектами.</p>
+      <p class="result-disclaimer">Перед публикацией проверьте ТТХ, рекламные утверждения и права на фотографии. Изображения не показываются на странице по вашему выбору. Для редактирования откройте SVG в CorelDRAW и сохраните его как CDR.</p>
     </section>
 
 
@@ -238,7 +257,7 @@
 
     <footer class="footer">PromoEditor · Ваши исходные материалы не включаются в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
-  <script src="/static/app.js?v=20261113-login-csrf" defer></script>
+  <script src="/static/app.js?v=20261113-prompt-corel" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>
