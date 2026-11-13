@@ -69,7 +69,7 @@ def configured():
 def issue_cookie(*,now:int|None=None)->str:
     timestamp=int(time.time()) if now is None else now
     message=f"v1.{timestamp}.{secrets.token_hex(12)}"
-    sig=hmac.new(os.environ["PROMO_SESSION_SECRET"].encode(),message.encode("ascii"),hashlib.sha256).hexdigest()
+    sig=hmac.new(hashlib.sha256((os.environ["PROMO_SESSION_SECRET"]+"|"+os.environ["PROMO_PASSWORD_HASH"]).encode()).digest(),message.encode("ascii"),hashlib.sha256).hexdigest()
     return message+"."+sig
 
 
@@ -88,7 +88,7 @@ def valid_cookie(token:str|None,*,now:int|None=None)->bool:
             return False
         int(parts[2],16);int(parts[3],16)
         message=".".join(parts[:3])
-        sig=hmac.new(os.environ["PROMO_SESSION_SECRET"].encode(),message.encode("ascii"),hashlib.sha256).hexdigest()
+        sig=hmac.new(hashlib.sha256((os.environ["PROMO_SESSION_SECRET"]+"|"+os.environ["PROMO_PASSWORD_HASH"]).encode()).digest(),message.encode("ascii"),hashlib.sha256).hexdigest()
         return hmac.compare_digest(sig,parts[3])
     except (ValueError,UnicodeEncodeError):
         return False
