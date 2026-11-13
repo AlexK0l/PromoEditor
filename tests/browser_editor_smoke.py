@@ -27,6 +27,19 @@ def main():
         errors=[]
         page.on("pageerror",lambda error: errors.append(str(error)))
         page.goto(BASE,wait_until="domcontentloaded")
+        # Dark mode is a real choice, persists after reload and never touches PNG.
+        toggle=page.locator("[data-theme-toggle]")
+        assert toggle.count()==1
+        toggle.click()
+        assert page.locator("html").get_attribute("data-theme")=="dark"
+        background=page.locator("body").evaluate("(el)=>getComputedStyle(el).backgroundColor")
+        assert background!="rgb(246, 247, 251)",background
+        page.reload(wait_until="domcontentloaded")
+        assert page.locator("html").get_attribute("data-theme")=="dark"
+        page.locator("[data-theme-toggle]").click()
+        assert page.locator("html").get_attribute("data-theme")=="light"
+        page.locator("[data-theme-toggle]").click()
+        assert page.locator("html").get_attribute("data-theme")=="dark"
         assert page.locator("#edit-body").is_hidden()
         assert page.locator("#edit-workspace").is_hidden()
         page.locator("#edit-toggle").click()
@@ -35,6 +48,14 @@ def main():
             {"name":"starting.png","mimeType":"image/png","buffer":png.getvalue()})
         page.wait_for_function("!document.getElementById('edit-workspace').hidden")
         assert page.locator("#edit-canvas").evaluate("(canvas) => [canvas.width,canvas.height]")==[640,480]
+        # Interface colors change; the content of the poster pixel stays exact.
+        before=page.locator("#edit-canvas").evaluate(
+            "(canvas)=>Array.from(canvas.getContext('2d').getImageData(0,0,1,1).data)")
+        page.locator("[data-theme-toggle]").click()
+        after=page.locator("#edit-canvas").evaluate(
+            "(canvas)=>Array.from(canvas.getContext('2d').getImageData(0,0,1,1).data)")
+        assert before==after,(before,after)
+        page.locator("[data-theme-toggle]").click()
         page.locator("#edit-text-input").fill("Новая надпись")
         page.locator("#edit-add-text").click()
         assert "Текстовый слой" in page.locator("#edit-selected-name").inner_text()
