@@ -66,6 +66,11 @@
 
         <div class="brief-column">
           <label class="field" for="model"><span>Название продукта <span class="required">*</span></span><input id="model" maxlength="80" autocomplete="off" placeholder="Например, ZubrTrail 500"></label>
+          <div class="two-fields">
+            <label class="field" for="brand"><span>Бренд <span class="field-hint">необязательно, если есть логотип</span></span><input id="brand" maxlength="70" placeholder="Например, ZUBR TRAIL"></label>
+            <label class="field" for="category"><span>Тип товара</span><input id="category" maxlength="100" placeholder="Например, самосвальный полуприцеп"></label>
+          </div>
+          <p class="field-tip">Для результата, похожего на эталон, добавьте подтверждённые ТТХ, цену и телефоны в дополнительных настройках или перенесите проверенные данные из документов.</p>
           <label class="field" for="slogan"><span>Главное сообщение <span class="field-hint">то, что увидят покупатели</span></span><textarea id="slogan" rows="3" maxlength="250" placeholder="Например: Алюминиевый зерновоз, который перевозит больше за каждый рейс"></textarea></label>
           <label class="field" for="design-notes"><span>Пожелания к оформлению <span class="field-hint">необязательно</span></span><textarea id="design-notes" rows="3" maxlength="1800" placeholder="Например: светлый фон, крупная техника, красные акценты, современный стиль"></textarea><small class="field-tip">Пожелания учитываются при AI-генерации фона. Тексты и характеристики добавляются из заполненных полей.</small></label>
           <label class="field" for="design-actions"><span>Дополнительные действия над дизайном <span class="field-hint">необязательно</span></span><textarea id="design-actions" rows="4" maxlength="1200" placeholder="Например: осветлить фон, добавить мягкое свечение, увеличить визуальную глубину и оставить свободное пространство справа"></textarea><small class="field-tip">Опишите желаемые изменения визуала своими словами. При включённом OpenAI эти инструкции передаются для обоих изображений. Без OpenAI сохраняются в брифе, но не применяются. Точное расположение текста, цены и ТТХ этим полем не изменяется.</small></label>
@@ -148,7 +153,7 @@
       <div class="advanced-body">
         <div class="advanced-group">
           <div class="group-title"><h3>Характеристики и преимущества</h3><p>Если цифры должны быть точными, впишите их здесь или извлеките из документов.</p></div>
-          <div class="two-fields"><label class="field" for="brand"><span>Бренд</span><input id="brand" maxlength="70" placeholder="ZUBR TRAIL"></label><label class="field" for="category"><span>Тип товара</span><input id="category" maxlength="100" placeholder="Полуприцеп-зерновоз"></label></div>
+
           <label class="field" for="claims"><span>Короткие преимущества <span class="field-hint">одно на строку, до 4</span></span><textarea id="claims" rows="3" placeholder="Легче на 2,5 т&#10;Больше полезной нагрузки"></textarea></label>
           <label class="field" for="specs"><span>Технические характеристики <span class="field-hint">Название | Значение</span></span><textarea id="specs" class="monospace" rows="5" placeholder="Грузоподъёмность | 44 т&#10;Объём кузова | 55 м³"></textarea></label>
           <label class="field" for="benefits"><span>Другие преимущества</span><textarea id="benefits" rows="3" placeholder="Алюминиевый кузов&#10;Проверенные компоненты"></textarea></label>
