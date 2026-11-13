@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const fileIds = ['hero','documents','logo','detail','drawing','references'];
   const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo'];
-  const placeholders = {documents:'PDF, Excel, Word',logo:'Необязательно',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'До 2 изображений'};
+  const placeholders = {documents:'Несколько документов · PDF / Word / Excel',logo:'Несколько логотипов',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Несколько референсов; система отберёт до 2'};
   let latest = null;
   let apiReady = false;
   let isBusy = false;
@@ -71,9 +71,10 @@
     setStatus('Параметры изменены','Создайте новый комплект, чтобы применить изменения.');
   }
   function updateFileLabels(){
-    const hero=$('hero').files[0];
-    $('hero-label').textContent=hero?(hero.name.length>45?hero.name.slice(0,42)+'…':hero.name):'Добавить фото товара';
-    $('hero-hint').textContent=hero?'Фото выбрано — можно заменить':'Перетащите сюда или выберите файл';
+    const heroFiles=Array.from($('hero').files);
+    const hero=heroFiles[0];
+    $('hero-label').textContent=heroFiles.length>1?`${heroFiles.length} фотографий товара`:hero?(hero.name.length>45?hero.name.slice(0,42)+'…':hero.name):'Добавить фотографии товара';
+    $('hero-hint').textContent=hero?'Можно добавить ещё фотографии':'Перетащите несколько фото или выберите файлы';
     $('hero-drop').classList.toggle('has-file',Boolean(hero));
     $('clear-hero').hidden=!hero;
     for(const id of fileIds.filter(v=>v!=='hero')){
@@ -86,7 +87,7 @@
     $('inspect-btn').disabled=isBusy||!$('documents').files.length;
     $('inspect-btn').hidden=!$('documents').files.length;
     const count=fileIds.reduce((total,id)=>total+$(id).files.length,0);
-    $('file-feedback').textContent=count?`Прикреплено файлов: ${count}. Использованные фото и логотипы включены в SVG внутри ZIP.`:'Фото и логотипы встраиваются в SVG-исходники ZIP.';
+    $('file-feedback').textContent=count?`Прикреплено файлов: ${count}. Лучшие материалы будут выбраны после анализа; не все войдут в промо.`:'Фото и логотипы встраиваются в SVG-исходники ZIP.';
   }
   function refreshStyle(){
     document.querySelectorAll('[data-style]').forEach(button=>{
@@ -107,15 +108,17 @@
   function validateFiles(){
     const all=fileIds.flatMap(id=>Array.from($(id).files));
     if(all.length>16)return 'Слишком много вложений: не более 16 файлов за один комплект.';
-    if($('references').files.length>2)return 'Можно добавить до двух изображений-референсов.';
+    // Можно загрузить несколько референсов: только два будут выбраны.
     if(all.some(file=>file.size>20*1024*1024))return 'Один из файлов больше 20 МБ. Уменьшите его размер.';
     if(all.reduce((sum,file)=>sum+file.size,0)>68*1024*1024)return 'Общий размер вложений не должен превышать 68 МБ.';
-    return '';
+    return window.PromoAssets?.validate()||'';
   }
   function busy(on){
     isBusy=on;
     $('generate-btn').disabled=on;
     $('build-prompt-btn').disabled=on;
+    $('analyze-assets-btn').disabled=on;
+    $('asset-rebuild').disabled=on;
     $('reset-btn').disabled=on;
     $('inspect-btn').disabled=on||!$('documents').files.length;
     $('loading').hidden=!on;
@@ -138,7 +141,7 @@
     if(!get('model').trim())throw new Error('Сначала укажите модель товара.');
     const response=await fetch('/api/prompt',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(formBrief())
+      body:JSON.stringify({...formBrief(),asset_report:window.PromoAssets?.getReport()||null})
     });
     if(!response.ok)throw new Error(await readError(response));
     const result=await response.json();
@@ -155,8 +158,11 @@
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
     }
     const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
+      showError('Сначала нажмите «Проанализировать материалы», проверьте выбор и при необходимости измените приоритеты.');return;
+    }
     if(checked('use-openai')&&!apiReady){showError('OpenAI не подключён на сервере. Используйте обычную сборку или настройте ключ в VPS.');return;}
-    if(!checked('use-openai')&&!$('hero').files.length&&!checked('use-demo')){
+    if(!checked('use-openai')&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
       showError('Сначала добавьте фото товара или нажмите «Заполнить пример» для пробного комплекта.');return;
     }
     invalidateResult();busy(true);
@@ -165,7 +171,8 @@
       const prompt=(promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim();
       const form=new FormData();form.append('payload',JSON.stringify(formBrief()));
       form.append('prompt',prompt);
-      fileIds.forEach(id=>appendFiles(form,id));
+      if(window.PromoAssets)window.PromoAssets.append(form);
+      else fileIds.forEach(id=>appendFiles(form,id));
       form.append('use_openai',String(checked('use-openai')));
       form.append('use_demo',String(checked('use-demo')));
       form.append('model',get('image-model'));
@@ -222,6 +229,7 @@
     set('currency','Br');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
     for(const id of fileIds)$(id).value='';
+    window.PromoAssets?.reset();
     $('extract-box').hidden=true;
     $('advanced-settings').open=false;
     $('color-label').textContent='#E31B26';
@@ -238,6 +246,7 @@
       const response=await fetch('/api/demo');if(!response.ok)throw new Error('Пример временно недоступен.');
       const result=await response.json();fillBrief(result.brief);
       for(const id of fileIds)$(id).value='';
+      window.PromoAssets?.reset();
       $('use-openai').checked=false;$('use-demo').checked=true;$('parse-ai').checked=false;
       $('advanced-settings').open=false;
       $('extract-box').hidden=true;
@@ -256,6 +265,7 @@
     try {
       const response=await fetch('/api/config');if(!response.ok)throw new Error('API недоступен');
       const config=await response.json();apiReady=Boolean(config.openai_ready);
+      window.PromoAssets?.setAiReady(apiReady);
       $('logout-form').hidden=!config.auth_enabled;
       $('logout-csrf').value=config.logout_csrf_token||'';
       $('api-dot').classList.toggle('good',apiReady);
