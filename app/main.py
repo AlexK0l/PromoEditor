@@ -258,7 +258,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                 archive.write(folder/filename,arcname=filename)
         warnings=['Проверьте технические данные, цены и права на изображения перед публикацией.']
         if brief.get('design_actions') and not use_openai:
-            warnings.append('Без OpenAI произвольные визуальные действия записаны в промпт, но не меняют структуру шаблона.')
+            warnings.append('Дополнительные действия сохранены в промпте, но без OpenAI не применяются к AI-фону и произвольному изменению дизайна.')
         return {
             'job_id':job_id,'images':paths,'jpeg':jpeg_paths,'corel':corel_paths,
             'prompt_file':f'/files/{job_id}/promo_prompt.txt',
