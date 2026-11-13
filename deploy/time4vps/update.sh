@@ -14,6 +14,10 @@ runuser -u promoeditor -- git merge --ff-only origin/main
 runuser -u promoeditor -- /opt/promoeditor/.venv/bin/python -m pip install --no-cache-dir -r requirements.txt
 systemctl restart promoeditor
 systemctl is-active --quiet promoeditor
-curl -fsS --max-time 10 http://127.0.0.1:18080/api/config >/dev/null
+code=$(curl --silent --output /dev/null --max-time 10 --write-out '%{http_code}' http://127.0.0.1:18080/api/config)
+[[ "$code" == "200" || "$code" == "401" ]] || { echo "PromoEditor health check failed: HTTP $code" >&2; exit 1; }
+if [[ "$code" == "401" ]]; then
+  curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18080/login >/dev/null
+fi
 printf 'PromoEditor updated. Previous HEAD: %s\n' "$previous"
 echo 'RegionalResearch and Caddy were not restarted.'
