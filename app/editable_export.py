@@ -156,7 +156,7 @@ class Scene:
             "logo":"04 Логотип","heading":"05 Заголовки","claims":"06 Тезисы",
             "specs":"07 Технические характеристики","benefits":"08 Преимущества",
             "dimensions":"09 Габариты и чертёж","roi":"10 Экономика",
-            "price":"11 Цена","contacts":"12 Контакты",
+            "cta_bg":"11 Фон рекламного блока","price":"12 Цена","contacts":"13 Контакты",
         }
         for name,title in titles.items():
             self.groups[name]=ET.SubElement(self.root,f"{{{NS}}}g",{

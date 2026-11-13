@@ -29,11 +29,14 @@ def _lines(brief,key,limit=7):
 def _benefits(brief):
     """Never invent advantages just to fill a template."""
     result=[]
-    for value in (brief.get('benefits') or [])+(brief.get('hero_claims') or []):
+    # Short claims already appear on the main product image. Use them as a
+    # fallback for the benefits strip, not as additional duplicate columns.
+    sources=(brief.get('benefits') or []) or (brief.get('hero_claims') or [])
+    for value in sources:
         text=str(value).strip()[:150]
         if text and text.casefold() not in {x.casefold() for x in result}:
             result.append(text)
-        if len(result)>=6:break
+        if len(result)>=5:break
     return result
 
 
@@ -369,11 +372,13 @@ def _format_price(text):
 
 
 def _cta(scene,brief,x,y,w,h,accent,portrait):
-    scene.rect('contacts',x,y,w,h,accent,ident='campaign-cta')
-    scene.polygon('contacts',[(w*.80,y),(w*.83,y),
+    # The CTA background is deliberately *below* independently editable
+    # price and contact text in the SVG group stack (CorelDRAW preserves it).
+    scene.rect('cta_bg',x,y,w,h,accent,ident='campaign-cta')
+    scene.polygon('cta_bg',[(w*.80,y),(w*.83,y),
                               (w*.73,y+h),(w*.70,y+h)],'#FFFFFF',
                   opacity='.12',ident='cta-slash')
-    scene.polygon('contacts',[(w*.91,y),(w*.94,y),
+    scene.polygon('cta_bg',[(w*.91,y),(w*.94,y),
                               (w*.84,y+h),(w*.81,y+h)],'#FFFFFF',
                   opacity='.19',ident='cta-slash-2')
     value=_format_price(brief.get('price'))

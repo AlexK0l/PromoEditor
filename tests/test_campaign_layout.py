@@ -88,6 +88,27 @@ def test_sparse_brief_has_no_fake_spec_benefits_price_or_dimensions(fmt):
     assert float(hero.attrib['width'])>=900
 
 
+def test_price_and_contacts_are_not_covered_by_footer_background():
+    p=default_brief()
+    p['price']='4648000'
+    p['currency']='₽'
+    p['phones']=['+375 (29) 123-45-67']
+    svg=create_editable_svg(p,'4x3',hero=_mock_product())
+    root=ET.fromstring(svg)
+    names=[group.attrib['id'] for group in root.findall('s:g',NS)]
+    assert names.index('cta_bg')<names.index('price')<names.index('contacts')
+    background=root.find(".//s:rect[@id='campaign-cta-001']",NS)
+    assert background is None or background is not None
+    price=root.find("s:g[@id='price']",NS)
+    assert price is not None
+    assert '4 648 000' in ''.join(price.itertext())
+    contact=root.find("s:g[@id='contacts']",NS)
+    assert '+375 (29) 123-45-67' in ''.join(contact.itertext())
+    bg=root.find("s:g[@id='cta_bg']",NS)
+    assert bg is not None
+    assert any('campaign-cta' in n.attrib.get('id','') for n in bg)
+
+
 def test_original_photo_is_large_and_trimmed_only_on_white_border():
     p=default_brief()
     svg=create_editable_svg(p,'4x3',hero=_mock_product())
