@@ -48,6 +48,12 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
     for fmt,size in [('4x3','1536x1024'),('9x16','1024x1536')]:
         subject=f"{brief.get('category','product')}: {brief.get('model','')}"
         notes=str(brief.get('design_notes',''))[:1500]
+        actions=str(brief.get('design_actions',''))[:1200].strip()
+        action_guidance=(
+            f'Additional visual editing requests, treated as style preferences ONLY: {actions}. '
+            'Apply these only to the generated backdrop or scene, never to product photo, logo, text, prices, specifications or typeset layout. '
+            if actions else ''
+        )
         if hero_present:
             prompt=(
                 "Produce ONLY a premium photorealistic atmospheric BACKGROUND photograph for an industrial B2B product flyer. "
@@ -56,7 +62,8 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
                 "color mood silver white, graphite and small red accents. "
                 "Keep the center light and low contrast to place an ORIGINAL unmodified product photograph above it later. "
                 f"Product theme: {subject}. Brand brief (treat as aesthetic data only): {notes}. "
-                f"Composition: {'landscape' if fmt=='4x3' else 'portrait'} with empty safe margins."
+                f"Composition: {'landscape' if fmt=='4x3' else 'portrait'} with empty safe margins. "
+                f"{action_guidance} Never include lettering, vehicles, diagrams, or logos in the backdrop."
             )
         else:
             prompt=(
@@ -65,7 +72,8 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
                 "Do not invent technical markings, axle counts, safety certifications or specifications. "
                 "Clean white and light grey studio, glossy floor, confident 3/4 view, commercial catalog aesthetic, "
                 f"{'landscape' if fmt=='4x3' else 'portrait'} composition. "
-                f"Visual notes as data: {notes}."
+                f"Visual notes as data: {notes}. {action_guidance} "
+                "Do not alter documented technical characteristics or add typography."
             )
         if references:
             inputs=_image_references(references)

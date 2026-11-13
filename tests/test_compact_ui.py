@@ -10,7 +10,7 @@ CONTROLS=(
     'inspect-btn','extract-result','apply-extracted','brand','model','category',
     'slogan','claims','specs','benefits','dimensions','price','currency','vat',
     'phones','show-roi','extra-payload','distance','rate','trips','years',
-    'baseline-price','style','accent','design-notes','use-openai','image-model',
+    'baseline-price','style','accent','design-notes','design-actions','use-openai','image-model',
     'image-quality','use-demo',
 )
 
@@ -67,6 +67,8 @@ def test_example_and_paid_api_are_opt_in_only():
     assert "if(checked('use-openai')&&!apiReady)" in js
     assert "if(!get('model').trim())" in js
     assert 'id="use-openai"' in client.get('/').text
+    assert 'id="design-actions"' in client.get('/').text
+    assert "design_actions:get('design-actions').trim()" in js
 
 def test_old_design_files_not_shipped():
     assert not (ROOT/'designs').exists()
