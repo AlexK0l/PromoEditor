@@ -21,6 +21,24 @@ jobs:
         run: python -m pip install -r requirements.txt pytest httpx
       - name: Run application tests
         run: python -m pytest -q
+      - name: Temporary design preview for visual QA
+        run: |
+          python - <<'PY'
+          import io,base64
+          from PIL import Image
+          from app.main import _demo_hero
+          from app.render import default_brief
+          from app.editable_export import create_editable_svg,rasterize_svg
+          brief=default_brief()
+          brief['style']='industrial'
+          for fmt in ('4x3','9x16'):
+              svg=create_editable_svg(brief,fmt,hero=_demo_hero())
+              png,_=rasterize_svg(svg)
+              im=Image.open(io.BytesIO(png)).convert('RGB')
+              im.thumbnail((720,720),Image.Resampling.LANCZOS)
+              buf=io.BytesIO();im.save(buf,format='JPEG',quality=69,optimize=True)
+              print('PREVIEW_CAMPAIGN_'+fmt+'='+base64.b64encode(buf.getvalue()).decode('ascii'))
+          PY
       - name: Check front-end JavaScript
         run: |
           node --check app/static/app.js
