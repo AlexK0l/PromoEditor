@@ -171,7 +171,7 @@ def _header(scene,brief,logo,accent,portrait):
     sx=246 if portrait else 266
     _rule(scene,'heading',sx,34,sx-37,145 if portrait else 135,'#FFFFFF',6,'header-divider')
     cat=str(brief.get('category') or 'ПРОМЫШЛЕННОЕ ОБОРУДОВАНИЕ').strip().upper()
-    model=str(brief.get('model') or 'Товар').strip().upper()
+    model=str(brief.get('model') or 'Товар').strip()
     scene.text('heading',cat,sx+25,25,w-sx-95,47,31 if portrait else 36,
                21,'#FFFFFF',True,'category',1)
     scene.text('heading',model,sx+24,70,w-sx-72,112 if portrait else 98,
