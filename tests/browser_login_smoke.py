@@ -23,7 +23,7 @@ def main():
         origin=response.request.headers.get("origin","")
         assert origin=="null",f"Expected browser form Origin:null with no-referrer, got {origin!r}"
         assert response.status==303,f"Valid password was rejected (status {response.status})"
-        assert "httponly" in response.headers.get("set-cookie","").lower()
+        assert "httponly" in response.all_headers().get("set-cookie","").lower()
         assert not errors,errors
         browser.close()
     print("Browser password-only login: Origin null accepted with valid signed CSRF token — PASS")
