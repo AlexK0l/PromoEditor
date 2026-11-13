@@ -18,6 +18,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
 COOKIE_NAME="promoeditor_session"
+LOGIN_CSRF_COOKIE="promoeditor_login_csrf"
 SESSION_SECONDS=12*3600
 FAILED_WINDOW=15*60
 FAILED_LIMIT=8
@@ -211,16 +212,22 @@ autocomplete="current-password" minlength="8" maxlength="256">
 
 
 def login_html(error:str|None=None,code:int=200):
+    csrf=issue_form_token("login")
     html=LOGIN_PAGE.replace("{{ERROR}}",
         '<div class="error" role="alert">'+error+'</div>' if error else "")
-    html=html.replace("{{CSRF_TOKEN}}",issue_form_token("login"))
-    return HTMLResponse(html,status_code=code,headers={
+    html=html.replace("{{CSRF_TOKEN}}",csrf)
+    response=HTMLResponse(html,status_code=code,headers={
         "Cache-Control":"no-store",
         "X-Frame-Options":"DENY",
         "X-Content-Type-Options":"nosniff",
         "Referrer-Policy":"no-referrer",
         "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
     })
+    # Bind the hidden signed token to THIS browser, so an attacker who can
+    # independently GET /login cannot forge a victim's login POST.
+    response.set_cookie(LOGIN_CSRF_COOKIE,csrf,secure=True,httponly=True,
+                        samesite="strict",path="/login",max_age=3600)
+    return response
 
 
 async def guard(request:Request,call_next):
@@ -265,7 +272,9 @@ async def login_post(request:Request):
         csrf=""
     # An HTML form can report Origin: null with Referrer-Policy: no-referrer.
     # The signed token protects login against cross-site forgery in that case.
-    if not valid_form_token("login",csrf) or not _form_origin_ok(request):
+    if (not valid_form_token("login",csrf)
+            or not hmac.compare_digest(str(csrf),request.cookies.get(LOGIN_CSRF_COOKIE,""))
+            or not _form_origin_ok(request)):
         return login_html("Обновите страницу входа и повторите попытку.",403)
     ip=request.client.host if request.client else "unknown"
     if _fail_count(ip)>=FAILED_LIMIT:
@@ -277,6 +286,8 @@ async def login_post(request:Request):
     response=RedirectResponse("/",status_code=303,headers={"Cache-Control":"no-store"})
     response.set_cookie(COOKIE_NAME,issue_cookie(),max_age=SESSION_SECONDS,
                         path="/",secure=True,httponly=True,samesite="lax")
+    response.delete_cookie(LOGIN_CSRF_COOKIE,path="/login",secure=True,
+                           httponly=True,samesite="strict")
     return response
 
 
