@@ -183,6 +183,56 @@ def test_ai_requires_key_and_invalid_uploads(monkeypatch):
     assert analyze(files=[],prefs={'photo_1':'include'}).status_code==400
 
 
+def test_source_report_has_roles_mime_and_priority_flags():
+    reviewed=analyze(prefs={'photo_1':'exclude','logo_2':'include'}).json()
+    records={row['id']:row for row in reviewed['project_assets']}
+    assert records['photo_1']['mime']=='image/png'
+    assert records['photo_1']['forced_exclude'] is True
+    assert records['photo_1']['selected'] is False
+    assert records['logo_2']['forced_include'] is True
+    assert records['logo_2']['role']=='logo'
+    assert records['document_1']['mime']=='text/csv'
+    assert records['document_1']['role']=='analysis_only'
+
+
+def test_large_documents_keep_each_source_in_ai_context(monkeypatch):
+    from app import openai_service
+    seen={}
+    def document_eval(text,requirements):
+        seen['text']=text
+        return {'category':'','model':'','slogan':'','specs':[],
+                'benefits':[],'dimensions':[],'price':'','phones':[],'warnings':[]}
+    monkeypatch.setenv('OPENAI_API_KEY','fake-for-test')
+    monkeypatch.setattr(openai_service,'analyze_documents',document_eval)
+    documents=[
+       ('documents',(f'source_{i}.txt',('Объём: 55 м³\\n'+chr(65+i)*20000).encode('utf-8'),'text/plain'))
+       for i in range(4)
+    ]
+    result=analyze(files=documents,use_ai=True)
+    assert result.status_code==200,result.text
+    assert 'source_1.txt' in seen['text']
+    assert 'source_4.txt' in seen['text']
+    assert len(seen['text'])<=34000
+    assert any('выдержки' in w for w in result.json()['warnings'])
+
+
+def test_ui_shows_multiple_inputs_and_manual_ai_fact_approval():
+    page=client.get('/').text
+    javascript=client.get('/static/assets.js').text
+    script=client.get('/static/app.js').text
+    assert 'id="hero" multiple' in page and 'id="logo" type="file" multiple' in page
+    for element in ('asset-files-list','analyze-assets-btn','assets-use-ai',
+                    'asset-picked','asset-unused','asset-specs-list','asset-apply-specs',
+                    'asset-apply-extra-facts','asset-manual','asset-rebuild','asset-approve'):
+        assert f'id="{element}"' in page
+    assert "fetch('/api/analyze-assets'" in javascript
+    assert "'asset_preferences'" in javascript
+    assert "window.confirm(" in javascript
+    assert "'promoeditor:assets-changed'" in javascript
+    assert 'extraFacts()' in javascript
+    assert "window.confirm('Перенести" in script
+
+
 def test_prompt_endpoint_from_selected_assets():
     report=analyze(prefs={'logo_1':'exclude'}).json()
     payload={**default_brief(),'asset_report':report}
