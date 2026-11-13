@@ -1,12 +1,13 @@
 """Password-only login with no username; complete API/file protection."""
 import time
+import re
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.auth import (
     COOKIE_NAME, FAILED_LIMIT, SESSION_SECONDS, _FAILURES,
-    hash_password, issue_cookie, valid_cookie, verify_password
+    hash_password, issue_cookie, valid_cookie, verify_password, issue_form_token, valid_form_token
 )
 from app.main import app
 from deploy.time4vps.provision_auth import prepare_settings
@@ -29,11 +30,21 @@ def browser():
     return TestClient(app,base_url="https://promo.test")
 
 
+def submit_login(client,password,**kwargs):
+    page=client.get("/login")
+    assert page.status_code==200
+    token=re.search(r'name="csrf_token" value="([^"]+)"',page.text)
+    assert token and valid_form_token("login",token.group(1))
+    return client.post("/login",data={"password":password,"csrf_token":token.group(1)},**kwargs)
+
+
 def test_login_has_exactly_one_password_field_and_no_username(protected):
     with browser() as client:
         r=client.get("/login")
         assert r.status_code==200
         assert 'name="password"' in r.text
+        assert 'name="csrf_token"' in r.text
+        assert r.headers['referrer-policy']=='no-referrer'
         assert 'name="username"' not in r.text
         assert "Вход в PromoEditor" in r.text
         assert "Cache-Control" in r.headers
@@ -57,10 +68,10 @@ def test_all_private_paths_require_login(protected):
 
 def test_signin_cookie_logout_and_rejection_of_bad_password(protected):
     with browser() as client:
-        wrong=client.post("/login",data={"password":"wrong"},follow_redirects=False)
+        wrong=submit_login(client,"wrong",follow_redirects=False)
         assert wrong.status_code==401
         assert "Неверный пароль" in wrong.text
-        ok=client.post("/login",data={"password":PASSWORD},follow_redirects=False)
+        ok=submit_login(client,PASSWORD,follow_redirects=False)
         assert ok.status_code==303 and ok.headers["location"]=="/"
         header=ok.headers["set-cookie"].lower()
         assert "httponly" in header and "secure" in header and "samesite=lax" in header
@@ -68,7 +79,9 @@ def test_signin_cookie_logout_and_rejection_of_bad_password(protected):
         assert client.get("/api/config").json()["auth_enabled"] is True
         assert client.get("/static/app.js").status_code==200
         assert "id=\"logout-form\"" in client.get("/").text
-        bye=client.post("/logout",follow_redirects=False)
+        csrf=client.get("/api/config").json()["logout_csrf_token"]
+        bye=client.post("/logout",data={"csrf_token":csrf},
+                        headers={"Origin":"null"},follow_redirects=False)
         assert bye.status_code==303 and bye.headers["location"]=="/login"
         assert client.get("/api/config").status_code==401
 
@@ -94,27 +107,79 @@ def test_fail_closed_when_auth_enabled_but_missing_secret(monkeypatch,protected)
 
 def test_login_rate_limit_and_origin_restriction(protected):
     with browser() as client:
-        alien=client.post("/login",data={"password":PASSWORD},
+        alien=submit_login(client,PASSWORD,
                           headers={"Origin":"https://evil.example"},follow_redirects=False)
         assert alien.status_code==403
         alien=client.post("/login",data={"password":PASSWORD},
                           headers={"Origin":"null"},follow_redirects=False)
         assert alien.status_code==403
         for _ in range(FAILED_LIMIT):
-            r=client.post("/login",data={"password":"bad"},follow_redirects=False)
+            r=submit_login(client,"bad",follow_redirects=False)
             assert r.status_code==401
-        assert client.post("/login",data={"password":PASSWORD},follow_redirects=False).status_code==429
+        assert submit_login(client,PASSWORD,follow_redirects=False).status_code==429
 
 
 def test_logged_in_cross_site_api_post_denied(protected):
     with browser() as client:
-        client.post("/login",data={"password":PASSWORD})
+        submit_login(client,PASSWORD)
         r=client.post("/api/generate",headers={"Origin":"https://other-site.test"},
                       data={"payload":"{}"})
         assert r.status_code==403
         r=client.post("/logout",headers={"Origin":"https://other-site.test"})
         assert r.status_code==403
         assert client.get("/api/config").status_code==200
+
+
+def test_browser_null_origin_with_valid_csrf_can_login(protected):
+    # Referrer-Policy: no-referrer converts native HTML form POST Origin to null.
+    with browser() as client:
+        good=submit_login(client,PASSWORD,headers={"Origin":"null"},follow_redirects=False)
+        assert good.status_code==303
+        assert "secure" in good.headers["set-cookie"].lower()
+        assert client.get("/api/config").status_code==200
+
+
+def test_signed_form_tokens_are_required_scoped_and_expire(protected):
+    token=issue_form_token("login")
+    assert valid_form_token("login",token)
+    assert not valid_form_token("logout",token)
+    assert not valid_form_token("login",token[:-1]+("0" if token[-1]!="0" else "1"))
+    assert not valid_form_token("login",issue_form_token("login",now=int(time.time())-3601))
+    assert not valid_form_token("login",None)
+    with browser() as client:
+        # A cross-site page cannot read the signed login token.
+        missing=client.post("/login",data={"password":PASSWORD},
+                            headers={"Origin":"null"},follow_redirects=False)
+        assert missing.status_code==403
+        wrong=client.post("/login",data={"password":PASSWORD,"csrf_token":"forged"},
+                          follow_redirects=False)
+        assert wrong.status_code==403
+        # An explicitly cross-origin POST is rejected even if the token is valid.
+        alien=client.post("/login",data={"password":PASSWORD,"csrf_token":token},
+                          headers={"Origin":"https://evil.example"},follow_redirects=False)
+        assert alien.status_code==403
+
+
+def test_native_logout_requires_valid_token_and_accepts_null_origin(protected):
+    with browser() as client:
+        assert submit_login(client,PASSWORD,headers={"Origin":"null"},follow_redirects=False).status_code==303
+        assert client.get("/api/config").status_code==200
+        no_token=client.post("/logout",headers={"Origin":"null"},follow_redirects=False)
+        assert no_token.status_code==403
+        assert client.get("/api/config").status_code==200
+        csrf=client.get("/api/config").json()["logout_csrf_token"]
+        assert valid_form_token("logout",csrf)
+        result=client.post("/logout",data={"csrf_token":csrf},
+                           headers={"Origin":"null"},follow_redirects=False)
+        assert result.status_code==303
+        assert client.get("/api/config").status_code==401
+
+
+def test_api_post_still_rejects_null_origin(protected):
+    with browser() as client:
+        submit_login(client,PASSWORD,headers={"Origin":"null"},follow_redirects=False)
+        r=client.post("/api/generate",headers={"Origin":"null"},data={"payload":"{}"})
+        assert r.status_code==403
 
 
 def test_local_dev_no_auth_by_default(monkeypatch):
