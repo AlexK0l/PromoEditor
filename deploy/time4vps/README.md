@@ -1,3 +1,7 @@
+## Генерация промпта и форматы CorelDRAW
+
+После обновления приложение формирует проверяемый промпт из формы, затем оба размера в PNG, JPEG и послойном SVG. Для SVG→PNG/JPEG используется CairoSVG и системная библиотека `libcairo2`. Скрипт `update.sh` устанавливает Cairo runtime только при отсутствии и перезапускает только PromoEditor. Caddy и RegionalResearch не меняются. ZIP содержит фото и логотипы, встроенные в SVG — учитывайте конфиденциальность.
+
 # PromoEditor on the EXISTING Time4VPS (RegionalResearch is kept intact)
 
 ## Editing the live server .env from Windows using PowerShell/SCP

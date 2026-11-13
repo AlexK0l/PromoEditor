@@ -86,7 +86,7 @@
     $('inspect-btn').disabled=isBusy||!$('documents').files.length;
     $('inspect-btn').hidden=!$('documents').files.length;
     const count=fileIds.reduce((total,id)=>total+$(id).files.length,0);
-    $('file-feedback').textContent=count?`Прикреплено файлов: ${count}. Оригиналы не включаются в готовый ZIP.`:'Оригинальные файлы не добавляются в скачиваемый ZIP.';
+    $('file-feedback').textContent=count?`Прикреплено файлов: ${count}. Использованные фото и логотипы включены в SVG внутри ZIP.`:'Фото и логотипы встраиваются в SVG-исходники ZIP.';
   }
   function refreshStyle(){
     document.querySelectorAll('[data-style]').forEach(button=>{
