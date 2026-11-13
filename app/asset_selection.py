@@ -1,6 +1,6 @@
 """Multi-file analysis and deterministic asset selection. Document facts need approval."""
 from __future__ import annotations
-import hashlib, io, json, math
+import hashlib, hmac, io, json, math, os, secrets
 from pathlib import Path
 from PIL import Image,ImageFilter,ImageOps,ImageStat
 from .documents import extract_text,heuristics
@@ -8,6 +8,39 @@ from .documents import extract_text,heuristics
 GROUPS={'photos':'photo','logos':'logo','documents':'document','references':'reference','drawings':'drawing'}
 PREFERENCES={'auto','include','exclude'}
 MAX_ITEMS=16
+
+# Production uses the existing private session secret. In a local developer
+# process a random in-memory key remains valid until restart. Never sign with
+# a public constant or trust unsigned client-provided "AI" scores.
+_FALLBACK_PROOF_SECRET=secrets.token_bytes(32)
+
+
+def _proof_content(report):
+    records=report.get('project_assets') or []
+    assets=[]
+    for row in records[:MAX_ITEMS]:
+        if not isinstance(row,dict):continue
+        assets.append({key:row.get(key) for key in
+                       ('id','sha256','ai_score','ai_reason','ai_role')})
+    facts=report.get('extracted_data') or {}
+    return json.dumps({
+        'method':report.get('analysis_method'),'assets':assets,
+        'ai_suggestions':facts.get('ai_suggestions') if isinstance(facts,dict) else None
+    },sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf-8')
+
+
+def _proof_digest(report):
+    server_secret=os.getenv('PROMO_SESSION_SECRET')
+    key=server_secret.encode('utf-8') if server_secret and len(server_secret)>=40 else _FALLBACK_PROOF_SECRET
+    return hmac.new(key,_proof_content(report),hashlib.sha256).hexdigest()
+
+
+def _verified_ai_report(report):
+    if not isinstance(report,dict) or report.get('analysis_method')!='ai':
+        return False
+    supplied=report.get('analysis_signature')
+    return isinstance(supplied,str) and len(supplied)==64 and hmac.compare_digest(supplied,_proof_digest(report))
+
 
 def preferences_of(value):
     if isinstance(value,str):
@@ -156,16 +189,31 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
         if joined.strip():
             ai_document=analyze_documents(joined,str(requirements)[:1500]);actual_ai=True
         method='ai' if actual_ai else 'local'
+    elif _verified_ai_report(cached_report):
+        old_assets=[x for x in cached_report.get('project_assets',[])[:MAX_ITEMS] if isinstance(x,dict)]
+        # Every uploaded file must match the original server-signed selection.
+        # The browser may edit manual priority, but cannot forge AI ratings.
+        old_fingerprints={(x.get('id'),x.get('sha256')) for x in old_assets}
+        current_fingerprints={(x['id'],x['sha256']) for x in records}
+        if old_fingerprints==current_fingerprints:
+            cached=[x for x in old_assets
+                    if x.get('id') in by_id and isinstance(x.get('ai_score'),(int,float))]
+            if cached:
+                score_data={'ratings':[{'id':x['id'],'score':x['ai_score'],
+                                        'reason':x.get('ai_reason',''),'suggested_role':x.get('ai_role','')} for x in cached]}
+                method='ai'
+            # Do not retain AI-extracted facts when a source document has been excluded.
+            current_docs={x['id'] for x in records if x['kind']=='document' and x['preference']!='exclude'}
+            previous_docs={x['id'] for x in old_assets if x.get('kind')=='document' and x.get('selected')}
+            if current_docs==previous_docs:
+                previous=cached_report.get('extracted_data',{})
+                if isinstance(previous,dict):
+                    ai_document=previous.get('ai_suggestions')
+                    if isinstance(ai_document,dict):method='ai'
+        else:
+            warnings.append('Состав файлов изменился; прежние AI-оценки больше не используются.')
     elif isinstance(cached_report,dict) and cached_report.get('analysis_method')=='ai':
-        cached=[x for x in cached_report.get('project_assets',[])[:MAX_ITEMS]
-                if isinstance(x,dict) and x.get('id') in by_id and x.get('sha256')==by_id[x['id']]['sha256']
-                and isinstance(x.get('ai_score'),(float,int))]
-        if cached:
-            score_data={'ratings':[{'id':x['id'],'score':x['ai_score'],
-                                    'reason':x.get('ai_reason',''),'suggested_role':x.get('ai_role','')} for x in cached]}
-            method='ai'
-            previous=cached_report.get('extracted_data',{})
-            if isinstance(previous,dict):ai_document=previous.get('ai_suggestions')
+        warnings.append('Недостоверный или устаревший отчёт AI: оценки проигнорированы.')
     _ai_scoring(records,score_data)
     for r in records:
         if r['preference']=='exclude':r['score']=0
@@ -220,6 +268,8 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     report={'project_assets':public,'selected_assets':selected,'rejected_assets':rejected,
             'extracted_data':extracted,'analysis_method':method,'ai_used':actual_ai,
             'warnings':warnings,'total_files':len(records)}
+    if method=='ai':
+        report['analysis_signature']=_proof_digest(report)
     return report,by_id
 
 def chosen_bytes(report,records,slot):

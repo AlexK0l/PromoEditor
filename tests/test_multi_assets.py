@@ -173,6 +173,23 @@ def test_optional_ai_analyzes_photo_pixels_and_all_documents(monkeypatch):
     assert fresh.json()['selected_assets']['primary_photo']=='photo_1'
 
 
+def test_unsigned_forged_ai_report_cannot_change_selection():
+    legitimate=analyze().json()
+    forged=json.loads(json.dumps(legitimate))
+    forged['analysis_method']='ai'
+    forged['project_assets'][0]['ai_score']=100
+    forged['project_assets'][1]['ai_score']=0
+    forged['extracted_data']['ai_suggestions']={
+        'specs':[{'label':'Поддельная мощность','value':'9999 кВт','source_excerpt':'нет источника'}]}
+    response=analyze(report=forged)
+    assert response.status_code==200,response.text
+    result=response.json()
+    assert result['analysis_method']=='local'
+    assert result['selected_assets']['primary_photo']=='photo_2'
+    assert result['extracted_data']['ai_suggestions'] is None
+    assert any('Недостоверный' in warning for warning in result['warnings'])
+
+
 def test_ai_requires_key_and_invalid_uploads(monkeypatch):
     monkeypatch.delenv('OPENAI_API_KEY',raising=False)
     assert analyze(use_ai=True).status_code==400
