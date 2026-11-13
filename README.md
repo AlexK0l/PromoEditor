@@ -4,6 +4,10 @@
 
 On a configured Time4VPS server, replace Caddy's browser username+password dialog with one independent PromoEditor password (minimum 8 characters). After updating the app, run `bash /opt/promoeditor/deploy/time4vps/switch_to_password_login.sh` as root. The script activates fail-closed FastAPI login, verifies protected API access, then safely removes only PromoEditor's old Caddy Basic Auth. Session cookies are signed and HttpOnly Secure (12-hour expiry); passwords and signing secrets are kept in the root-owned `/etc/promoeditor/promoeditor.env` file. RegionalResearch is unchanged. See `deploy/time4vps/README.md` for backups and steps.
 
+## Светлая и тёмная тема
+
+В верхней панели редактора доступна кнопка переключения светлой и тёмной темы. Тема применяется к форме генерации, дополнительным настройкам, разделу редактирования готового промо и странице входа. Выбор сохраняется локально в браузере (localStorage), а при первом открытии используется настройка операционной системы. **Цвета итоговых PNG и содержимое canvas не меняются** при переключении интерфейса. Для тёмного режима на форме входа доступен тот же переключатель; до авторизации браузеру разрешено получить только безопасный скрипт `/theme.js`, остальные файлы и API защищены паролем.
+
 ## Интерфейс PromoEditor
 
 Доступен только **«Компактный»** вариант интерфейса. Главная страница `/` сразу открывает одностраничную форму; переключателя между дизайнами, дополнительных вариантов и вложенных страниц больше нет. Введите название продукта, прикрепите фото и при необходимости документы, укажите рекламный тезис и стиль. Остальные поля размещены в «Дополнительных настройках».

@@ -54,6 +54,12 @@ app.mount('/static',StaticFiles(directory=str(STATIC)),name='static')
 async def password_auth_middleware(request:Request,call_next):
     return await password_guard(request,call_next)
 
+@app.get('/theme.js')
+def public_theme_script():
+    # A single harmless UI asset is available on the login page before auth.
+    # Other /static resources and ALL APIs remain private.
+    return FileResponse(STATIC/'theme.js',media_type='text/javascript',headers={'Cache-Control':'public, max-age=3600'})
+
 @app.get('/login')
 async def password_login_page(request:Request):
     return await login_get(request)
