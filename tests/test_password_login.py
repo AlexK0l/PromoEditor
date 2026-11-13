@@ -125,6 +125,27 @@ def test_local_dev_no_auth_by_default(monkeypatch):
         assert client.get("/api/config").json()["auth_enabled"] is False
 
 
+def test_eight_characters_are_accepted_and_seven_rejected(protected):
+    valid_eight="Ab3$xyZ9"
+    assert len(valid_eight)==8
+    hashed=hash_password(valid_eight,iterations=300_000)
+    assert verify_password(valid_eight,hashed)
+    assert verify_password(valid_eight,hash_password(valid_eight,iterations=600_000))
+    with pytest.raises(ValueError):
+        hash_password("a"*7,iterations=300_000)
+    with pytest.raises(ValueError):
+        hash_password("a"*257,iterations=300_000)
+
+    env=prepare_settings("OPENAI_API_KEY=example\n",valid_eight)
+    values=dict(line.split("=",1) for line in env.splitlines() if "=" in line)
+    assert verify_password(valid_eight,values["PROMO_PASSWORD_HASH"])
+    with pytest.raises(ValueError):
+        prepare_settings("", "a"*7)
+
+    from app.auth import login_html
+    assert 'minlength="8"' in login_html().body.decode("utf-8")
+
+
 def test_provision_preserves_other_env_and_rotates_secret():
     original="OPENAI_API_KEY=test-placeholder\nPROMO_REQUESTS_PER_HOUR=10\nPROMO_AUTH_ENABLED=0\n"
     out1=prepare_settings(original,PASSWORD)

@@ -14,8 +14,8 @@ KEYS=("PROMO_AUTH_ENABLED","PROMO_PASSWORD_HASH","PROMO_SESSION_SECRET")
 
 
 def prepare_settings(source,password):
-    if not 12<=len(password)<=256:
-        raise ValueError("Пароль должен содержать 12–256 символов.")
+    if not 8<=len(password)<=256:
+        raise ValueError("Пароль должен содержать от 8 до 256 символов.")
     salt=secrets.token_bytes(24)
     digest=hashlib.pbkdf2_hmac("sha256",password.encode("utf-8"),salt,600_000)
     new={
@@ -36,7 +36,7 @@ def provision(path):
         raise PermissionError("Run as root.")
     if not path.is_file() or stat.S_IMODE(path.stat().st_mode)&0o077:
         raise PermissionError("Server env file must exist with mode 0600.")
-    print("Новый пароль для PromoEditor: 12–256 символов. Вы можете использовать знакомый вам пароль.")
+    print("Новый пароль для PromoEditor: 8–256 символов. Вы можете использовать знакомый вам пароль.")
     one=getpass.getpass("Новый пароль (скрыт): ")
     two=getpass.getpass("Повторите пароль: ")
     if not secrets.compare_digest(one,two):
