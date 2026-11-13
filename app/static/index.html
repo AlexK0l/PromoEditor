@@ -7,6 +7,7 @@
   <meta name="description" content="PromoEditor — удобное создание рекламных PNG 4:3 и 9:16 из ваших материалов.">
   <title>PromoEditor — новый промо-материал</title>
   <link rel="stylesheet" href="/static/app.css?v=20261113-compact-only">
+  <link rel="stylesheet" href="/static/editor.css?v=20261113-v1">
 </head>
 <body>
   <header class="topbar">
@@ -141,8 +142,99 @@
       <p class="result-disclaimer">Перед публикацией проверьте ТТХ, рекламные утверждения и права на фотографии. Изображения не показываются на странице по вашему выбору.</p>
     </section>
 
+
+    <section id="edit-section" class="edit-section" aria-labelledby="edit-title">
+      <div class="edit-heading">
+        <div>
+          <span class="step-label">ПОСЛЕ ГЕНЕРАЦИИ · РЕДАКТОР</span>
+          <h2 id="edit-title">Редактировать готовое промо</h2>
+          <p>Откройте созданный PNG или загрузите свой. Заменяйте надписи и изображения, закрывайте старые элементы, двигайте слои. Для изменения самого рисунка используйте OpenAI.</p>
+        </div>
+        <button type="button" id="edit-toggle" class="secondary-button" aria-controls="edit-body" aria-expanded="false">Открыть редактор</button>
+      </div>
+      <div id="edit-body" hidden>
+        <div class="edit-choose">
+          <button type="button" id="edit-open-landscape" class="secondary-button" disabled>Редактировать созданный 4:3</button>
+          <button type="button" id="edit-open-portrait" class="secondary-button" disabled>Редактировать созданный 9:16</button>
+          <label class="edit-file-select">Загрузить PNG / JPG / WEBP
+            <input type="file" id="edit-open-file" accept="image/png,image/jpeg,image/webp">
+          </label>
+          <label class="edit-file-select">Открыть проект .promo.json
+            <input type="file" id="edit-project-file" accept=".json,.promo.json,application/json">
+          </label>
+        </div>
+        <p class="edit-helper">Редактор работает с одним форматом за раз. Чтобы обработать оба, откройте их по очереди. Сохранение не меняет оригинальные PNG.</p>
+        <p id="edit-status" class="edit-status" role="status" aria-live="polite">Выберите готовое изображение или загрузите файл.</p>
+        <div id="edit-workspace" class="edit-workspace" hidden>
+          <div class="edit-canvas-column">
+            <div class="edit-tools" role="group" aria-label="Инструменты редактирования">
+              <button type="button" class="edit-tool is-selected" data-edit-tool="select" aria-pressed="true">↖ Переместить</button>
+              <button type="button" class="edit-tool" data-edit-tool="cover" aria-pressed="false">▧ Закрыть область</button>
+              <button type="button" class="edit-tool" data-edit-tool="region" aria-pressed="false">✦ Область для AI</button>
+              <button type="button" id="edit-clear-region" class="edit-tool">Снять выделение</button>
+            </div>
+            <div class="edit-stage">
+              <canvas id="edit-canvas" role="img" tabindex="0" aria-label="Холст готового промо. Перетащите слой для перемещения, либо протяните прямоугольник выбранным инструментом."></canvas>
+            </div>
+            <p class="edit-caption">Предпросмотр доступен только здесь, во время редактирования. Контур выделения не попадёт в итоговый PNG.</p>
+            <div class="edit-bottom-actions">
+              <button type="button" id="edit-undo" class="secondary-button" disabled>↶ Отменить</button>
+              <button type="button" id="edit-redo" class="secondary-button" disabled>↷ Повторить</button>
+              <button type="button" id="edit-download" class="primary-button">Скачать отредактированный PNG ↓</button>
+              <button type="button" id="edit-save-project" class="secondary-button">Сохранить редактируемый проект</button>
+            </div>
+          </div>
+          <div class="edit-options">
+            <div class="edit-option-group">
+              <h3>Заменить надпись</h3>
+              <label for="edit-text-input">Новый текст</label>
+              <textarea id="edit-text-input" rows="2" maxlength="500" placeholder="Новая цена, характеристика или заголовок"></textarea>
+              <div class="edit-grid-two">
+                <label>Размер текста <input id="edit-text-size" type="number" min="12" max="200" value="52"></label>
+                <label>Цвет <input id="edit-text-color" type="color" value="#ffffff"></label>
+              </div>
+              <button type="button" id="edit-add-text" class="secondary-button">+ Добавить текстовый слой</button>
+              <p class="edit-help">Чтобы заменить старую надпись в PNG, сначала закройте её область цветом или удалите через AI, затем добавьте новую.</p>
+            </div>
+            <div class="edit-option-group">
+              <h3>Заменить фото или логотип</h3>
+              <label class="edit-file-select">+ Добавить изображение поверх
+                <input id="edit-overlay-file" type="file" accept="image/png,image/jpeg,image/webp">
+              </label>
+              <label>Цвет закрываемой области <input id="edit-cover-color" type="color" value="#ffffff"></label>
+              <p class="edit-help">Выберите «Закрыть область» и выделите прямоугольник на холсте. Это точная цветовая замена без AI.</p>
+            </div>
+            <div class="edit-option-group">
+              <h3>Выбранный элемент</h3>
+              <p id="edit-selected-name" class="edit-help">Нажмите на добавленный текст или изображение.</p>
+              <div id="edit-selected-fields" hidden>
+                <label id="edit-selected-text-wrap">Содержимое текста
+                  <textarea id="edit-selected-text" rows="3" maxlength="500"></textarea>
+                </label>
+                <div class="edit-grid-two">
+                  <label>Ширина, px <input id="edit-layer-width" type="number" min="10" max="4096"></label>
+                  <label>Высота, px <input id="edit-layer-height" type="number" min="10" max="4096"></label>
+                </div>
+                <button type="button" id="edit-bring-forward" class="secondary-button">Слой выше ↑</button>
+                <button type="button" id="edit-delete-layer" class="secondary-button">Удалить элемент</button>
+              </div>
+            </div>
+            <div class="edit-option-group edit-ai-option">
+              <h3>AI-редактирование существующего изображения</h3>
+              <label for="edit-ai-prompt">Что заменить или изменить?</label>
+              <textarea id="edit-ai-prompt" rows="4" maxlength="2500" placeholder="Например: заменить жёлтый зерновоз на красный, убрать старый логотип, сделать фон ночным, сохранив остальную композицию"></textarea>
+              <label>Качество <select id="edit-ai-quality"><option value="low">Быстрое</option><option value="medium" selected>Стандартное</option><option value="high">Высокое</option></select></label>
+              <button type="button" id="edit-run-ai" class="primary-button">✦ Применить через OpenAI</button>
+              <p class="edit-help">Платный API-запрос только после подтверждения. Инструмент «Область для AI» ограничивает правку выделенным прямоугольником; без выделения редактируется всё изображение. AI может искажать надписи и мелкие детали.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <footer class="footer">PromoEditor · Ваши исходные материалы не включаются в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/app.js?v=20261113-design-actions" defer></script>
+  <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>

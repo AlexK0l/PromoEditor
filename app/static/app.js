@@ -149,6 +149,7 @@
       const response=await fetch('/api/generate',{method:'POST',body:form});
       if(!response.ok)throw new Error(await readError(response));
       latest=await response.json();
+      window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16'].forEach(id=>$(id).disabled=false);
       setStatus('Готово','Оба PNG и ZIP можно скачать ниже.','done');
