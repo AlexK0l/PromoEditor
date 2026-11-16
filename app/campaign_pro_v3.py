@@ -524,16 +524,9 @@ def _bottom_band(scene, brief, proof, x, y, w, h, accent):
 
 
 def _footer(scene, brief, accent, portrait):
+    """Angled advertising price/CTA ribbons with a clear white print margin."""
     w,h=scene.w,scene.h
     y=1706 if portrait else 969
-    scene.rect("cta_bg",0,y,w,h-y,
-               "url(#pro-red-gradient)",ident="pro-cta")
-    for i in range(3):
-        xx=w-275+i*73
-        scene.polygon("cta_bg",[
-            (xx,y),(xx+48,y),(xx-126,h),(xx-174,h)
-        ],"#FFFFFF",opacity=".15",
-        ident=f"pro3-footer-chevron-{i}")
     price=_format_price(brief.get("price"))
     currency=str(brief.get("currency") or "").strip()
     caption=price+" "+currency+(" с НДС" if brief.get("vat",True)
@@ -541,6 +534,14 @@ def _footer(scene, brief, accent, portrait):
     phones=[str(v).strip() for v in (brief.get("phones") or [])[:2]
             if str(v).strip()]
     if portrait:
+        scene.rect("cta_bg",0,y,w,h-y,
+                   "url(#pro-red-gradient)",ident="pro-cta")
+        for i in range(3):
+            xx=w-275+i*73
+            scene.polygon("cta_bg",[
+                (xx,y),(xx+48,y),(xx-126,h),(xx-174,h)
+            ],"#FFFFFF",opacity=".15",
+            ident=f"pro3-footer-chevron-{i}")
         scene.polygon("cta_bg",[
             (0,y),(w-62,y),(w-144,y+98),(0,y+98)
         ],accent,ident="pro3-footer-price-plate")
@@ -557,25 +558,77 @@ def _footer(scene, brief, accent, portrait):
                 _type(scene,"contacts",phone,w*.48,
                       y+119+i*36,w*.48,36,28,15,
                       "#FFFFFF",True,f"pro3-phone-{i}",1)
-    else:
-        split=w*.58
+        return
+
+    # Target poster footer uses discrete ribbons on white paper, not a
+    # featureless full-height red rectangle. Leave the bottom white margin
+    # available for a factual price-validity note if the user supplies one.
+    scene.rect("cta_bg",0,y,w,h-y,
+               "#FFFFFF",ident="pro-cta")
+    bar_top=y+12
+    bar_bottom=h-18
+    split=835
+    scene.polygon("cta_bg",[
+        (0,bar_top),(split-14,bar_top),
+        (split-107,bar_bottom),(0,bar_bottom)
+    ],"url(#pro-red-gradient)",ident="pro3-footer-price-plate")
+    scene.polygon("cta_bg",[
+        (split+4,bar_top),(w-10,bar_top),
+        (w-64,bar_bottom),(split-51,bar_bottom)
+    ],accent,ident="pro3-footer-contact-plate")
+    scene.polygon("cta_bg",[
+        (split-15,bar_top),(split+4,bar_top),
+        (split-51,bar_bottom),(split-70,bar_bottom)
+    ],"#FFFFFF",ident="pro3-footer-white-separator")
+    for i in range(3):
+        xx=w-260+i*58
         scene.polygon("cta_bg",[
-            (0,y),(split-18,y),(split-107,h),(0,h)
-        ],accent,ident="pro3-footer-price-plate")
-        _type(scene,"price",caption,42,y+26,
-              split-129,h-y-36,71 if price else 40,
-              21,"#FFFFFF",True,"pro-price",1,italic=True)
-        if phones:
-            _rule(scene,"contacts",split-21,y+17,
-                  split-21,h-16,"#FFFFFF",2.6,
-                  "pro3-footer-divider")
-            _type(scene,"contacts","СВЯЖИТЕСЬ С НАМИ",
-                  split+17,y+15,w-split-44,34,28,16,
-                  "#FFFFFF",True,"pro3-contact-title",1)
-            for i,phone in enumerate(phones):
-                _type(scene,"contacts",phone,split+17,
-                      y+49+i*30,w-split-48,29,27,14,
-                      "#FFFFFF",True,f"pro3-phone-{i}",1)
+            (xx,bar_top),(xx+24,bar_top),
+            (xx-59,bar_bottom),(xx-83,bar_bottom)
+        ],"#FFFFFF",opacity=".16",
+        ident=f"pro3-footer-chevron-{i}")
+    # Price icon: original editorial coins, not a borrowed manufacturer logo.
+    for dx,dy in ((0,0),(18,-8),(31,9)):
+        px=24+dx
+        py=bar_top+28+dy
+        scene.el("cta_bg","ellipse",f"pro3-price-coin-{dx}",{
+            "cx":px+14,"cy":py+3,
+            "rx":14,"ry":7,
+            "fill":"none","stroke":"#FFFFFF","stroke-width":2.4
+        })
+        _rule(scene,"cta_bg",px,py+4,px,py+15,
+              "#FFFFFF",2,"pro3-coin-left")
+        _rule(scene,"cta_bg",px+28,py+4,px+28,py+15,
+              "#FFFFFF",2,"pro3-coin-right")
+    _type(scene,"price",caption,107,bar_top+6,
+          split-220,bar_bottom-bar_top-14,
+          69 if price else 39,19,
+          "#FFFFFF",True,"pro-price",1,italic=True)
+    if phones:
+        # White headset/phone outline is a pure visual mark.
+        scene.el("contacts","path","pro3-footer-phone-icon",{
+            "d":f"M {split+44} {bar_top+36} "
+                 f"q -17 -11 -11 -19 l 8 -7 l 11 11 l -5 6 "
+                 f"q 11 13 21 19 l 6 -5 l 10 10 l -8 7 "
+                 f"q -8 6 -32 -15",
+            "fill":"none","stroke":"#FFFFFF",
+            "stroke-width":3.3,"stroke-linecap":"round",
+            "stroke-linejoin":"round"
+        })
+        _type(scene,"contacts","СВЯЖИТЕСЬ С НАМИ",
+              split+72,bar_top+4,w-split-129,30,
+              26,14,"#FFFFFF",True,
+              "pro3-contact-title",1,italic=True)
+        for i,phone in enumerate(phones):
+            _type(scene,"contacts",phone,split+72,
+                  bar_top+31+i*25,w-split-132,27,
+                  25,13,"#FFFFFF",True,
+                  f"pro3-phone-{i}",1)
+    note=str(brief.get("price_note") or "").strip()
+    if note:
+        _type(scene,"contacts",note,28,bar_bottom+1,
+              w-56,h-bar_bottom-2,15,10,
+              INK,False,"pro3-price-note",1)
 
 
 def create_pro_campaign_svg(brief, key, hero=None, detail=None,
