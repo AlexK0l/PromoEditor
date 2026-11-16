@@ -586,8 +586,10 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
     segments = []
 
     if portrait and facts:
-        # Two large columns of specs below the portrait product.
-        segments.append(("specs", 355 if len(facts)<=6 else 372))
+        # Match the height to the number of two-column rows: no empty 350px
+        # strip when the customer provides only one or two specifications.
+        rows = math.ceil(len(facts)/2)
+        segments.append(("specs", 92*rows + 7*(rows-1) + 12))
     if dimensions or drawing is not None:
         if portrait:
             dim_h = 222 if drawing is not None else (
