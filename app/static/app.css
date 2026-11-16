@@ -49,6 +49,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
 .remove-link,.remove-uploads button,.extra-clear button{border:0;background:transparent;color:#5b6b88;font-size:11px;padding:6px 0;text-decoration:underline;text-underline-offset:3px}
 .remove-link:hover,.remove-uploads button:hover,.extra-clear button:hover{color:var(--blue)}
 .mini-uploads{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.mini-uploads>label[for="drawing"]{grid-column:1/-1}
 .mini-upload{min-height:73px;position:relative;display:flex;gap:9px;align-items:center;border:1px solid var(--line);background:#fff;border-radius:11px;padding:11px 10px;cursor:pointer;transition:border .15s,background .15s;min-width:0}
 .mini-upload:hover,.mini-upload:focus-within{background:#f8faff;border-color:#a8bcf1}
 .mini-upload.has-file{background:#f5fbf7;border-color:#b5dbc6}
