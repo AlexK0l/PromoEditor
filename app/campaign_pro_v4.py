@@ -183,7 +183,7 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
     if proof:
         claims_width=w if full_width else w*.65
         slug_w=min(266,claims_width*.36)
-        heading=("ПОДТВЕРЖДЁННЫЕ ФАКТЫ"
+        heading=("ПОДТВЕРЖДЕНО"
                  if brief.get("proof_points") else "КЛЮЧЕВЫЕ ТЕЗИСЫ")
         v3._slug(scene,"benefits",heading,x+5,y+5,slug_w,h-10,
                  accent,"pro4-trust-title",24)
