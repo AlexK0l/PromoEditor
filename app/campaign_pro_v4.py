@@ -61,16 +61,43 @@ def _specs_four(scene, facts, x, y, w, h, accent):
                  12,accent,True,f"pro-spec-value-{i}",2)
 
 
+def _studio_stage(scene, x, y, w, h, accent):
+    """Neutral SVG graphic for photos without a supplied real backdrop.
+
+    No made-up agricultural silos, quarry equipment or location. A bright,
+    geometric stage ensures the trailer (not a cartoon background) dominates.
+    """
+    scene.rect("photos", x, y, w, h, "#EDF1F5", ident="pro5-studio-background")
+    scene.polygon("photos", [
+        (x, y), (x+w*.39, y),
+        (x+w*.13, y+h), (x, y+h)
+    ], "#F7F9FA", ident="pro5-studio-beam-left")
+    scene.polygon("photos", [
+        (x+w*.77, y), (x+w, y),
+        (x+w*.58, y+h), (x+w*.39, y+h)
+    ], "#FFFFFF", opacity=".64", ident="pro5-studio-beam-right")
+    scene.polygon("photos", [
+        (x, y+h*.71), (x+w, y+h*.55),
+        (x+w, y+h), (x, y+h)
+    ], "#DDE4EA", ident="pro5-stage-floor")
+    _rule(scene, "photos", x+12, y+h*.72, x+w-14,
+          y+h*.58, "#FFFFFF", 2.5, "pro5-stage-perspective")
+    scene.rect("photos", x, y, 8, h, accent,
+               ident="pro5-hero-edge")
+
+
 def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
     category=str(brief.get("category") or "").casefold()
     grain=any(token in category for token in ("зерн","агро","сельхоз"))
     photo_height=min(395,h*.72) if _lines(brief,"dimensions",4) else h
-    v3._new_atmosphere(scene,x,y,w,photo_height,accent,grain)
+    # Without a verified real backdrop, use neutral editorial geometry.
+    # This keeps the source product dominant and avoids fictional scenery.
+    _studio_stage(scene,x,y,w,photo_height,accent)
     if backdrop is not None and not ai_product:
         _photo(scene,backdrop,x,y,w,photo_height,"pro-ai-background",cover=True)
         scene.rect("photos",x,y,w,photo_height,"#FFFFFF",opacity=".065",
                    ident="pro4-photo-veil")
-    for j,(radius,opacity) in enumerate(((.45,.075),(.37,.10),(.29,.12))):
+    for j,(radius,opacity) in enumerate(((.43,.055),(.36,.07),(.29,.09))):
         scene.el("photos","ellipse",f"pro4-ground-shadow-{j}",{
             "cx":x+w*.53,"cy":y+photo_height*.87,
             "rx":w*radius,"ry":photo_height*.077,"fill":"#1D242D",
@@ -85,7 +112,7 @@ def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
         else:
             # Keep the original product a separate, editable bitmap.
             # Its bounding rectangle ends above the dimensions panel.
-            _photo(scene,image,x+64,y+5,w-110,min(390,h*.72),
+            _photo(scene,image,x+7,y+2,w-18,min(395,h*.75),
                    "original-product-photo",trim=True)
     scene.polygon("photos",[(x,y+photo_height-9),(x+w-98,y+photo_height-9),
                             (x+w-112,y+photo_height),(x,y+photo_height)],
