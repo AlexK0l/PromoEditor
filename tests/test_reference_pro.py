@@ -179,3 +179,15 @@ def test_pro_v2_unprovided_dimensions_and_claims_are_absent(format_key):
     assert "pro-dimensions-title" not in svg
     assert "pro-proof-panel" not in svg
     assert "pro-benefit-halo" not in svg
+
+
+@pytest.mark.parametrize("format_key", ["4x3", "9x16"])
+def test_pro_v2_product_values_do_not_ellipsis(format_key):
+    from app.render import default_brief
+    sample = default_brief()
+    sample["style"] = "reference_pro"
+    root = ET.fromstring(create_editable_svg(sample, format_key))
+    for element in root.findall(".//s:text", SVG):
+        if element.get("id", "").startswith("pro-spec-value-"):
+            assert "…" not in "".join(element.itertext()), (
+                format_key, element.get("id"), list(element.itertext()))
