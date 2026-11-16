@@ -26,6 +26,8 @@ def main():
         # clickable and must NOT silently change the chosen layout to industrial.
         page.locator('[data-style="reference_pro"]').click()
         assert page.locator('#style').input_value()=='reference_pro'
+        page.locator('#advanced-settings summary').click()
+        assert page.locator('#advanced-settings').evaluate('(el)=>el.open')
         page.locator('#proof-points').fill('Старый факт из другого проекта')
         page.locator('#reset-btn').click()
         page.wait_for_function(
