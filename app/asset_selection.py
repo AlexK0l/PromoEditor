@@ -7,7 +7,7 @@ from .image_analysis import analysis_preview, ANALYSIS_RESIZE_THRESHOLD
 from .documents import extract_text,heuristics
 
 GROUPS={'photos':'photo','logos':'logo','documents':'document','references':'reference','drawings':'drawing'}
-PREFERENCES={'auto','include','exclude'}
+PREFERENCES={'auto','include','exclude','drawing'}
 MAX_ITEMS=16
 
 # Production uses the existing private session secret. In a local developer
@@ -112,8 +112,8 @@ def _ai_scoring(records,result):
 
 def _choose(rows,kind,maximum):
     choices=[x for x in rows if x['kind']==kind and x['preference']!='exclude' and not x.get('duplicate_of')]
-    forced=[x for x in choices if x['preference']=='include']
-    auto=sorted((x for x in choices if x['preference']!='include'),key=lambda x:(-x['score'],x['index']))
+    forced=[x for x in choices if x['preference'] in ('include','drawing')]
+    auto=sorted((x for x in choices if x['preference'] not in ('include','drawing')),key=lambda x:(-x['score'],x['index']))
     return (forced+auto)[:maximum]
 
 def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,requirements=''):
@@ -134,7 +134,16 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
         raise ValueError('Некорректный отчёт анализа.')
     warnings=[];seen={};visual_hashes=[]
     for i,r in enumerate(records):
-        r.update(index=i,preference=prefs.get(r['id'],'auto'),score=50,quality='',selected=False,assignment='',reason='')
+        preference=prefs.get(r['id'],'auto')
+        if preference=='drawing':
+            # An image mistakenly uploaded as a photo can be explicitly
+            # reassigned without downloading/reuploading. This must happen
+            # BEFORE image scoring, duplicate grouping and photo selection.
+            if r['kind']!='photo':
+                raise ValueError('Назначить чертежом можно только фотографию в JPG, PNG или WEBP.')
+            r['kind']='drawing'
+            r['manual_drawing']=True
+        r.update(index=i,preference=preference,score=50,quality='',selected=False,assignment='',reason='')
         if r['kind'] in ('photo','logo','reference') or (r['kind']=='drawing' and Path(r['name']).suffix.lower() in ('.png','.jpg','.jpeg','.webp')):
             try:
                 score,quality,w,h,alpha,dhash,tone,preview_size,resized=_tech_score(
@@ -163,9 +172,9 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
             if r.get('duplicate_of'):r['score']=min(r['score'],20)
         elif r['kind']=='document':r['quality']='Документ: извлечение фактов требует проверки'
         else:r['quality']='Чертёж'
-        if r['preference']=='include':r.pop('duplicate_of',None)
+        if r['preference'] in ('include','drawing'):r.pop('duplicate_of',None)
     for kind,max_allowed in (('photo',2),('logo',1),('reference',2),('drawing',1)):
-        if sum(x['kind']==kind and x['preference']=='include' for x in records)>max_allowed:
+        if sum(x['kind']==kind and x['preference'] in ('include','drawing') for x in records)>max_allowed:
             raise ValueError(f'Для роли {kind} можно обязательно включить максимум {max_allowed} файл(а).')
     suggestions=[];doc_text=[];seen_facts=set();docs=[]
     for r in records:
@@ -267,7 +276,7 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     for r in records:
         keys=('id','kind','name','size','sha256','preference','score','quality','selected','assignment','reason',
               'width','height','analysis_width','analysis_height','analysis_resized',
-              'alpha','ai_score','ai_reason','ai_role','duplicate_of')
+              'alpha','ai_score','ai_reason','ai_role','duplicate_of','manual_drawing')
         row={key:r[key] for key in keys if key in r}
         suffix=Path(r['name']).suffix.lower()
         row['mime']={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg',
@@ -276,7 +285,7 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
                      '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                      '.csv':'text/csv','.txt':'text/plain','.md':'text/markdown'}.get(suffix,'application/octet-stream')
         row['role']=r['assignment'] or r['kind']
-        row['forced_include']=r['preference']=='include'
+        row['forced_include']=r['preference'] in ('include','drawing')
         row['forced_exclude']=r['preference']=='exclude'
         public.append(row)
     rejected=[{'id':r['id'],'name':r['name'],'reason':r['reason']}
