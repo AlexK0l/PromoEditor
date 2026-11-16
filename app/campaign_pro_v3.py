@@ -601,7 +601,11 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
     if not portrait:
         # 4:3 proportions mirror reference sections rather than spreadsheet rows.
         main_y=171
-        main_bottom=720 if with_dim else 724
+        if benefits:
+            main_bottom=720 if with_dim else 724
+        else:
+            # Omitted benefits must not leave a blank white quarter-poster.
+            main_bottom=874 if with_band else 959
         left_w=928 if facts else 1440
         spec_x=943
         hero_h=(main_bottom-main_y-163) if with_dim else main_bottom-main_y
