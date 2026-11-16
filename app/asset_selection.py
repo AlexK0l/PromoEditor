@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib, hmac, io, json, math, os, secrets
 from pathlib import Path
-from PIL import ImageFilter,ImageStat
+from PIL import Image,ImageFilter,ImageStat
 from .image_analysis import analysis_preview, ANALYSIS_RESIZE_THRESHOLD
 from .documents import extract_text,heuristics
 
