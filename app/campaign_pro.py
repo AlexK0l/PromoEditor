@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 from .campaign_layout import (
     _check, _format_price, _lines, _photo, _rule, _spec_symbol,
 )
-from .editable_export import Scene
+from .editable_export import Scene, _wrap
 from .render import compute_roi
 
 RED_DARK = "#AE0013"
@@ -31,6 +31,22 @@ def _copy(scene, group, value, x, y, w, h, size=24, minimum=13,
     return node
 
 
+def _fit_fact(scene, group, value, x, y, w, h, preferred, color, ident):
+    """Use the largest font that fits exactly, without internal ellipses."""
+    width=max(20,int(w))
+    height=max(15,h)
+    chosen=12
+    for size in range(int(preferred),11,-1):
+        wrapped=_wrap(str(value),width,size,True)
+        if (len(wrapped)<=2
+                and all("…" not in part for part in wrapped)
+                and len(wrapped)*size*1.25<=height):
+            chosen=size
+            break
+    return scene.text(group,value,x,y,width,height,chosen,chosen,
+                      color,True,ident,2)
+
+
 def _tint(scene, accent):
     defs = scene.root.find(f"{{{SVG_NS}}}defs")
     gradient = ET.SubElement(defs, f"{{{SVG_NS}}}linearGradient", {
@@ -44,160 +60,211 @@ def _tint(scene, accent):
                   {"offset": "100%", "stop-color": "#D10A1B"})
 
 
+
 def _header(scene, brief, logo, accent, portrait):
+    """Sharper brand hierarchy; artwork remains a replaceable original bitmap."""
     w = scene.w
-    h = 257 if portrait else 181
+    h = 266 if portrait else 187
     scene.rect("decor", 0, 0, w, h, "url(#pro-red-gradient)",
                ident="pro-header")
-    for idx, offset in enumerate((0, 56, 112)):
+    # Three strong diagonal motifs rather than a flat stripe.
+    for i, off in enumerate((0, 64, 128)):
         scene.polygon("decor", [
-            (w-240+offset, 0), (w-198+offset, 0),
-            (w-340+offset, h), (w-382+offset, h)
-        ], "#FFFFFF", ident=f"pro-head-stripe-{idx}",
-            opacity=".92" if idx == 2 else ".23")
-    scene.polygon("decor", [(0, h-12), (w, h-12), (w, h), (0, h)],
-                  "#F9FAFD", ident="pro-header-edge")
-    brand_w = 240 if portrait else 257
+            (w-294+off, 0), (w-244+off, 0),
+            (w-391+off, h), (w-441+off, h)
+        ], "#FFFFFF", ident=f"pro-head-stripe-{i}",
+            opacity=".19" if i < 2 else ".98")
+    scene.polygon("decor", [(0, h-6), (w, h-6), (w, h), (0, h)],
+                  PAPER, ident="pro-header-edge")
+
+    plate_x, plate_y = 23, 20
+    plate_w = 245 if portrait else 276
+    plate_h = 128 if portrait else 132
     if logo is not None:
-        # Keep user artwork independent; a white base gives dark logos contrast.
-        scene.polygon("logo", [(24, 22), (brand_w-9, 22),
-                               (brand_w-40, 133), (24, 133)],
-                      "#FFFFFF", ident="pro-logo-plate")
-        _photo(scene, logo, 32, 30, brand_w-84, 94, "original-logo",
+        scene.polygon("logo", [
+            (plate_x, plate_y), (plate_x+plate_w, plate_y),
+            (plate_x+plate_w-34, plate_y+plate_h),
+            (plate_x, plate_y+plate_h)
+        ], "#FFFFFF", ident="pro-logo-plate")
+        _photo(scene, logo, plate_x+12, plate_y+9,
+               plate_w-53, plate_h-21, "original-logo",
                layer="logo", trim=True)
     elif str(brief.get("brand") or "").strip():
-        _copy(scene, "logo", brief["brand"].upper(), 29, 29,
-              brand_w-50, 104, 40, 18, "#FFFFFF", True,
-              "pro-brand", 2)
-    sx = 269 if portrait else 282
-    _rule(scene, "heading", sx-13, 26, sx-49, 145 if portrait else 128,
-          "#FFFFFF", 5, "pro-brand-divider")
+        scene.polygon("logo", [
+            (plate_x, plate_y), (plate_x+plate_w, plate_y),
+            (plate_x+plate_w-34, plate_y+plate_h),
+            (plate_x, plate_y+plate_h)
+        ], "#A90016", ident="pro-brand-plate")
+        _copy(scene, "logo", str(brief["brand"]).upper(),
+              plate_x+9, plate_y+22, plate_w-64, 93,
+              37, 18, "#FFFFFF", True, "pro-brand", 2)
+
+    sx = 270 if portrait else 317
+    _rule(scene, "heading", sx-14, 22,
+          sx-50, 143 if portrait else 135,
+          "#FFFFFF", 6, "pro-brand-divider")
     cat = str(brief.get("category") or "").strip().upper()
     model = str(brief.get("model") or "").strip()
     if cat:
-        _copy(scene, "heading", cat, sx+4, 17, w-sx-65, 49,
-              39 if portrait else 42, 20, "#FFFFFF", True,
-              "pro-category", 1, italic=True)
-    _copy(scene, "heading", model, sx, 61, w-sx-68,
-          122 if portrait else 88, 89 if portrait else 92,
-          34, "#FFFFFF", True, "pro-model", 1, italic=True)
+        _copy(scene, "heading", cat, sx+3, 13, w-sx-68, 46,
+              38, 21, "#FFFFFF", True, "pro-category", 1, italic=True)
+    _copy(scene, "heading", model, sx-2, 56, w-sx-61, 94 if portrait else 87,
+          93 if portrait else 91, 30,
+          "#FFFFFF", True, "pro-model", 1, italic=True)
+
     slogan = str(brief.get("slogan") or "").strip()
     if slogan:
-        sy = 200 if portrait else 143
-        left = 230 if portrait else 246
+        sy = 209 if portrait else 140
+        left = 240 if portrait else 262
         scene.polygon("heading", [
-            (left+11, sy), (w-27, sy), (w-55, sy+43),
-            (left-16, sy+43)
+            (left+8, sy), (w-25, sy), (w-58, sy+48),
+            (left-17, sy+48)
         ], "#FFFFFF", ident="pro-slogan-ribbon")
-        _copy(scene, "heading", slogan, left+26, sy+3,
-              w-left-109, 37, 29 if portrait else 27,
-              15, accent, True, "pro-slogan", 1, italic=True)
+        _copy(scene, "heading", slogan, left+23, sy+5,
+              w-left-99, 39, 31 if portrait else 30,
+              16, accent, True, "pro-slogan", 1, italic=True)
 
 
 def _hero(scene, hero, detail, backdrop, ai_product, brief,
           accent, x, y, w, h):
-    scene.rect("photos", x, y, w, h, "#E7EBF1", ident="pro-hero-stage")
-    scene.polygon("photos", [(x, y+h*.58), (x+w, y+h*.38),
-                              (x+w, y+h), (x, y+h)],
-                  "#D2D8DF", ident="pro-hero-ground")
-    scene.polygon("photos", [(x+w*.82, y), (x+w, y),
-                              (x+w*.67, y+h)], "#FFFFFF",
-                  opacity=".45", ident="pro-hero-light")
+    """Make the original equipment dominant without inventing surroundings."""
+    scene.rect("photos", x, y, w, h, "#E7ECF1", ident="pro-hero-stage")
+    # Graphic industrial depth is deliberately schematic, NOT a fake quarry.
+    scene.polygon("photos", [
+        (x, y+h*.63), (x+w, y+h*.43),
+        (x+w, y+h), (x, y+h)
+    ], "#D0D9E1", ident="pro-hero-ground")
+    scene.polygon("photos", [
+        (x+w*.80, y), (x+w, y),
+        (x+w*.58, y+h), (x+w*.38, y+h)
+    ], "#FFFFFF", opacity=".54", ident="pro-hero-light")
+    for i in range(4):
+        line_y = y+h*(.66+.075*i)
+        _rule(scene, "photos", x+20, line_y,
+              x+w-20, line_y-h*.16,
+              "#FFFFFF", 2, f"pro-hero-depth-{i}")
     if backdrop is not None and not ai_product:
-        _photo(scene, backdrop, x, y, w, h, "pro-ai-background", cover=True)
-        scene.rect("photos", x, y, w, h, "#FFFFFF", opacity=".1",
+        _photo(scene, backdrop, x+2, y+2, w-4, h-4,
+               "pro-ai-background", cover=True)
+        scene.rect("photos", x+2, y+2, w-4, h-4,
+                   "#FFFFFF", opacity=".07",
                    ident="pro-photo-atmosphere")
+
     source = backdrop if ai_product else hero
     if source is not None:
-        # The original product is never regenerated or rewritten by the model.
-        _photo(scene, source, x+9, y+8, w-18, h-16,
+        _photo(scene, source, x+4, y+3, w-8, h-23,
                "ai-product-bitmap" if ai_product else "original-product-photo",
                trim=not ai_product)
+    scene.rect("photos", x+7, y+h-10, w-14, 6,
+               accent, ident="pro-hero-bottom-rule")
+    scene.polygon("photos", [
+        (x+w-87, y+h-33), (x+w-21, y+h-33),
+        (x+w-39, y+h-11), (x+w-105, y+h-11)
+    ], accent, ident="pro-hero-red-notch", opacity=".9")
+
     if detail is not None:
-        dw = min(260, w*.34)
-        dh = min(135, h*.36)
-        ix, iy = x+18, y+h-dh-21
-        scene.rect("photos", ix-6, iy-6, dw+12, dh+12,
-                   "#FFFFFF", rad=11, ident="pro-detail-frame")
+        dw = min(295, w*.35)
+        dh = min(159, h*.36)
+        ix, iy = x+20, y+h-dh-24
+        scene.rect("photos", ix-8, iy-8, dw+16, dh+16,
+                   "#FFFFFF", rad=10, ident="pro-detail-frame")
         _photo(scene, detail, ix, iy, dw, dh, "detail-photo", trim=True)
-        scene.rect("claims", ix-6, iy+dh+4, dw+12, 5,
+        scene.rect("claims", ix-8, iy+dh+2, dw+16, 6,
                    accent, ident="pro-detail-underline")
+
     if ai_product:
-        ly = y+h-41
-        scene.rect("claims", x+15, ly, 240, 30, "#272B33",
-                   rad=4, ident="pro-ai-tag-bg")
-        _copy(scene, "claims", "AI-ВИЗУАЛИЗАЦИЯ", x+26,
-              ly+2, 225, 24, 16, 12, "#FFFFFF", True,
+        ly = y+h-51
+        scene.rect("claims", x+w-249, ly, 233, 31, "#272B33",
+                   rad=3, ident="pro-ai-tag-bg")
+        _copy(scene, "claims", "AI-ВИЗУАЛИЗАЦИЯ", x+w-240,
+              ly+3, 219, 25, 16, 12, "#FFFFFF", True,
               "pro-ai-tag", 1)
-    # Short verified claims, only if not already used as a photo inset.
     if detail is None:
+        # Never borrow claims or copy from the visual reference.
         claims = [str(v).strip() for v in (brief.get("hero_claims") or [])
                   if str(v).strip()][:2]
         for i, claim in enumerate(claims):
-            py = y+h-57-i*49
-            if py < y+17:
+            py = y+h-66-i*52
+            if py < y+18:
                 break
-            cw = min(w*.57, 400)
-            scene.polygon("claims", [(x+15, py), (x+cw+15, py),
-                                      (x+cw-4, py+42), (x+15, py+42)],
-                          "#FFFFFF", opacity=".93",
-                          ident=f"pro-claim-plate-{i}")
-            scene.rect("claims", x+15, py, 6, 42, accent,
+            cw = min(w*.55, 420)
+            scene.polygon("claims", [
+                (x+17, py), (x+cw+15, py),
+                (x+cw-14, py+43), (x+17, py+43)
+            ], "#FFFFFF", opacity=".95", ident=f"pro-claim-plate-{i}")
+            scene.rect("claims", x+17, py, 7, 43, accent,
                        ident=f"pro-claim-bar-{i}")
-            _copy(scene, "claims", claim, x+29, py+5,
-                  cw-49, 32, 21, 12, INK, True, f"pro-claim-{i}", 1)
+            _copy(scene, "claims", claim, x+34, py+5,
+                  cw-61, 32, 22, 13, INK, True,
+                  f"pro-claim-{i}", 1)
 
 
 def _specs(scene, facts, x, y, w, h, accent, portrait):
+    """Prioritise key numeric facts; keep every user-provided row visible."""
     if not facts:
         return
-    columns = 2 if portrait else 1
+    columns = 2 if portrait and len(facts) > 1 else 1
     rows = math.ceil(len(facts)/columns)
     gap = 7 if portrait else 5
     col_w = (w-(columns-1)*gap)/columns
-    row_h = (h-(rows-1)*gap)/rows
+    weights = [1.22 if row == 0 else 1.0 for row in range(rows)]
+    unit = (h-gap*(rows-1))/sum(weights)
+    heights = [unit*t for t in weights]
+    starts = []
+    position = y
+    for rh in heights:
+        starts.append(position)
+        position += rh+gap
+
     for i, (name, value) in enumerate(facts):
-        bx = x+(i%columns)*(col_w+gap)
-        by = y+(i//columns)*(row_h+gap)
+        col, row = (i%columns, i//columns)
+        bx = x+col*(col_w+gap)
+        by, rh = starts[row], heights[row]
         scene.polygon("specs", [
-            (bx+14, by), (bx+col_w-4, by),
-            (bx+col_w, by+row_h*.5),
-            (bx+col_w-4, by+row_h), (bx, by+row_h),
-            (bx+12, by+4)
+            (bx+16, by), (bx+col_w-7, by),
+            (bx+col_w, by+rh*.5),
+            (bx+col_w-7, by+rh), (bx, by+rh),
+            (bx+13, by+4)
         ], "#FFFFFF", ident=f"pro-spec-card-{i}")
         scene.el("specs", "polygon", f"pro-spec-outline-{i}", {
-            "points": " ".join(f"{a:.1f},{b:.1f}" for a,b in [
-                (bx+14, by), (bx+col_w-4, by),
-                (bx+col_w, by+row_h*.5), (bx+col_w-4, by+row_h),
-                (bx, by+row_h), (bx+12, by+4)
+            "points": " ".join(f"{px:.1f},{py:.1f}" for px,py in [
+                (bx+16,by),(bx+col_w-7,by),(bx+col_w,by+rh*.5),
+                (bx+col_w-7,by+rh),(bx,by+rh),(bx+13,by+4)
             ]),
-            "fill": "none", "stroke": accent, "stroke-width": 1.6
+            "fill":"none", "stroke":accent, "stroke-width":1.8
         })
+        # Diagonal left plate is a deliberate visual echo of the reference.
         scene.polygon("specs", [
-            (bx, by+row_h), (bx+72, by+row_h),
-            (bx+94, by), (bx+20, by)
+            (bx, by+rh-1), (bx+65, by+rh-1),
+            (bx+91, by+1), (bx+21, by+1)
         ], accent, ident=f"pro-spec-icon-plate-{i}")
-        # Existing editor-safe icons are genuine SVG paths rather than emoji.
-        icon_x = bx+18
-        icon_y = by+(row_h-60)/2
-        start = len(scene.groups["specs"])
-        _spec_symbol(scene, icon_x, icon_y, i, accent)
-        scale = min(.73, max(.43, (row_h-10)/60))
-        for part in list(scene.groups["specs"])[start:]:
-            part.set("transform", f"translate({icon_x*(1-scale):.2f} "
-                                  f"{icon_y*(1-scale):.2f}) scale({scale:.3f})")
-        # Column widths adapt independently; values stay visible in narrow 9:16.
-        sep_x = bx+col_w*.66
-        _rule(scene, "specs", sep_x-9, by+8, sep_x-9,
-              by+row_h-8, "#EBEDEF", 1.5, "pro-spec-divider")
-        _copy(scene, "specs", name, bx+95, by+5,
-              sep_x-bx-107, row_h-8, 22 if not portrait else 19,
-              12, INK, True, f"pro-spec-name-{i}", 2, italic=True)
-        _copy(scene, "specs", value, sep_x+1, by+5,
-              bx+col_w-sep_x-7, row_h-9,
-              28 if not portrait else 22, 12,
-              accent, True, f"pro-spec-value-{i}", 2)
 
+        icon_x = bx+15
+        icon_y = by+(rh-60)/2
+        first = len(scene.groups["specs"])
+        _spec_symbol(scene, icon_x, icon_y, i, accent)
+        scale = min(.88, max(.38, (rh-11)/60))
+        for part in list(scene.groups["specs"])[first:]:
+            part.set("transform",
+                     f"translate({icon_x*(1-scale):.2f} "
+                     f"{icon_y*(1-scale):.2f}) scale({scale:.3f})")
+
+        # Values have their own visual zone and must never sit on labels.
+        value_length = len(str(value).strip())
+        ratio = .59 if value_length >= 16 else (.63 if value_length >= 12 else .68)
+        sep = bx+col_w*ratio
+        _rule(scene, "specs", sep-9, by+9, sep-9,
+              by+rh-9, "#E1E5EA", 2, "pro-spec-divider")
+        title_size = 23 if rh>=60 else 20
+        title_w=max(20,sep-bx-102)
+        _fit_fact(scene, "specs", name, bx+92, by+6,
+                  title_w, rh-11, title_size, INK,
+                  f"pro-spec-name-{i}")
+        value_w=max(20,bx+col_w-sep-12)
+        preferred=33 if row==0 and rh>=57 else 28
+        _fit_fact(scene, "specs", value, sep+2, by+5,
+                  value_w, rh-10, preferred, accent,
+                  f"pro-spec-value-{i}")
 
 def _ribbon(scene, layer, text, x, y, width, height, accent, ident):
     scene.polygon(layer, [(x, y), (x+width, y),
@@ -208,50 +275,84 @@ def _ribbon(scene, layer, text, x, y, width, height, accent, ident):
           ident+"-text", 1, italic=True)
 
 
+
 def _dimensions(scene, facts, drawing, x, y, w, h, accent, portrait):
+    """A technical display, not a narrow spreadsheet; never invent a diagram."""
     if not facts and drawing is None:
         return
     scene.rect("dimensions", x, y, w, h, "#FFFFFF",
-               rad=9, ident="pro-dimensions-panel")
-    _ribbon(scene, "dimensions",
-            "ГАБАРИТЫ И ЧЕРТЁЖ" if drawing is not None else "ГАБАРИТНЫЕ РАЗМЕРЫ",
-            x+7, y+4, min(510, w*.59),
-            37 if portrait else 34, accent, "pro-dimensions-title")
-    top = y+(46 if portrait else 42)
-    body_h = h-(53 if portrait else 47)
+               rad=8, ident="pro-dimensions-panel")
+    title = "ГАБАРИТЫ И ЧЕРТЁЖ" if drawing is not None else "ГАБАРИТНЫЕ РАЗМЕРЫ"
+    ribbon_h = 42 if portrait else 39
+    _ribbon(scene, "dimensions", title, x+8, y+4,
+            min(w*.53, 535), ribbon_h, accent, "pro-dimensions-title")
+    top = y+ribbon_h+12
+    body_h = h-ribbon_h-20
     if drawing is not None:
-        dw = w*.56 if portrait else w*.62
-        _photo(scene, drawing, x+17, top+2, dw-24,
-               body_h-7, "original-drawing", layer="dimensions")
-        left = x+dw+5
-        available = w-dw-19
+        # Imported original drawing stays an independent raster layer.
+        dw = w*.58 if portrait else w*.62
+        scene.rect("dimensions", x+14, top+2, dw-18,
+                   body_h-5, "#F3F6F8", rad=5,
+                   ident="pro-technical-drawing-stage")
+        _photo(scene, drawing, x+19, top+6, dw-30, body_h-15,
+               "original-drawing", layer="dimensions")
+        left = x+dw+8
+        available = w-dw-24
         columns = 1
     else:
-        left = x+18
-        available = w-36
-        columns = 2 if portrait and len(facts)>2 else min(4, len(facts))
+        left = x+16
+        available = w-32
+        if portrait:
+            columns = 2 if len(facts)>=4 else max(1,len(facts))
+        else:
+            columns = min(4,len(facts))
     if not facts:
         return
+
     rows = math.ceil(len(facts)/columns)
-    gap = 5
-    cw = (available-(columns-1)*gap)/columns
-    ch = (body_h-(rows-1)*gap)/rows
-    for i, (label, value) in enumerate(facts):
-        bx = left+(i%columns)*(cw+gap)
-        by = top+(i//columns)*(ch+gap)
-        if i%2 == 0:
-            scene.rect("dimensions", bx, by, cw, ch, "#F2F4F7",
-                       rad=4, ident=f"pro-dimension-cell-{i}")
-        _copy(scene, "dimensions", label, bx+9, by+4,
-              cw*.45, ch-6, 18, 12, "#3C4550", False,
-              f"pro-dimension-name-{i}", 2)
-        _copy(scene, "dimensions", value, bx+cw*.48, by+4,
-              cw*.49-6, ch-7, 24, 13, accent, True,
-              f"pro-dimension-value-{i}", 2)
+    gap = 7
+    cw = (available-gap*(columns-1))/columns
+    ch = (body_h-gap*(rows-1))/rows
+    for i,(label,value) in enumerate(facts):
+        bx=left+(i%columns)*(cw+gap)
+        by=top+(i//columns)*(ch+gap)
+        scene.rect("dimensions", bx, by, cw, ch,
+                   "#F1F4F7" if i%2==0 else "#F9FAFC",
+                   rad=5, ident=f"pro-dimension-cell-{i}")
+        scene.rect("dimensions", bx, by, cw, 4,
+                   accent, ident=f"pro-dimension-stripe-{i}")
+        if drawing is not None or ch < 73:
+            _copy(scene, "dimensions", label, bx+10, by+7,
+                  cw*.43, ch-13, 19, 12, "#303846", True,
+                  f"pro-dimension-name-{i}", 2)
+            _copy(scene, "dimensions", value,
+                  bx+cw*.48, by+6, cw*.49-10, ch-12,
+                  27, 13, accent, True,
+                  f"pro-dimension-value-{i}", 2)
+        else:
+            _copy(scene, "dimensions", label, bx+15, by+10,
+                  cw-28, 30, 22, 14, "#333C49",
+                  True, f"pro-dimension-name-{i}", 1)
+            _copy(scene, "dimensions", value, bx+15,
+                  by+ch*.38, cw-28, ch*.45,
+                  35 if not portrait else 37,
+                  18, accent, True,
+                  f"pro-dimension-value-{i}", 1)
+            # A decorative vector measuring rule, not a synthesized drawing.
+            ly=by+ch-12
+            _rule(scene, "dimensions", bx+17, ly,
+                  bx+cw-17, ly, accent, 1.8,
+                  f"pro-dimension-measure-{i}")
+            _rule(scene, "dimensions", bx+17, ly-6,
+                  bx+17, ly+4, accent, 1.8,
+                  f"pro-dimension-measure-left-{i}")
+            _rule(scene, "dimensions", bx+cw-17, ly-6,
+                  bx+cw-17, ly+4, accent, 1.8,
+                  f"pro-dimension-measure-right-{i}")
 
 
 def _benefit_icon(scene, x, y, index, accent):
-    # Neutral, illustrative pictograms (no invented safety certification).
+    """Simple semantic-neutral original vector marks, not certifications."""
     shapes = (
         f"M {x-20} {y-8} L {x} {y-21} L {x+20} {y-8} L {x} {y+4} Z "
         f"M {x-20} {y+2} L {x} {y+15} L {x+20} {y+2}",
@@ -269,38 +370,67 @@ def _benefit_icon(scene, x, y, index, accent):
         f"M {x} {y-22} A 22 22 0 1 1 {x-.01} {y-22} "
         f"M {x} {y-16} L {x} {y} L {x+12} {y+8}"
     )
-    scene.el("benefits", "path", f"pro-benefit-icon-{index}", {
+    return scene.el("benefits", "path", f"pro-benefit-icon-{index}", {
         "d": shapes[index%len(shapes)], "stroke": accent,
-        "stroke-width": 3.5, "stroke-linecap": "round",
+        "stroke-width": 3.8, "stroke-linecap": "round",
         "stroke-linejoin": "round", "fill": "none"
     })
 
-
 def _benefits(scene, benefits, x, y, w, h, accent, portrait):
+    """Large pictograms and readable claims for either orientation."""
     if not benefits:
         return
     scene.rect("benefits", x, y, w, h, "#FFFFFF",
-               rad=10, ident="pro-benefits-panel")
-    caption_h = 37 if not portrait else 43
-    _ribbon(scene, "benefits", "ПРЕИМУЩЕСТВА", x+8, y+4,
-            min(570, w*.55), caption_h, accent, "pro-benefits-title")
-    columns = min(3, len(benefits)) if portrait else len(benefits)
-    rows = math.ceil(len(benefits)/columns)
-    top = y+caption_h+10
-    row_h = (h-caption_h-17)/rows
-    col_w = (w-20)/columns
-    for i, claim in enumerate(benefits):
-        bx = x+10+(i%columns)*col_w
-        by = top+(i//columns)*row_h
-        if i%columns:
-            _rule(scene, "benefits", bx, by+7, bx, by+row_h-8,
-                  accent, 1.5, "pro-benefit-separator")
-        icon_y = by+min(29, row_h*.36)
-        _benefit_icon(scene, bx+col_w*.5, icon_y, i, accent)
-        _copy(scene, "benefits", claim, bx+7, by+min(56, row_h*.64),
-              col_w-14, max(28, row_h*.35), 20 if not portrait else 20,
-              11, INK, True, f"pro-benefit-{i}", 2)
-
+               rad=8, ident="pro-benefits-panel")
+    caption_h = 42 if portrait else 38
+    _ribbon(scene, "benefits", "ПРЕИМУЩЕСТВА", x+8, y+3,
+            min(600, w*.56), caption_h, accent,
+            "pro-benefits-title")
+    cols = (2 if len(benefits) in (2,4) else min(3,len(benefits))) if portrait else min(4,len(benefits))
+    rows = math.ceil(len(benefits)/cols)
+    usable=h-caption_h-17
+    col_w=(w-24)/cols
+    row_h=usable/rows
+    for i,claim in enumerate(benefits):
+        bx=x+12+(i%cols)*col_w
+        by=y+caption_h+10+(i//cols)*row_h
+        if i%cols:
+            _rule(scene, "benefits", bx, by+6,
+                  bx, by+row_h-6, accent, 1.8,
+                  f"pro-benefit-divider-{i}")
+        # Horizontal cards at low heights prevent icon/text collisions.
+        horizontal = (not portrait) or row_h < 106
+        if horizontal:
+            cx=bx+45
+            cy=by+row_h*.50
+            radius=min(27,max(15,row_h*.36))
+            scene.el("benefits", "circle", f"pro-benefit-halo-{i}", {
+                "cx":cx, "cy":cy, "r":radius,
+                "fill":"#FFF0F1", "stroke":accent, "stroke-width":1.5
+            })
+            pictogram=_benefit_icon(scene,cx,cy,i,accent)
+            # Scale only the pictogram, not its editable containing group.
+            if pictogram is not None and radius<26:
+                scale=radius/26
+                pictogram.set("transform",
+                    f"translate({cx*(1-scale):.2f} {cy*(1-scale):.2f}) "
+                    f"scale({scale:.3f})")
+            _copy(scene, "benefits", claim, bx+86,
+                  by+8, col_w-97, row_h-15,
+                  23, 12, INK, True,
+                  f"pro-benefit-{i}", 2)
+        else:
+            cx=bx+col_w*.5
+            cy=by+30
+            scene.el("benefits", "circle", f"pro-benefit-halo-{i}", {
+                "cx":cx, "cy":cy, "r":28,
+                "fill":"#FFF0F1", "stroke":accent, "stroke-width":1.5
+            })
+            _benefit_icon(scene,cx,cy,i,accent)
+            _copy(scene, "benefits", claim, bx+12,
+                  by+65, col_w-24, row_h-71,
+                  22, 12, INK, True,
+                  f"pro-benefit-{i}", 2)
 
 def _proof(scene, claims, x, y, w, h, accent, portrait):
     if not claims:
@@ -338,152 +468,214 @@ def _proof(scene, claims, x, y, w, h, accent, portrait):
               INK, True, f"pro-proof-fact-{i}", 2)
 
 
+
 def _roi(scene, brief, x, y, w, h, accent):
+    """Label computed values with units; never imply independent guarantees."""
     if not brief.get("show_roi"):
         return
-    data = compute_roi(brief)
-    if data is None:
+    data=compute_roi(brief)
+    if not data:
         return
-    metrics = [
-        ("ЗА РЕЙС", data["per_trip"]),
-        ("РЕЙСОВ В ГОД", data["trips"]),
-        ("ЗА ГОД", data["annual"]),
-        ("БАЛАНС", data["net"]),
+    currency=str(brief.get("currency") or "Br").strip()[:12] or "Br"
+    metrics=[
+        (f"ЗА РЕЙС, {currency}",data["per_trip"]),
+        ("РЕЙСОВ В ГОД",data["trips"]),
+        (f"ЗА ГОД, {currency}",data["annual"]),
+        (f"БАЛАНС, {currency}",data["net"]),
     ]
     scene.rect("roi", x, y, w, h, "#FFF0F1",
-               ident="pro-roi-panel")
-    cw = w/4
-    for i, (label, value) in enumerate(metrics):
+               rad=6, ident="pro-roi-panel")
+    cw=w/4
+    for i,(label,value) in enumerate(metrics):
         bx=x+i*cw
         if i:
-            _rule(scene, "roi", bx, y+6, bx, y+h-6,
-                  "#EAAAB1", 1.6, "pro-roi-divider")
-        _copy(scene, "roi", label, bx+10, y+4,
-              cw-18, h*.32, 17, 12, "#532E32",
-              True, f"pro-roi-label-{i}", 1)
-        formatted=f"{value:,.0f}".replace(",", " ")
-        _copy(scene, "roi", formatted, bx+10, y+h*.34,
-              cw-18, h*.59, 29, 15, accent,
-              True, f"pro-roi-value-{i}", 1)
+            _rule(scene, "roi", bx, y+7,
+                  bx, y+h-7, "#ECAEB5", 2,
+                  f"pro-roi-divider-{i}")
+        _copy(scene, "roi", label, bx+13,
+              y+5, cw-24, h*.31,
+              19, 12, "#652A35", True,
+              f"pro-roi-label-{i}", 1)
+        formatted=f"{value:,.0f}".replace(","," ")
+        _copy(scene, "roi", formatted, bx+13,
+              y+h*.35, cw-24, h*.58,
+              34, 16, accent, True,
+              f"pro-roi-value-{i}", 1)
 
 
 def _footer(scene, brief, accent, portrait):
-    w, h = scene.w, scene.h
-    y = 1742 if portrait else 957
+    """Large price / prominent phones, with editable independent SVG groups."""
+    w,h=scene.w,scene.h
+    y=1720 if portrait else 950
     scene.rect("cta_bg", 0, y, w, h-y,
                "url(#pro-red-gradient)", ident="pro-cta")
-    for k in range(3):
-        xx=w-255+k*65
-        scene.polygon("cta_bg", [(xx, y), (xx+43, y),
-                                  (xx-110, h), (xx-153, h)],
-                      "#FFFFFF", opacity=".11",
-                      ident=f"pro-cta-stripe-{k}")
-    price = _format_price(brief.get("price"))
-    currency = str(brief.get("currency") or "").strip()
-    vat = bool(brief.get("vat", True))
-    price_copy = (price+" "+currency+(" с НДС" if vat else "")
-                  if price else "ЗАПРОСИТЕ ПРЕДЛОЖЕНИЕ")
-    contacts = [str(v).strip() for v in (brief.get("phones") or [])[:2]
-                if str(v).strip()]
+    for i in range(3):
+        xx=w-268+i*68
+        scene.polygon("cta_bg", [
+            (xx,y), (xx+45,y), (xx-118,h), (xx-163,h)
+        ], "#FFFFFF", opacity=".16",
+        ident=f"pro-cta-stripe-{i}")
+    amount=_format_price(brief.get("price"))
+    currency=str(brief.get("currency") or "").strip()
+    vat=bool(brief.get("vat",True))
+    price_copy=(amount+" "+currency+(" с НДС" if vat else "")
+                if amount else "ЗАПРОСИТЕ ПРЕДЛОЖЕНИЕ")
+    phones=[str(v).strip() for v in (brief.get("phones") or [])[:2]
+            if str(v).strip()]
+
     if portrait:
-        _copy(scene, "price", price_copy, 40, y+18,
-              w-72, 78, 68 if price else 41,
-              24, "#FFFFFF", True, "pro-price", 2, italic=True)
-        if contacts:
-            _rule(scene, "contacts", 37, y+99, w-38, y+99,
-                  "#FFFFFF", 2, "pro-contact-topline")
-            _copy(scene, "contacts", "СВЯЖИТЕСЬ С НАМИ", 39,
-                  y+104, w*.45, 42, 27, 17,
-                  "#FFFFFF", True, "pro-contact-label", 1)
-            for i, phone in enumerate(contacts):
-                _copy(scene, "contacts", phone, w*.51,
-                      y+103+i*37, w*.45, 36, 26,
-                      15, "#FFFFFF", True, f"pro-phone-{i}", 1)
-    else:
-        side=w*.57
-        scene.polygon("cta_bg", [(0, y), (side-46, y),
-                                  (side-113, h), (0, h)],
-                      accent, ident="pro-price-plate")
-        _copy(scene, "price", price_copy, 42, y+22,
-              side-118, h-y-30, 61 if price else 38,
-              22, "#FFFFFF", True, "pro-price", 2, italic=True)
-        if contacts:
-            _rule(scene, "contacts", side-13, y+20,
-                  side-13, h-17, "#FFFFFF", 2.5,
-                  "pro-contact-divider")
-            _copy(scene, "contacts", "СВЯЖИТЕСЬ С НАМИ", side+14,
-                  y+13, w-side-40, 31, 25, 15,
+        scene.polygon("cta_bg", [
+            (0,y), (w-40,y), (w-120,y+91), (0,y+91)
+        ], accent, ident="pro-price-plate")
+        _copy(scene, "price", price_copy, 38, y+13,
+              w-95, 73, 69 if amount else 43, 24,
+              "#FFFFFF", True, "pro-price", 1,
+              italic=True)
+        if phones:
+            _rule(scene, "contacts", 36, y+103,
+                  w-39, y+103, "#FFFFFF", 2.5,
+                  "pro-contact-topline")
+            _copy(scene, "contacts", "СВЯЖИТЕСЬ С НАМИ",
+                  39, y+112, w*.46, 35, 27, 16,
                   "#FFFFFF", True, "pro-contact-label", 1,
                   italic=True)
-            for i, phone in enumerate(contacts):
-                _copy(scene, "contacts", phone, side+14,
-                      y+48+i*28, w-side-43, 29, 27, 15,
-                      "#FFFFFF", True, f"pro-phone-{i}", 1)
+            for i,phone in enumerate(phones):
+                _copy(scene, "contacts", phone,
+                      w*.52, y+111+i*37,
+                      w*.44, 33, 27, 15,
+                      "#FFFFFF", True,
+                      f"pro-phone-{i}", 1)
+        return
+
+    side=w*.595
+    scene.polygon("cta_bg", [
+        (0,y),(side-17,y),(side-122,h),(0,h)
+    ], accent, ident="pro-price-plate")
+    _copy(scene, "price", price_copy, 41, y+24,
+          side-131, h-y-31, 68 if amount else 38,
+          21, "#FFFFFF", True, "pro-price", 1,
+          italic=True)
+    if phones:
+        _rule(scene, "contacts", side-22, y+18,
+              side-22, h-16, "#FFFFFF", 2.5,
+              "pro-contact-divider")
+        _copy(scene, "contacts", "СВЯЖИТЕСЬ С НАМИ",
+              side+13, y+17, w-side-45, 34,
+              27, 17, "#FFFFFF", True,
+              "pro-contact-label", 1, italic=True)
+        for i,phone in enumerate(phones):
+            _copy(scene, "contacts", phone, side+13,
+                  y+53+i*31, w-side-43, 31,
+                  28, 17, "#FFFFFF", True,
+                  f"pro-phone-{i}", 1)
 
 
 def create_pro_campaign_svg(brief, key, hero=None, detail=None,
                             logo=None, drawing=None, backdrop=None,
                             ai_product=False):
-    """Render both exact sizes with source-only claims and Corel-editable layers."""
+    """Render a dense but legible reference-style campaign in both SVG sizes.
+
+    Every numeric value and claim comes from the supplied form, never the
+    reference. Missing sections are omitted, giving the hero more space.
+    """
     if key not in ("4x3", "9x16"):
         raise ValueError("Неизвестное соотношение сторон.")
-    portrait=key=="9x16"
-    scene=Scene(key, brief.get("accent"), "industrial")
-    accent=scene.accent
+    portrait = key == "9x16"
+    scene = Scene(key, brief.get("accent"), "industrial")
+    accent = scene.accent
     _tint(scene, accent)
-    scene.rect("decor", 0, 0, scene.w, scene.h, PAPER,
-               ident="pro-paper")
-    facts=_lines(brief, "specs", 8)
-    dims=_lines(brief, "dimensions", 4)
-    benefits=[str(v).strip()[:150] for v in (brief.get("benefits") or [])
-              if str(v).strip()][:6]
-    # Only explicit approved text; a reference photo is never a fact source.
-    proof=[str(v).strip()[:180] for v in (brief.get("proof_points") or [])
-           if str(v).strip()][:4]
-    has_roi=bool(brief.get("show_roi") and compute_roi(brief))
+    scene.rect("decor", 0, 0, scene.w, scene.h,
+               PAPER, ident="pro-paper")
+
+    facts = _lines(brief, "specs", 8)
+    dimensions = _lines(brief, "dimensions", 4)
+    benefits = [str(v).strip()[:150]
+                for v in (brief.get("benefits") or [])
+                if str(v).strip()][:6]
+    proof = [str(v).strip()[:180]
+             for v in (brief.get("proof_points") or [])
+             if str(v).strip()][:4]
+    has_roi = bool(brief.get("show_roi") and compute_roi(brief))
     _header(scene, brief, logo, accent, portrait)
-    bottom=1733 if portrait else 949
-    top=271 if portrait else 188
-    gap=10 if portrait else 9
-    segments=[]
+
+    top = 277 if portrait else 195
+    bottom = 1711 if portrait else 941
+    gap = 9 if portrait else 8
+    segments = []
+
     if portrait and facts:
-        segments.append(("specs", 364))
-    if dims or drawing is not None:
-        segments.append(("dimensions", 183 if portrait else 132))
-    if benefits:
-        segments.append(("benefits", 211 if portrait else 142))
-    if proof:
-        segments.append(("proof", 117 if portrait else 77))
-    if has_roi:
-        segments.append(("roi", 110 if portrait else 75))
-    reserved=sum(h for _,h in segments)+gap*len(segments)
-    hero_h=bottom-top-reserved
-    # No unsupported sections are rendered; the product receives their space.
-    if portrait:
-        _hero(scene, hero, detail, backdrop, ai_product, brief,
-              accent, 20, top, scene.w-40, hero_h)
-    else:
-        photo_width=892 if facts else scene.w-40
-        _hero(scene, hero, detail, backdrop, ai_product, brief,
-              accent, 20, top, photo_width, hero_h)
-        if facts:
-            _specs(scene, facts, 923, top, scene.w-944,
-                   hero_h, accent, False)
-    cursor=top+hero_h+gap
-    for kind, height in segments:
-        x=20
-        w=scene.w-40
-        if kind=="specs":
-            _specs(scene, facts, x, cursor, w, height, accent, True)
-        elif kind=="dimensions":
-            _dimensions(scene, dims, drawing, x, cursor, w, height,
-                        accent, portrait)
-        elif kind=="benefits":
-            _benefits(scene, benefits, x, cursor, w, height, accent, portrait)
-        elif kind=="proof":
-            _proof(scene, proof, x, cursor, w, height, accent, portrait)
+        # Match the height to the number of two-column rows: no empty 350px
+        # strip when the customer provides only one or two specifications.
+        rows = math.ceil(len(facts)/2)
+        segments.append(("specs", 92*rows + 7*(rows-1) + 12))
+    if dimensions or drawing is not None:
+        if portrait:
+            dim_h = 222 if drawing is not None else (
+                197 if len(dimensions)>3 else 165)
         else:
-            _roi(scene, brief, x, cursor, w, height, accent)
-        cursor+=height+gap
-    _footer(scene, brief, accent, portrait)
+            dim_h = 184 if drawing is not None else (
+                164 if len(dimensions)>3 else 135)
+        segments.append(("dimensions", dim_h))
+    if benefits:
+        if portrait:
+            benefits_h = 228 if len(benefits)>3 else 162
+        else:
+            benefits_h = 179 if len(benefits)>4 else 133
+        segments.append(("benefits", benefits_h))
+    if proof:
+        segments.append(("proof", 120 if portrait else 73))
+    if has_roi:
+        segments.append(("roi", 96 if portrait else 72))
+
+    # Dense campaigns can otherwise shrink the landscape photograph to a
+    # postage stamp. Shrink optional strip heights without hiding any claims.
+    reserved = sum(size for _,size in segments)+len(segments)*gap
+    minimum_hero = 395 if portrait else 305
+    overflow = max(0, minimum_hero-(bottom-top-reserved))
+    if overflow and not portrait:
+        floors = {"benefits":126,"dimensions":134 if drawing else 112,
+                  "proof":64,"roi":64}
+        adapted=[]
+        for kind,height in segments:
+            reduction=min(overflow,max(0,height-floors.get(kind,height)))
+            adapted.append((kind,height-reduction))
+            overflow-=reduction
+        segments=adapted
+    reserved=sum(size for _,size in segments)+len(segments)*gap
+    hero_height=bottom-top-reserved
+    if hero_height < 185:
+        # Narrow unexpected content must not emit inverted SVG viewports.
+        raise ValueError("Слишком много элементов для рекламного макета.")
+
+    if portrait:
+        _hero(scene,hero,detail,backdrop,ai_product,brief,accent,
+              18,top,scene.w-36,hero_height)
+    else:
+        if facts:
+            _hero(scene,hero,detail,backdrop,ai_product,brief,accent,
+                  15,top,909,hero_height)
+            _specs(scene,facts,939,top,
+                   scene.w-955,hero_height,accent,False)
+        else:
+            _hero(scene,hero,detail,backdrop,ai_product,brief,accent,
+                  15,top,scene.w-30,hero_height)
+
+    cursor=top+hero_height+gap
+    for kind,height in segments:
+        x=18 if portrait else 15
+        w=scene.w-2*x
+        if kind=="specs":
+            _specs(scene,facts,x,cursor,w,height,accent,True)
+        elif kind=="dimensions":
+            _dimensions(scene,dimensions,drawing,x,cursor,w,height,
+                        accent,portrait)
+        elif kind=="benefits":
+            _benefits(scene,benefits,x,cursor,w,height,accent,portrait)
+        elif kind=="proof":
+            _proof(scene,proof,x,cursor,w,height,accent,portrait)
+        elif kind=="roi":
+            _roi(scene,brief,x,cursor,w,height,accent)
+        cursor += height+gap
+
+    _footer(scene,brief,accent,portrait)
     return scene.export()

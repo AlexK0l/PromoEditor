@@ -39,7 +39,8 @@ def brief():
 
 
 def words(root):
-    return " ".join("".join(n.itertext()) for n in root.findall(".//s:text", SVG))
+    # Each SVG tspan is a visually separate line; preserve its word boundary.
+    return " ".join(" ".join(t for t in n.itertext() if t) for n in root.findall(".//s:text", SVG))
 
 
 @pytest.mark.parametrize("format_key,dimensions", [
@@ -112,3 +113,81 @@ def test_pro_user_photos_and_drawings_keep_individual_raster_layers():
     assert len(ids) == len(set(ids))
     assert any("original-drawing" in ident for ident in ids)
     assert "Гарантия подтверждена" in words(root)
+
+
+def test_pro_v2_numeric_units_and_dimension_cards():
+    data = {**brief(), "show_roi": True, "roi": {
+        "extra_payload": "2.5", "distance": "300", "rate": "0.19",
+        "trips": "240", "years": "5", "baseline_price": "149499"}}
+    for format_key in ("4x3", "9x16"):
+        svg = create_editable_svg(data, format_key)
+        root = ET.fromstring(svg)
+        text = words(root)
+        assert "ЗА РЕЙС, Br" in text
+        assert "ЗА ГОД, Br" in text
+        assert "БАЛАНС, Br" in text
+        assert "10 440 мм" in text
+        assert "2 550 мм" in text
+        assert "pro-dimension-measure-0" in svg.decode()
+        assert "pro-benefit-halo-0" in svg.decode()
+        assert "pro-hero-depth-0" in svg.decode()
+        assert not root.findall(".//s:script", SVG)
+
+
+@pytest.mark.parametrize("format_key,expected", [
+    ("4x3", (1440, 1080)), ("9x16", (1080, 1920))
+])
+def test_pro_v2_dense_and_sparse_campaigns(format_key, expected):
+    from app.render import default_brief
+    dense = default_brief()
+    dense["style"] = "reference_pro"
+    dense["proof_points"] = [
+        "Проверенный документ 1", "Проверенный документ 2",
+        "Проверенный документ 3", "Проверенный документ 4"]
+    dense["benefits"] += ["Проверенное преимущество 5", "Проверенное преимущество 6"]
+    image = Image.new("RGB", (940, 560), "#f3e4c1")
+    original_drawing = Image.new("RGB", (1200, 440), "white")
+    svg = create_editable_svg(dense, format_key, hero=image,
+                              drawing=original_drawing)
+    root = ET.fromstring(svg)
+    assert root.attrib["viewBox"] == f"0 0 {expected[0]} {expected[1]}"
+    assert "Проверенный документ 4" in words(root)
+    assert "Проверенное преимущество 6" in words(root)
+    assert "original-drawing" in svg.decode()
+    assert "pro-spec-value-7" in svg.decode()
+    assert "pro-price" in svg.decode()
+    # No invented raster background / decorative pseudo-blueprint.
+    assert len(root.findall(".//s:image", SVG)) == 2
+    png, jpg = rasterize_svg(svg)
+    assert Image.open(io.BytesIO(png)).size == expected
+    assert Image.open(io.BytesIO(jpg)).size == expected
+
+
+@pytest.mark.parametrize("format_key", ["4x3", "9x16"])
+def test_pro_v2_unprovided_dimensions_and_claims_are_absent(format_key):
+    minimal = {
+        "style": "reference_pro", "model": "TRAIL 50",
+        "specs": [["Полезная нагрузка", "20 т"]],
+        "dimensions": [], "benefits": [], "proof_points": [],
+        "phones": [], "price": "",
+    }
+    svg = create_editable_svg(minimal, format_key).decode()
+    text = words(ET.fromstring(svg))
+    assert "Полезная нагрузка" in text
+    assert "20 т" in text
+    assert "ГАБАРИТ" not in svg
+    assert "pro-dimensions-title" not in svg
+    assert "pro-proof-panel" not in svg
+    assert "pro-benefit-halo" not in svg
+
+
+@pytest.mark.parametrize("format_key", ["4x3", "9x16"])
+def test_pro_v2_fact_labels_and_values_do_not_ellipsis(format_key):
+    from app.render import default_brief
+    sample = default_brief()
+    sample["style"] = "reference_pro"
+    root = ET.fromstring(create_editable_svg(sample, format_key))
+    for element in root.findall(".//s:text", SVG):
+        if element.get("id", "").startswith(("pro-spec-value-", "pro-spec-name-")):
+            assert "…" not in "".join(element.itertext()), (
+                format_key, element.get("id"), list(element.itertext()))
