@@ -439,22 +439,41 @@ def _benefits(scene, benefits, x, y, w, h, accent, portrait):
             text_w=cw-118
             text_h=ch-15
         else:
-            icon_x=bx+cw*.5
-            icon_y=by+23
-            size=26
-            text_x=bx+16
-            text_y=by+57
-            text_w=cw-32
-            text_h=ch-62
+            compact=(h<=126 or n>=6)
+            size=24 if compact else 26
+            if compact:
+                # In the dense 6-claim strip, icons sit BESIDE the copy,
+                # never above it; all lines remain inside this section.
+                icon_x=bx+38
+                icon_y=by+ch*.50
+                text_x=bx+77
+                text_y=by+4
+                text_w=cw-86
+                text_h=ch-8
+            else:
+                icon_x=bx+cw*.5
+                icon_y=by+23
+                text_x=bx+16
+                text_y=by+57
+                text_w=cw-32
+                text_h=ch-62
         scene.el("benefits","circle",f"pro-benefit-halo-{i}",{
             "cx":icon_x,"cy":icon_y,"r":size+6,
             "fill":"#FFF1F2","stroke":accent,"stroke-width":2
         })
-        _benefit_icon(scene,icon_x,icon_y,i,accent)
+        pictogram=_benefit_icon(scene,icon_x,icon_y,i,accent)
+        compact_landscape=not portrait and (h<=126 or n>=6)
+        if compact_landscape:
+            scale=.86
+            pictogram.set("transform",
+                f"translate({icon_x*(1-scale):.2f} {icon_y*(1-scale):.2f}) "
+                f"scale({scale:.3f})")
         _type(scene,"benefits",str(claim).strip(),
               text_x,text_y,text_w,text_h,
-              25 if not portrait else 24,12,
-              INK,True,f"pro-benefit-{i}",2)
+              22 if compact_landscape else (25 if not portrait else 24),
+              11 if compact_landscape else 12,
+              INK,True,f"pro-benefit-{i}",
+              4 if compact_landscape else 2)
 
 
 def _roi(scene, brief, x, y, w, h, accent):
