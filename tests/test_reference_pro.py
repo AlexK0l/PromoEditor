@@ -191,3 +191,92 @@ def test_pro_v2_fact_labels_and_values_do_not_ellipsis(format_key):
         if element.get("id", "").startswith(("pro-spec-value-", "pro-spec-name-")):
             assert "…" not in "".join(element.itertext()), (
                 format_key, element.get("id"), list(element.itertext()))
+
+
+def _shape(root, prefix, tag):
+    for el in root.findall(f".//s:{tag}", SVG):
+        if el.attrib.get("id","").startswith(prefix):
+            return el
+    raise AssertionError(f"Missing SVG shape {prefix}")
+
+
+def _area_iou(expected, actual):
+    ex,ey,ew,eh=expected
+    ax,ay,aw,ah=actual
+    x1=max(ex,ax)
+    y1=max(ey,ay)
+    x2=min(ex+ew,ax+aw)
+    y2=min(ey+eh,ay+ah)
+    overlap=max(0,x2-x1)*max(0,y2-y1)
+    return overlap/(ew*eh+aw*ah-overlap)
+
+
+def test_pro_v3_landscape_anchors_match_reference_structure():
+    """Geometry benchmark taken from sections of the supplied 1280x960 ref.
+
+    We compare editorial zones, NOT another product's photos, brand or numbers.
+    Minor variances are intentional because the product and claims differ.
+    """
+    from app.render import default_brief
+    sample=default_brief()
+    sample["style"]="reference_pro"
+    sample["proof_points"]=["Подтверждённое условие"]
+    svg=create_editable_svg(sample,"4x3")
+    root=ET.fromstring(svg)
+    assert "pro3-" in svg.decode()
+    sections=(
+        # expected reference bounding zones normalized to 1440x1080
+        ("pro-header", "rect", (0,0,1440,166), .90),
+        ("pro3-hero-scene","rect",(0,166,920,405),.80),
+        ("pro3-dim-stage","rect",(0,555,920,180),.75),
+        ("pro3-benefits-stage","rect",(0,741,1440,142),.77),
+        ("pro-cta","rect",(0,968,1440,112),.88),
+    )
+    for ident,tag,expected,minimum in sections:
+        el=_shape(root,ident,tag)
+        actual=tuple(float(el.attrib[k]) for k in ("x","y","width","height"))
+        assert _area_iou(expected,actual)>=minimum,(ident,actual)
+    spec_first=_shape(root,"pro-spec-card-0","polygon")
+    assert float(spec_first.attrib["points"].split()[0].split(",")[0])>=930
+    assert "ZubrTrail 500" in words(root)
+    assert "44 т" in words(root)
+    assert "8,3 т" in words(root)
+
+
+def _pixel_regions(png):
+    im=Image.open(io.BytesIO(png)).convert("RGB").resize((144,108))
+    regions=((0,16),(17,55),(73,87),(97,108))
+    result=[]
+    for start,stop in regions:
+        colors=[im.getpixel((x,y)) for y in range(start,stop) for x in range(144)]
+        red=sum(1 for r,g,b in colors if r>120 and r>g*1.65 and r>b*1.5)
+        result.append(red/len(colors))
+    return result
+
+
+def test_pro_v3_poster_has_reference_color_anchors():
+    """Upper/lower dramatic red, readable mid band; not a pixel copy."""
+    from app.render import default_brief
+    sample=default_brief()
+    sample["style"]="reference_pro"
+    # Avoid accidental product-color matching: use a neutral fixture.
+    photo=Image.new("RGBA",(850,390),(232,201,62,255))
+    png,_=rasterize_svg(create_editable_svg(sample,"4x3",hero=photo))
+    top,hero,benefits,footer=_pixel_regions(png)
+    assert top>.45
+    assert hero>.045
+    assert benefits>.07
+    assert footer>.44
+
+
+def test_pro_v3_missing_sections_never_claim_dimensions_or_warranty():
+    clean={"style":"reference_pro","model":"Model X",
+           "specs":[["Материал","Сталь"]],
+           "dimensions":[],"benefits":[],"proof_points":[],
+           "price":"","phones":[]}
+    for aspect in ("4x3","9x16"):
+        source=create_editable_svg(clean,aspect).decode("utf-8")
+        assert "pro-dimensions-title" not in source
+        assert "pro-proof-panel" not in source
+        assert "ГАРАНТИЯ" not in source
+        assert "Сталь" in source
