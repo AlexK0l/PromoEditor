@@ -303,7 +303,7 @@
   }
   document.querySelectorAll('[data-style]').forEach(button=>button.addEventListener('click',()=>{
     set('style',button.dataset.style);
-    const accents={industrial:'#e31b26',graphite:'#344054',minimal:'#315ddc'};
+    const accents={industrial:'#e31b26',reference_pro:'#e31b26',graphite:'#344054',minimal:'#315ddc'};
     set('accent',accents[button.dataset.style]);$('color-label').textContent=get('accent').toUpperCase();
     refreshStyle();markPromptStale();invalidateResult();
   }));
