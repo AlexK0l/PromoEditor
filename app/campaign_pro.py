@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 from .campaign_layout import (
     _check, _format_price, _lines, _photo, _rule, _spec_symbol,
 )
-from .editable_export import Scene
+from .editable_export import Scene, _wrap
 from .render import compute_roi
 
 RED_DARK = "#AE0013"
@@ -240,18 +240,25 @@ def _specs(scene, facts, x, y, w, h, accent, portrait):
         _rule(scene, "specs", sep-9, by+9, sep-9,
               by+rh-9, "#E1E5EA", 2, "pro-spec-divider")
         title_size = 23 if rh>=60 else 20
-        # The shared SVG wrapper inserts an ellipsis when splitting a word.
-        # For long technical values use a readable smaller font up front, so
-        # full material names survive instead of appearing truncated.
-        val_size = 19 if value_length >= 12 else (33 if row == 0 and rh>=57 else 28)
         _copy(scene, "specs", name, bx+92, by+6,
               max(20, sep-bx-102), rh-11,
               title_size, 12, INK, True,
               f"pro-spec-name-{i}", 2)
-        _copy(scene, "specs", value, sep+2, by+5,
-              max(20, bx+col_w-sep-12), rh-10,
-              val_size, 13, accent, True,
-              f"pro-spec-value-{i}", 2)
+        value_w=max(20, bx+col_w-sep-12)
+        value_h=rh-10
+        preferred=33 if row == 0 and rh>=57 else 28
+        # The common text wrapper marks midword splits with '…'.
+        # Find the largest font that fits the factual value without it.
+        font=12
+        for candidate in range(preferred,11,-1):
+            wrapped=_wrap(value,int(value_w),candidate,True)
+            if (len(wrapped)<=2 and all("…" not in part for part in wrapped)
+                    and len(wrapped)*candidate*1.25<=value_h):
+                font=candidate
+                break
+        scene.text("specs", value, sep+2, by+5, value_w,
+                   value_h, font, font, accent, True,
+                   f"pro-spec-value-{i}", 2)
 
 def _ribbon(scene, layer, text, x, y, width, height, accent, ident):
     scene.polygon(layer, [(x, y), (x+width, y),
