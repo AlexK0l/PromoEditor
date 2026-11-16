@@ -267,8 +267,11 @@ def test_photo_can_be_assigned_drawing_without_reupload(monkeypatch):
     """A schematic JPEG in the main photo input must reach the drawing SVG layer."""
     from app import main as main_module
     monkeypatch.setattr(main_module, "_guard_rate", lambda request: None)
+    with Image.open(io.BytesIO(photo("white",(680,420),17))) as original:
+        buffer=io.BytesIO()
+        original.save(buffer,format="JPEG",quality=89)
     files=[
-        ("photos", ("tech-drawing.jpg", photo("white",(680,420),17), "image/jpeg")),
+        ("photos", ("tech-drawing.jpg", buffer.getvalue(), "image/jpeg")),
         ("photos", ("product.png", photo("yellow",(870,570),10), "image/png")),
         ("logos", ("brand.png", photo("blue",(280,200),21), "image/png")),
     ]
