@@ -463,9 +463,21 @@ def _roi(scene, brief, x, y, w, h, accent):
     ]
     scene.rect("roi",x,y,w,h,"#FFF3F4",
                ident="pro3-roi-stage")
-    cw=w/4
+    # The reference's trust banner has a strong left red headline.
+    # A real ROI brief gets an original, source-neutral economic headline.
+    if w>=1250 and h<=95:
+        banner_w=224
+        _slug(scene,"roi","ЭКОНОМИКА",x+7,y+8,
+              banner_w,h-16,accent,
+              "pro3-roi-headline",26)
+        stats_x=x+banner_w+13
+        stats_w=w-banner_w-16
+    else:
+        stats_x=x
+        stats_w=w
+    cw=stats_w/4
     for i,(title,value) in enumerate(metrics):
-        px=x+i*cw
+        px=stats_x+i*cw
         if i:
             _rule(scene,"roi",px,y+8,px,y+h-8,
                   "#DE9AA3",1.6,
@@ -566,8 +578,8 @@ def _footer(scene, brief, accent, portrait):
     # available for a factual price-validity note if the user supplies one.
     scene.rect("cta_bg",0,y,w,h-y,
                "#FFFFFF",ident="pro-cta")
-    bar_top=y+12
-    bar_bottom=h-18
+    bar_top=y+20
+    bar_bottom=h-20
     split=835
     scene.polygon("cta_bg",[
         (0,bar_top),(split-14,bar_top),
@@ -601,9 +613,9 @@ def _footer(scene, brief, accent, portrait):
               "#FFFFFF",2,"pro3-coin-left")
         _rule(scene,"cta_bg",px+28,py+4,px+28,py+15,
               "#FFFFFF",2,"pro3-coin-right")
-    _type(scene,"price",caption,107,bar_top+6,
-          split-220,bar_bottom-bar_top-14,
-          69 if price else 39,19,
+    _type(scene,"price",caption,107,bar_top+3,
+          split-220,bar_bottom-bar_top-8,
+          63 if price else 38,19,
           "#FFFFFF",True,"pro-price",1,italic=True)
     if phones:
         # White headset/phone outline is a pure visual mark.
@@ -617,13 +629,13 @@ def _footer(scene, brief, accent, portrait):
             "stroke-linejoin":"round"
         })
         _type(scene,"contacts","СВЯЖИТЕСЬ С НАМИ",
-              split+72,bar_top+4,w-split-129,30,
-              26,14,"#FFFFFF",True,
+              split+72,bar_top+2,w-split-129,27,
+              25,14,"#FFFFFF",True,
               "pro3-contact-title",1,italic=True)
         for i,phone in enumerate(phones):
             _type(scene,"contacts",phone,split+72,
-                  bar_top+31+i*25,w-split-132,27,
-                  25,13,"#FFFFFF",True,
+                  bar_top+26+i*21,w-split-132,24,
+                  23,13,"#FFFFFF",True,
                   f"pro3-phone-{i}",1)
     note=str(brief.get("price_note") or "").strip()
     if note:
