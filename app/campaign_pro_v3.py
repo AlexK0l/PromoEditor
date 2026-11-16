@@ -193,8 +193,9 @@ def _hero(scene, brief, hero, detail, backdrop, ai_product,
     ], accent,ident="pro3-hero-bottom-accent")
     scene.rect("photos",x+10,y+h-14,w-20,3,
                "#FFFFFF",ident="pro3-hero-white-rule")
-    if portrait and detail is not None:
-        # Rear-angle photo as a separate replaceable inset, not AI-fabricated.
+    if detail is not None and (portrait or not _lines(brief,"dimensions",4)):
+        # Real rear-angle inset when there is no dimensions panel for it.
+        # Never claim a technical drawing exists just because an inset exists.
         inset_w=min(290,w*.31)
         inset_h=min(158,h*.35)
         ix=x+23
@@ -647,7 +648,7 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
               if str(s).strip()][:6]
     proof=[str(s).strip()[:180] for s in (brief.get("proof_points") or [])
            if str(s).strip()][:4]
-    with_dim=bool(dims or drawing is not None or detail is not None)
+    with_dim=bool(dims or drawing is not None)
     with_band=bool(proof or (brief.get("show_roi") and compute_roi(brief)))
     _header(scene,brief,logo,accent,portrait)
 
