@@ -129,7 +129,7 @@ def test_pro_v2_numeric_units_and_dimension_cards():
         assert "10 440 мм" in text
         assert "2 550 мм" in text
         assert "pro-dimension-measure-0" in svg.decode()
-        assert "pro-benefit-halo-0" in svg.decode()
+        assert "pro-benefit-icon-0" in svg.decode()
         assert "pro-hero-depth-0" in svg.decode()
         assert not root.findall(".//s:script", SVG)
 
@@ -349,14 +349,14 @@ def test_pro_v3_dense_text_fits_inside_its_visual_band(format_key):
         ident=shape.get("id","")
         if ident.startswith("pro3-benefits-stage"):
             bounds["benefit"]=float(shape.get("y"))+float(shape.get("height"))
-        if ident.startswith("pro-proof-panel"):
+        if ident.startswith(("pro-proof-panel", "pro4-claims-finance-band")):
             bounds["proof"]=float(shape.get("y"))+float(shape.get("height"))
     assert set(bounds)=={"benefit","proof"}
     for node in root.findall(".//s:text",SVG):
         ident=node.get("id","")
         if ident.startswith("pro-benefit-"):
             lower=bounds["benefit"]
-        elif ident.startswith("pro3-proof-") and not "slug" in ident:
+        elif ident.startswith(("pro3-proof-", "pro4-proof-statement-")) and not "slug" in ident:
             lower=bounds["proof"]
         else:
             continue

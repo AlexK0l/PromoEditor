@@ -238,7 +238,7 @@ def create_editable_svg(brief,key,hero=None,detail=None,logo=None,drawing=None,
     # Keep the legacy implementation below temporarily for compatibility,
     # while routing all existing styles through the redesigned layout.
     if brief.get("style") == "reference_pro":
-        from .campaign_pro_v3 import create_pro_campaign_svg
+        from .campaign_pro_v4 import create_pro_campaign_svg
         return create_pro_campaign_svg(brief,key,hero=hero,detail=detail,
                                        logo=logo,drawing=drawing,backdrop=backdrop,
                                        ai_product=ai_product)
