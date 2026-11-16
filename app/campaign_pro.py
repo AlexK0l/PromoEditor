@@ -234,7 +234,9 @@ def _specs(scene, facts, x, y, w, h, accent, portrait):
                      f"{icon_y*(1-scale):.2f}) scale({scale:.3f})")
 
         # Values have their own visual zone and must never sit on labels.
-        sep = bx+col_w*(.70 if col_w>=450 else .69)
+        value_length = len(str(value).strip())
+        ratio = .59 if value_length >= 16 else (.63 if value_length >= 12 else .68)
+        sep = bx+col_w*ratio
         _rule(scene, "specs", sep-9, by+9, sep-9,
               by+rh-9, "#E1E5EA", 2, "pro-spec-divider")
         title_size = 23 if rh>=60 else 20
@@ -368,7 +370,7 @@ def _benefits(scene, benefits, x, y, w, h, accent, portrait):
     _ribbon(scene, "benefits", "ПРЕИМУЩЕСТВА", x+8, y+3,
             min(600, w*.56), caption_h, accent,
             "pro-benefits-title")
-    cols = min(3,len(benefits)) if portrait else min(4,len(benefits))
+    cols = (2 if len(benefits) in (2,4) else min(3,len(benefits))) if portrait else min(4,len(benefits))
     rows = math.ceil(len(benefits)/cols)
     usable=h-caption_h-17
     col_w=(w-24)/cols
