@@ -193,6 +193,18 @@ def _hero(scene, brief, hero, detail, backdrop, ai_product,
     ], accent,ident="pro3-hero-bottom-accent")
     scene.rect("photos",x+10,y+h-14,w-20,3,
                "#FFFFFF",ident="pro3-hero-white-rule")
+    if portrait and detail is not None:
+        # Rear-angle photo as a separate replaceable inset, not AI-fabricated.
+        inset_w=min(290,w*.31)
+        inset_h=min(158,h*.35)
+        ix=x+23
+        iy=y+h-inset_h-26
+        scene.rect("photos",ix-8,iy-8,inset_w+16,inset_h+16,
+                   "#FFFFFF",rad=11,ident="pro3-portrait-detail-frame")
+        _photo(scene,detail,ix,iy,inset_w,inset_h,
+               "detail-photo",layer="photos",trim=True)
+        scene.rect("photos",ix-8,iy+inset_h+3,
+                   inset_w+16,6,accent,ident="pro3-portrait-detail-rule")
     if ai_product:
         scene.rect("claims",x+w-254,y+h-54,230,31,
                    "#222936",rad=3,ident="pro3-ai-label-bg")
@@ -473,9 +485,10 @@ def _proof(scene, facts, x, y, w, h, accent):
         return
     scene.rect("benefits",x,y,w,h,"#FDFDFE",
                ident="pro-proof-panel")
-    _slug(scene,"benefits","ПОДТВЕРЖДЁННЫЕ ФАКТЫ",
+    proof_title="ПОДТВЕРЖДЁННЫЕ ФАКТЫ" if w>=850 else "ПОДТВЕРЖДЕНО"
+    _slug(scene,"benefits",proof_title,
           x+5,y+4,min(w*.36,310),h-8,
-          accent,"pro3-proof-slug",22)
+          accent,"pro3-proof-slug",21)
     left=x+min(w*.36,310)+10
     width=x+w-left-9
     cols=min(2 if w<850 else 4,len(facts))
@@ -491,8 +504,10 @@ def _proof(scene, facts, x, y, w, h, accent):
         })
         _check(scene,"benefits",px+11,py+rh*.5-7,
                14,accent,f"pro3-proof-check-{i}")
-        _type(scene,"benefits",fact,px+35,py+4,
-              cw-44,rh-8,19,11,
+        text_h=min(56,rh-9)
+        _type(scene,"benefits",fact,px+35,
+              py+(rh-text_h)/2,
+              cw-44,text_h,19,11,
               INK,True,f"pro3-proof-{i}",2)
 
 
@@ -607,14 +622,20 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
     else:
         # Portrait retains a dominant product followed by spacious specs.
         main_y=252
-        base_hero_h=433
-        specs_h=411 if facts else 0
-        dims_h=202 if with_dim else 0
-        benefit_h=224 if benefits else 0
-        band_h=146 if with_band else 0
-        gaps=sum([1 for v in (specs_h,dims_h,benefit_h,band_h) if v])*10
-        # Reclaim free vertical area for the product while maintaining footer.
-        hero_h=max(385,1700-main_y-specs_h-dims_h-benefit_h-band_h-gaps)
+        has_roi=bool(brief.get("show_roi") and compute_roi(brief))
+        both=bool(proof and has_roi)
+        # A split 146px band made the proof title and claims illegible.
+        # Use two full-width editorial bands when both types are supplied.
+        specs_h=(370 if both else 411) if facts else 0
+        dims_h=(176 if both else 202) if with_dim else 0
+        benefit_h=(188 if both else 224) if benefits else 0
+        proof_h=(101 if both else 0)
+        roi_h=(120 if both else 0)
+        band_h=proof_h+roi_h if both else (146 if with_band else 0)
+        band_gap=10 if both else 0
+        count=sum(bool(v) for v in (specs_h,dims_h,benefit_h,band_h))
+        gaps=count*10+band_gap
+        hero_h=max(380,1700-main_y-specs_h-dims_h-benefit_h-band_h-gaps)
         _hero(scene,brief,hero,detail,backdrop,ai_product,
               14,main_y,1052,hero_h,accent,True)
         cursor=main_y+hero_h+10
@@ -629,7 +650,11 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
             _benefits(scene,benefits,14,cursor,1052,
                       benefit_h,accent,True)
             cursor+=benefit_h+10
-        if with_band:
+        if both:
+            _proof(scene,proof,14,cursor,1052,proof_h,accent)
+            cursor+=proof_h+10
+            _roi(scene,brief,14,cursor,1052,roi_h,accent)
+        elif with_band:
             _bottom_band(scene,brief,proof,14,cursor,
                          1052,band_h,accent)
         _footer(scene,brief,accent,True)
