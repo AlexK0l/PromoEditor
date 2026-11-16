@@ -10,8 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
-
-Image.MAX_IMAGE_PIXELS = 48_000_000
+from .image_analysis import rendering_copy
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 FONT_REG = ['/usr/share/fonts/opentype/inter/Inter-Regular.otf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 'C:/Windows/Fonts/arial.ttf', 'DejaVuSans.ttf']
@@ -148,10 +147,10 @@ def gradient_bg(size,style,accent):
 def load_image(data: Optional[bytes]):
     if not data:return None
     try:
-        img=Image.open(io.BytesIO(data))
-        img.load()
-        if img.width>10000 or img.height>10000: raise ValueError('Слишком крупное изображение')
-        return ImageOps.exif_transpose(img).convert('RGBA')
+        # Never decode a 58 MP original into several huge in-memory RGBA
+        # layers. This is only a high-quality layout copy (<=3200 px);
+        # the actual uploaded bytes stay unchanged and go into the ZIP.
+        return rendering_copy(data)
     except Exception:
         return None
 
