@@ -320,3 +320,41 @@ def test_pro_v3_long_verified_proof_claims_are_not_cut(format_key):
     for element in root.findall(".//s:text",SVG):
         if element.get("id","").startswith("pro3-proof-"):
             assert "…" not in "".join(element.itertext())
+
+
+@pytest.mark.parametrize("format_key", ["4x3", "9x16"])
+def test_pro_v3_dense_text_fits_inside_its_visual_band(format_key):
+    from app.render import default_brief
+    data=default_brief()
+    data["style"]="reference_pro"
+    data["benefits"] += [
+        "Подтверждённое преимущество номер пять",
+        "Подтверждённое преимущество номер шесть"]
+    data["proof_points"]=[
+        "Подтверждённая гарантия при соблюдении условий договора",
+        "Отдельное сервисное обслуживание по условиям договора",
+        "Наличие документации на все основные комплектующие",
+        "Техническая консультация по вопросам эксплуатации",
+    ]
+    root=ET.fromstring(create_editable_svg(data,format_key))
+    bounds={}
+    for shape in root.findall(".//s:rect",SVG):
+        ident=shape.get("id","")
+        if ident.startswith("pro3-benefits-stage"):
+            bounds["benefit"]=float(shape.get("y"))+float(shape.get("height"))
+        if ident.startswith("pro-proof-panel"):
+            bounds["proof"]=float(shape.get("y"))+float(shape.get("height"))
+    assert set(bounds)=={"benefit","proof"}
+    for node in root.findall(".//s:text",SVG):
+        ident=node.get("id","")
+        if ident.startswith("pro-benefit-"):
+            lower=bounds["benefit"]
+        elif ident.startswith("pro3-proof-") and not "slug" in ident:
+            lower=bounds["proof"]
+        else:
+            continue
+        fontsize=float(node.get("font-size"))
+        baseline=float(node.get("y"))
+        baseline+=sum(float(span.get("dy","0"))
+                      for span in node.findall("s:tspan",SVG))
+        assert baseline+fontsize*.20<=lower-3,(format_key,ident,baseline,lower)
