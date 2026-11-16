@@ -146,7 +146,7 @@ def _normalize(data):
     for key,lim in [('brand',70),('category',100),('model',80),('slogan',250),('design_notes',1800),('design_actions',1200),('price',30),('currency',12)]:
         clean[key]=str(data.get(key,''))[:lim].strip()
     clean['accent']=valid_hex(data.get('accent','#E31B26'))
-    clean['style']=str(data.get('style','industrial')) if data.get('style') in {'industrial','graphite','minimal'} else 'industrial'
+    clean['style']=str(data.get('style','industrial')) if data.get('style') in {'industrial','graphite','minimal','reference_pro'} else 'industrial'
     clean['vat']=bool(data.get('vat',True));clean['show_roi']=bool(data.get('show_roi',False))
     for key,count,lim in [('benefits',12,160),('hero_claims',4,120),('phones',2,48)]:
         value=data.get(key,[])
