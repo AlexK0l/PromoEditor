@@ -44,160 +44,209 @@ def _tint(scene, accent):
                   {"offset": "100%", "stop-color": "#D10A1B"})
 
 
+
 def _header(scene, brief, logo, accent, portrait):
+    """Sharper brand hierarchy; artwork remains a replaceable original bitmap."""
     w = scene.w
-    h = 257 if portrait else 181
+    h = 266 if portrait else 187
     scene.rect("decor", 0, 0, w, h, "url(#pro-red-gradient)",
                ident="pro-header")
-    for idx, offset in enumerate((0, 56, 112)):
+    # Three strong diagonal motifs rather than a flat stripe.
+    for i, off in enumerate((0, 64, 128)):
         scene.polygon("decor", [
-            (w-240+offset, 0), (w-198+offset, 0),
-            (w-340+offset, h), (w-382+offset, h)
-        ], "#FFFFFF", ident=f"pro-head-stripe-{idx}",
-            opacity=".92" if idx == 2 else ".23")
-    scene.polygon("decor", [(0, h-12), (w, h-12), (w, h), (0, h)],
-                  "#F9FAFD", ident="pro-header-edge")
-    brand_w = 240 if portrait else 257
+            (w-294+off, 0), (w-244+off, 0),
+            (w-391+off, h), (w-441+off, h)
+        ], "#FFFFFF", ident=f"pro-head-stripe-{i}",
+            opacity=".19" if i < 2 else ".98")
+    scene.polygon("decor", [(0, h-6), (w, h-6), (w, h), (0, h)],
+                  PAPER, ident="pro-header-edge")
+
+    plate_x, plate_y = 23, 20
+    plate_w = 245 if portrait else 276
+    plate_h = 128 if portrait else 132
     if logo is not None:
-        # Keep user artwork independent; a white base gives dark logos contrast.
-        scene.polygon("logo", [(24, 22), (brand_w-9, 22),
-                               (brand_w-40, 133), (24, 133)],
-                      "#FFFFFF", ident="pro-logo-plate")
-        _photo(scene, logo, 32, 30, brand_w-84, 94, "original-logo",
+        scene.polygon("logo", [
+            (plate_x, plate_y), (plate_x+plate_w, plate_y),
+            (plate_x+plate_w-34, plate_y+plate_h),
+            (plate_x, plate_y+plate_h)
+        ], "#FFFFFF", ident="pro-logo-plate")
+        _photo(scene, logo, plate_x+12, plate_y+9,
+               plate_w-53, plate_h-21, "original-logo",
                layer="logo", trim=True)
     elif str(brief.get("brand") or "").strip():
-        _copy(scene, "logo", brief["brand"].upper(), 29, 29,
-              brand_w-50, 104, 40, 18, "#FFFFFF", True,
-              "pro-brand", 2)
-    sx = 269 if portrait else 282
-    _rule(scene, "heading", sx-13, 26, sx-49, 145 if portrait else 128,
-          "#FFFFFF", 5, "pro-brand-divider")
+        scene.polygon("logo", [
+            (plate_x, plate_y), (plate_x+plate_w, plate_y),
+            (plate_x+plate_w-34, plate_y+plate_h),
+            (plate_x, plate_y+plate_h)
+        ], "#A90016", ident="pro-brand-plate")
+        _copy(scene, "logo", str(brief["brand"]).upper(),
+              plate_x+9, plate_y+22, plate_w-64, 93,
+              37, 18, "#FFFFFF", True, "pro-brand", 2)
+
+    sx = 270 if portrait else 317
+    _rule(scene, "heading", sx-14, 22,
+          sx-50, 143 if portrait else 135,
+          "#FFFFFF", 6, "pro-brand-divider")
     cat = str(brief.get("category") or "").strip().upper()
     model = str(brief.get("model") or "").strip()
     if cat:
-        _copy(scene, "heading", cat, sx+4, 17, w-sx-65, 49,
-              39 if portrait else 42, 20, "#FFFFFF", True,
-              "pro-category", 1, italic=True)
-    _copy(scene, "heading", model, sx, 61, w-sx-68,
-          122 if portrait else 88, 89 if portrait else 92,
-          34, "#FFFFFF", True, "pro-model", 1, italic=True)
+        _copy(scene, "heading", cat, sx+3, 13, w-sx-68, 46,
+              38, 21, "#FFFFFF", True, "pro-category", 1, italic=True)
+    _copy(scene, "heading", model, sx-2, 56, w-sx-61, 94 if portrait else 87,
+          93 if portrait else 91, 30,
+          "#FFFFFF", True, "pro-model", 1, italic=True)
+
     slogan = str(brief.get("slogan") or "").strip()
     if slogan:
-        sy = 200 if portrait else 143
-        left = 230 if portrait else 246
+        sy = 209 if portrait else 140
+        left = 240 if portrait else 262
         scene.polygon("heading", [
-            (left+11, sy), (w-27, sy), (w-55, sy+43),
-            (left-16, sy+43)
+            (left+8, sy), (w-25, sy), (w-58, sy+48),
+            (left-17, sy+48)
         ], "#FFFFFF", ident="pro-slogan-ribbon")
-        _copy(scene, "heading", slogan, left+26, sy+3,
-              w-left-109, 37, 29 if portrait else 27,
-              15, accent, True, "pro-slogan", 1, italic=True)
+        _copy(scene, "heading", slogan, left+23, sy+5,
+              w-left-99, 39, 31 if portrait else 30,
+              16, accent, True, "pro-slogan", 1, italic=True)
 
 
 def _hero(scene, hero, detail, backdrop, ai_product, brief,
           accent, x, y, w, h):
-    scene.rect("photos", x, y, w, h, "#E7EBF1", ident="pro-hero-stage")
-    scene.polygon("photos", [(x, y+h*.58), (x+w, y+h*.38),
-                              (x+w, y+h), (x, y+h)],
-                  "#D2D8DF", ident="pro-hero-ground")
-    scene.polygon("photos", [(x+w*.82, y), (x+w, y),
-                              (x+w*.67, y+h)], "#FFFFFF",
-                  opacity=".45", ident="pro-hero-light")
+    """Make the original equipment dominant without inventing surroundings."""
+    scene.rect("photos", x, y, w, h, "#E7ECF1", ident="pro-hero-stage")
+    # Graphic industrial depth is deliberately schematic, NOT a fake quarry.
+    scene.polygon("photos", [
+        (x, y+h*.63), (x+w, y+h*.43),
+        (x+w, y+h), (x, y+h)
+    ], "#D0D9E1", ident="pro-hero-ground")
+    scene.polygon("photos", [
+        (x+w*.80, y), (x+w, y),
+        (x+w*.58, y+h), (x+w*.38, y+h)
+    ], "#FFFFFF", opacity=".54", ident="pro-hero-light")
+    for i in range(4):
+        line_y = y+h*(.66+.075*i)
+        _rule(scene, "photos", x+20, line_y,
+              x+w-20, line_y-h*.16,
+              "#FFFFFF", 2, f"pro-hero-depth-{i}")
     if backdrop is not None and not ai_product:
-        _photo(scene, backdrop, x, y, w, h, "pro-ai-background", cover=True)
-        scene.rect("photos", x, y, w, h, "#FFFFFF", opacity=".1",
+        _photo(scene, backdrop, x+2, y+2, w-4, h-4,
+               "pro-ai-background", cover=True)
+        scene.rect("photos", x+2, y+2, w-4, h-4,
+                   "#FFFFFF", opacity=".07",
                    ident="pro-photo-atmosphere")
+
     source = backdrop if ai_product else hero
     if source is not None:
-        # The original product is never regenerated or rewritten by the model.
-        _photo(scene, source, x+9, y+8, w-18, h-16,
+        _photo(scene, source, x+4, y+3, w-8, h-23,
                "ai-product-bitmap" if ai_product else "original-product-photo",
                trim=not ai_product)
+    scene.rect("photos", x+7, y+h-10, w-14, 6,
+               accent, ident="pro-hero-bottom-rule")
+    scene.polygon("photos", [
+        (x+w-87, y+h-33), (x+w-21, y+h-33),
+        (x+w-39, y+h-11), (x+w-105, y+h-11)
+    ], accent, ident="pro-hero-red-notch", opacity=".9")
+
     if detail is not None:
-        dw = min(260, w*.34)
-        dh = min(135, h*.36)
-        ix, iy = x+18, y+h-dh-21
-        scene.rect("photos", ix-6, iy-6, dw+12, dh+12,
-                   "#FFFFFF", rad=11, ident="pro-detail-frame")
+        dw = min(295, w*.35)
+        dh = min(159, h*.36)
+        ix, iy = x+20, y+h-dh-24
+        scene.rect("photos", ix-8, iy-8, dw+16, dh+16,
+                   "#FFFFFF", rad=10, ident="pro-detail-frame")
         _photo(scene, detail, ix, iy, dw, dh, "detail-photo", trim=True)
-        scene.rect("claims", ix-6, iy+dh+4, dw+12, 5,
+        scene.rect("claims", ix-8, iy+dh+2, dw+16, 6,
                    accent, ident="pro-detail-underline")
+
     if ai_product:
-        ly = y+h-41
-        scene.rect("claims", x+15, ly, 240, 30, "#272B33",
-                   rad=4, ident="pro-ai-tag-bg")
-        _copy(scene, "claims", "AI-ВИЗУАЛИЗАЦИЯ", x+26,
-              ly+2, 225, 24, 16, 12, "#FFFFFF", True,
+        ly = y+h-51
+        scene.rect("claims", x+w-249, ly, 233, 31, "#272B33",
+                   rad=3, ident="pro-ai-tag-bg")
+        _copy(scene, "claims", "AI-ВИЗУАЛИЗАЦИЯ", x+w-240,
+              ly+3, 219, 25, 16, 12, "#FFFFFF", True,
               "pro-ai-tag", 1)
-    # Short verified claims, only if not already used as a photo inset.
     if detail is None:
+        # Never borrow claims or copy from the visual reference.
         claims = [str(v).strip() for v in (brief.get("hero_claims") or [])
                   if str(v).strip()][:2]
         for i, claim in enumerate(claims):
-            py = y+h-57-i*49
-            if py < y+17:
+            py = y+h-66-i*52
+            if py < y+18:
                 break
-            cw = min(w*.57, 400)
-            scene.polygon("claims", [(x+15, py), (x+cw+15, py),
-                                      (x+cw-4, py+42), (x+15, py+42)],
-                          "#FFFFFF", opacity=".93",
-                          ident=f"pro-claim-plate-{i}")
-            scene.rect("claims", x+15, py, 6, 42, accent,
+            cw = min(w*.55, 420)
+            scene.polygon("claims", [
+                (x+17, py), (x+cw+15, py),
+                (x+cw-14, py+43), (x+17, py+43)
+            ], "#FFFFFF", opacity=".95", ident=f"pro-claim-plate-{i}")
+            scene.rect("claims", x+17, py, 7, 43, accent,
                        ident=f"pro-claim-bar-{i}")
-            _copy(scene, "claims", claim, x+29, py+5,
-                  cw-49, 32, 21, 12, INK, True, f"pro-claim-{i}", 1)
+            _copy(scene, "claims", claim, x+34, py+5,
+                  cw-61, 32, 22, 13, INK, True,
+                  f"pro-claim-{i}", 1)
 
 
 def _specs(scene, facts, x, y, w, h, accent, portrait):
+    """Prioritise key numeric facts; keep every user-provided row visible."""
     if not facts:
         return
-    columns = 2 if portrait else 1
+    columns = 2 if portrait and len(facts) > 1 else 1
     rows = math.ceil(len(facts)/columns)
     gap = 7 if portrait else 5
     col_w = (w-(columns-1)*gap)/columns
-    row_h = (h-(rows-1)*gap)/rows
+    weights = [1.22 if row == 0 else 1.0 for row in range(rows)]
+    unit = (h-gap*(rows-1))/sum(weights)
+    heights = [unit*t for t in weights]
+    starts = []
+    position = y
+    for rh in heights:
+        starts.append(position)
+        position += rh+gap
+
     for i, (name, value) in enumerate(facts):
-        bx = x+(i%columns)*(col_w+gap)
-        by = y+(i//columns)*(row_h+gap)
+        col, row = (i%columns, i//columns)
+        bx = x+col*(col_w+gap)
+        by, rh = starts[row], heights[row]
         scene.polygon("specs", [
-            (bx+14, by), (bx+col_w-4, by),
-            (bx+col_w, by+row_h*.5),
-            (bx+col_w-4, by+row_h), (bx, by+row_h),
-            (bx+12, by+4)
+            (bx+16, by), (bx+col_w-7, by),
+            (bx+col_w, by+rh*.5),
+            (bx+col_w-7, by+rh), (bx, by+rh),
+            (bx+13, by+4)
         ], "#FFFFFF", ident=f"pro-spec-card-{i}")
         scene.el("specs", "polygon", f"pro-spec-outline-{i}", {
-            "points": " ".join(f"{a:.1f},{b:.1f}" for a,b in [
-                (bx+14, by), (bx+col_w-4, by),
-                (bx+col_w, by+row_h*.5), (bx+col_w-4, by+row_h),
-                (bx, by+row_h), (bx+12, by+4)
+            "points": " ".join(f"{px:.1f},{py:.1f}" for px,py in [
+                (bx+16,by),(bx+col_w-7,by),(bx+col_w,by+rh*.5),
+                (bx+col_w-7,by+rh),(bx,by+rh),(bx+13,by+4)
             ]),
-            "fill": "none", "stroke": accent, "stroke-width": 1.6
+            "fill":"none", "stroke":accent, "stroke-width":1.8
         })
+        # Diagonal left plate is a deliberate visual echo of the reference.
         scene.polygon("specs", [
-            (bx, by+row_h), (bx+72, by+row_h),
-            (bx+94, by), (bx+20, by)
+            (bx, by+rh-1), (bx+65, by+rh-1),
+            (bx+91, by+1), (bx+21, by+1)
         ], accent, ident=f"pro-spec-icon-plate-{i}")
-        # Existing editor-safe icons are genuine SVG paths rather than emoji.
-        icon_x = bx+18
-        icon_y = by+(row_h-60)/2
-        start = len(scene.groups["specs"])
-        _spec_symbol(scene, icon_x, icon_y, i, accent)
-        scale = min(.73, max(.43, (row_h-10)/60))
-        for part in list(scene.groups["specs"])[start:]:
-            part.set("transform", f"translate({icon_x*(1-scale):.2f} "
-                                  f"{icon_y*(1-scale):.2f}) scale({scale:.3f})")
-        # Column widths adapt independently; values stay visible in narrow 9:16.
-        sep_x = bx+col_w*.66
-        _rule(scene, "specs", sep_x-9, by+8, sep_x-9,
-              by+row_h-8, "#EBEDEF", 1.5, "pro-spec-divider")
-        _copy(scene, "specs", name, bx+95, by+5,
-              sep_x-bx-107, row_h-8, 22 if not portrait else 19,
-              12, INK, True, f"pro-spec-name-{i}", 2, italic=True)
-        _copy(scene, "specs", value, sep_x+1, by+5,
-              bx+col_w-sep_x-7, row_h-9,
-              28 if not portrait else 22, 12,
-              accent, True, f"pro-spec-value-{i}", 2)
 
+        icon_x = bx+15
+        icon_y = by+(rh-60)/2
+        first = len(scene.groups["specs"])
+        _spec_symbol(scene, icon_x, icon_y, i, accent)
+        scale = min(.88, max(.38, (rh-11)/60))
+        for part in list(scene.groups["specs"])[first:]:
+            part.set("transform",
+                     f"translate({icon_x*(1-scale):.2f} "
+                     f"{icon_y*(1-scale):.2f}) scale({scale:.3f})")
+
+        # Values have their own visual zone and must never sit on labels.
+        sep = bx+col_w*(.70 if col_w>=450 else .69)
+        _rule(scene, "specs", sep-9, by+9, sep-9,
+              by+rh-9, "#E1E5EA", 2, "pro-spec-divider")
+        title_size = 23 if rh>=60 else 20
+        val_size = 33 if row == 0 and rh>=57 else 28
+        _copy(scene, "specs", name, bx+92, by+6,
+              max(20, sep-bx-102), rh-11,
+              title_size, 12, INK, True,
+              f"pro-spec-name-{i}", 2)
+        _copy(scene, "specs", value, sep+2, by+5,
+              max(20, bx+col_w-sep-12), rh-10,
+              val_size, 13, accent, True,
+              f"pro-spec-value-{i}", 2)
 
 def _ribbon(scene, layer, text, x, y, width, height, accent, ident):
     scene.polygon(layer, [(x, y), (x+width, y),
