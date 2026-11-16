@@ -322,6 +322,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'Сохраните импортированный файл как CDR в самой программе CorelDRAW.\n'
             'Фотографии и AI-изображения — отдельные растровые объекты. '
             'Их внутренние детали НЕ становятся независимыми векторными объектами.\n'
+            'Если выбраны исходные фотографии, их оригинальные байты находятся '
+            'в папке originals/ внутри ZIP. SVG содержит облегчённые копии для верстки.\n'
             'Для соответствия типографике установите или замените DejaVu Sans.\n'
             'JPEG/PNG получены из тех же SVG, поэтому компоновка совпадает.\n'
             'Проверьте тексты и цифры перед публикацией.\n'
@@ -337,6 +339,24 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                             compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
             for filename in names:
                 archive.write(folder/filename,arcname=filename)
+            # Preserve the *exact* selected uploaded photos alongside the
+            # size-optimized raster layers in SVG. Analysis previews and
+            # rendering copies never replace these original bytes.
+            selected=(asset_report or {}).get('selected_assets') or {}
+            originals={
+                row.get('id'):row for row in
+                ((asset_report or {}).get('project_assets') or [])
+                if isinstance(row,dict)
+            }
+            for role,payload in (('primary_photo',hero_raw),
+                                 ('secondary_photo',detail_raw)):
+                asset=originals.get(selected.get(role))
+                if not payload or not asset:continue
+                extension=Path(str(asset.get('name') or '')).suffix.lower()
+                if extension in ALLOWED_IMAGES:
+                    archive.writestr(
+                        f'originals/{role}{extension}',payload,
+                        compress_type=zipfile.ZIP_STORED)
         warnings=['Проверьте технические данные, цены и права на изображения перед публикацией.']
         if not brief.get('specs'):
             warnings.append('Подтверждённые ТТХ не заполнены: таблица характеристик не показана. Проверьте предложения из документов и перенесите нужные в форму.')

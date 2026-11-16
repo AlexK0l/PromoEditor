@@ -3,6 +3,7 @@ import base64
 import hashlib
 import io
 import json
+import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +12,7 @@ from PIL import Image, ImageDraw
 from app import main as main_module
 from app import openai_service
 from app.asset_selection import analyze_project, chosen_bytes
-from app.image_analysis import analysis_preview, validate_image_dimensions
+from app.image_analysis import (analysis_preview, rendering_copy, validate_image_dimensions)
 from app.render import default_brief
 
 client = TestClient(main_module.app)
@@ -147,10 +148,80 @@ def test_orientation_and_alpha_are_kept_in_analysis_preview():
 
 
 def test_unreasonably_large_or_tiny_originals_still_rejected():
-    with pytest.raises(ValueError, match="48 млн пикселей"):
-        validate_image_dimensions(8000, 7000)
+    with pytest.raises(ValueError, match="80 млн пикселей"):
+        validate_image_dimensions(9500, 9000)
     with pytest.raises(ValueError, match="10000 px"):
         validate_image_dimensions(11000, 2000)
     with pytest.raises(ValueError, match="32 px"):
         validate_image_dimensions(20, 500)
     validate_image_dimensions(6000, 4000)
+
+
+@pytest.fixture(scope="module")
+def original_58mp_jpeg():
+    """Exact dimensions of the customer photo: 58,467,760 source pixels."""
+    size = (8840, 6614)
+    image = Image.new("RGB", size, "#dda932")
+    drawing = ImageDraw.Draw(image)
+    drawing.rectangle((900, 700, 7850, 5900), outline="#202c32", width=40)
+    drawing.line((100, 6010, 8630, 500), fill="#292d3a", width=42)
+    data = io.BytesIO()
+    image.save(data, format="JPEG", quality=80)
+    image.close()
+    return data.getvalue()
+
+
+def test_exact_customer_resolution_accepted_and_original_bytes_preserved(
+        original_58mp_jpeg):
+    raw = original_58mp_jpeg
+    original_sha = hashlib.sha256(raw).hexdigest()
+    validate_image_dimensions(8840, 6614)
+
+    img, dimensions = analysis_preview(raw, max_edge=300)
+    assert dimensions == (8840, 6614)
+    assert img.size[0] <= 300 and img.size[1] <= 300
+    working = rendering_copy(raw)
+    assert working.mode == "RGBA"
+    assert max(working.size) <= 3200
+    assert min(working.size) > 2000
+    working.close()
+
+    report, records = analyze_project(_groups(raw))
+    row = report["project_assets"][0]
+    assert row["width"] == 8840
+    assert row["height"] == 6614
+    assert row["analysis_resized"] is True
+    assert row["sha256"] == original_sha
+    assert chosen_bytes(report, records, "primary_photo") == raw
+    assert hashlib.sha256(raw).hexdigest() == original_sha
+
+
+def test_exact_58mp_photo_generates_poster_and_archives_unchanged_source(
+        original_58mp_jpeg, monkeypatch):
+    # No request-rate side effects for other tests.
+    monkeypatch.setattr(main_module, "_guard_rate", lambda _request: None)
+    raw = original_58mp_jpeg
+    upload = [("photos", ("SAT500_8840x6614.jpg", raw, "image/jpeg"))]
+    brief = default_brief()
+    brief["style"] = "reference_pro"
+    data = {"payload": json.dumps(brief, ensure_ascii=False),
+            "use_openai": "false", "use_demo": "false"}
+    review = client.post("/api/analyze-assets", data=data, files=upload)
+    assert review.status_code == 200, review.text
+    data["asset_report"] = json.dumps(review.json(), ensure_ascii=False)
+
+    result = client.post("/api/generate", data=data, files=upload)
+    assert result.status_code == 200, result.text
+    response = result.json()
+    assert set(response["images"]) == {"4x3", "9x16"}
+
+    archive_data = client.get(response["zip"]).content
+    with zipfile.ZipFile(io.BytesIO(archive_data)) as archive:
+        assert "originals/primary_photo.jpg" in archive.namelist()
+        saved_original = archive.read("originals/primary_photo.jpg")
+        assert saved_original == raw
+        assert hashlib.sha256(saved_original).hexdigest() == hashlib.sha256(raw).hexdigest()
+        for aspect in ("4x3", "9x16"):
+            svg = archive.read(f"corel_{aspect}.svg")
+            assert b"original-product-photo" in svg
+            assert archive.read(f"poster_{aspect}.png").startswith(b"\x89PNG\r\n\x1a\n")
