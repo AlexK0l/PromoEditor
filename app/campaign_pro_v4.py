@@ -64,15 +64,16 @@ def _specs_four(scene, facts, x, y, w, h, accent):
 def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
     category=str(brief.get("category") or "").casefold()
     grain=any(token in category for token in ("зерн","агро","сельхоз"))
-    v3._new_atmosphere(scene,x,y,w,h,accent,grain)
+    photo_height=min(395,h*.72) if _lines(brief,"dimensions",4) else h
+    v3._new_atmosphere(scene,x,y,w,photo_height,accent,grain)
     if backdrop is not None and not ai_product:
-        _photo(scene,backdrop,x,y,w,h,"pro-ai-background",cover=True)
-        scene.rect("photos",x,y,w,h,"#FFFFFF",opacity=".065",
+        _photo(scene,backdrop,x,y,w,photo_height,"pro-ai-background",cover=True)
+        scene.rect("photos",x,y,w,photo_height,"#FFFFFF",opacity=".065",
                    ident="pro4-photo-veil")
     for j,(radius,opacity) in enumerate(((.45,.075),(.37,.10),(.29,.12))):
         scene.el("photos","ellipse",f"pro4-ground-shadow-{j}",{
-            "cx":x+w*.53,"cy":y+h*.87,
-            "rx":w*radius,"ry":h*.077,"fill":"#1D242D",
+            "cx":x+w*.53,"cy":y+photo_height*.87,
+            "rx":w*radius,"ry":photo_height*.077,"fill":"#1D242D",
             "opacity":opacity})
     image=backdrop if ai_product else hero
     if image is not None:
@@ -86,8 +87,8 @@ def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
             # Its bounding rectangle ends above the dimensions panel.
             _photo(scene,image,x+64,y+5,w-110,min(390,h*.72),
                    "original-product-photo",trim=True)
-    scene.polygon("photos",[(x,y+h-9),(x+w-98,y+h-9),
-                            (x+w-112,y+h),(x,y+h)],
+    scene.polygon("photos",[(x,y+photo_height-9),(x+w-98,y+photo_height-9),
+                            (x+w-112,y+photo_height),(x,y+photo_height)],
                   accent,ident="pro4-scene-bottom-slash")
     if ai_product:
         tag_y=y+min(395,h*.72)-35
