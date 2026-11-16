@@ -8,11 +8,14 @@
   let apiReady = false;
   let isBusy = false;
   let hasDemo = false;
+  let isDemoLoading = false;
   let promptDirty = true;
 
-  const get = id => $(id).value;
-  const checked = id => $(id).checked;
-  const set = (id,val) => { $(id).value = val ?? ''; };
+  // Optional new fields should not disable the entire UI if an older HTML
+  // document briefly remains in the browser cache after deployment.
+  const get = id => $(id)?.value ?? '';
+  const checked = id => Boolean($(id)?.checked);
+  const set = (id,val) => { const field=$(id);if(field)field.value = val ?? ''; };
   const lines = id => get(id).split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   const asLines = values => (values||[]).map(x=>Array.isArray(x)?x.join(' | '):x).join('\n');
   const pairs = id => lines(id).map(line=>{
@@ -222,7 +225,7 @@
   }
   function fillBrief(data){
     for(const id of ['brand','model','category','slogan','price','currency','style','accent'])set(id,data[id]);
-    set('claims',asLines(data.hero_claims));set('specs',asLines(data.specs));set('benefits',asLines(data.benefits));set('dimensions',asLines(data.dimensions));set('phones',asLines(data.phones));set('design-notes',data.design_notes);set('design-actions',data.design_actions);
+    set('claims',asLines(data.hero_claims));set('specs',asLines(data.specs));set('benefits',asLines(data.benefits));set('proof-points',asLines(data.proof_points));set('dimensions',asLines(data.dimensions));set('phones',asLines(data.phones));set('design-notes',data.design_notes);set('design-actions',data.design_actions);
     $('vat').checked=Boolean(data.vat);$('show-roi').checked=Boolean(data.show_roi);
     const roi=data.roi||{};
     for(const [id,key] of [['extra-payload','extra_payload'],['distance','distance'],['rate','rate'],['trips','trips'],['years','years'],['baseline-price','baseline_price']])set(id,roi[key]??'');
@@ -247,18 +250,30 @@
     clearError();updateRoi();refreshStyle();updateFileLabels();updateAi();
   }
   async function resetDemo(){
+    if(isBusy||isDemoLoading)return;
     if(hasDemo){clearForm();return;}
+    // Sample content must never silently reset a deliberately chosen PRO style.
+    const selectedStyle=get('style')||'industrial';
+    const selectedAccent=get('accent')||'#E31B26';
+    const button=$('reset-btn');
+    isDemoLoading=true;button.disabled=true;button.textContent='Загружаем пример…';
     clearError();
     try {
-      const response=await fetch('/api/demo');if(!response.ok)throw new Error('Пример временно недоступен.');
-      const result=await response.json();fillBrief(result.brief);
+      const response=await fetch('/api/demo',{cache:'no-store'});
+      if(!response.ok)throw new Error(response.status===401?
+        'Сессия истекла. Войдите заново и повторите загрузку примера.':
+        'Пример временно недоступен.');
+      const result=await response.json();
+      if(!result?.brief?.model)throw new Error('Сервер вернул неполный пример.');
+      fillBrief(result.brief);
+      set('style',selectedStyle);set('accent',selectedAccent);
+      $('color-label').textContent=selectedAccent.toUpperCase();
       for(const id of fileIds)$(id).value='';
       window.PromoAssets?.reset();
       $('use-openai').checked=false;$('use-demo').checked=true;$('parse-ai').checked=false;
       $('advanced-settings').open=false;
       $('extract-box').hidden=true;
       hasDemo=true;
-      $('reset-btn').textContent='Очистить форму';
       latest=null;$('download-panel').hidden=true;
       ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=true);
       markPromptStale();
@@ -267,6 +282,11 @@
       $('model').focus({preventScroll:true});
       window.scrollTo({top:0,behavior:'smooth'});
     }catch(error){showError(error.message||'Не удалось загрузить пример.');}
+    finally{
+      isDemoLoading=false;
+      button.disabled=isBusy;
+      button.textContent=hasDemo?'Очистить форму':'Заполнить пример';
+    }
   }
   async function init(){
     try {
@@ -293,13 +313,15 @@
     button.addEventListener('click',()=>{const id=button.dataset.clear;$(id).value='';$(id).dispatchEvent(new Event('change',{bubbles:true}));});
   });
   for(const id of briefIds){
-    $(id).addEventListener('input',()=>{
+    const field=$(id);
+    if(!field)continue; // tolerate a cached HTML/JS version mismatch
+    field.addEventListener('input',()=>{
       if(id==='accent')$('color-label').textContent=get('accent').toUpperCase();
       if(['show-roi','price','currency','extra-payload','distance','rate','trips','years','baseline-price'].includes(id))updateRoi();
       markPromptStale();
       invalidateResult();
     });
-    $(id).addEventListener('change',()=>{markPromptStale();invalidateResult();});
+    field.addEventListener('change',()=>{markPromptStale();invalidateResult();});
   }
   document.querySelectorAll('[data-style]').forEach(button=>button.addEventListener('click',()=>{
     set('style',button.dataset.style);
