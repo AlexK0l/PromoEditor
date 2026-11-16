@@ -63,6 +63,9 @@ def test_large_original_is_preprocessed_for_analysis_but_never_replaced(original
 
 def test_upload_accepts_24mp_and_generation_receives_exact_original(
         original_large_jpeg, monkeypatch):
+    # This test checks the asset path, not the shared hourly quota. Other API
+    # tests intentionally exercise the limiter with the same TestClient IP.
+    monkeypatch.setattr(main_module, "_guard_rate", lambda _request: None)
     upload = [("photos", ("large.jpg", original_large_jpeg, "image/jpeg"))]
     reviewed = client.post("/api/analyze-assets", data=_payload(), files=upload)
     assert reviewed.status_code == 200, reviewed.text
