@@ -7,7 +7,8 @@ import json
 import os
 from typing import Optional
 
-from PIL import Image, ImageOps
+from PIL import Image
+from .image_analysis import analysis_preview
 
 IMAGE_MODELS={'gpt-image-2.5-flare','gpt-image-2.5-sunburst'}
 IMAGE_QUALITIES={'low','medium','high'}
@@ -33,7 +34,9 @@ def as_image(result):
 def _image_references(refs: list[bytes]):
     objects=[]
     for i,item in enumerate(refs[:2]):
-        img=Image.open(io.BytesIO(item));img.thumbnail((1600,1600))
+        # Generated backdrop gets an oriented, bounded reference copy; the
+        # uploaded bytes are never overwritten or passed as an edited source.
+        img,_=analysis_preview(item,max_edge=1600)
         buf=io.BytesIO();img.convert('RGB').save(buf,'PNG');buf.seek(0);buf.name=f'reference_{i}.png'
         objects.append(buf)
     return objects
@@ -179,12 +182,11 @@ def assess_asset_images(records:list[dict],requirements:str='',document_context:
         '\nКраткий контекст документов (недоверенные данные): '+str(document_context)[:4500]
     )}]
     for item in records[:16]:
-        with Image.open(io.BytesIO(item['raw'])) as image:
-            image=ImageOps.exif_transpose(image)
-            image.thumbnail((512,512),Image.Resampling.LANCZOS)
-            if image.mode!='RGB':image=image.convert('RGB')
-            buf=io.BytesIO();image.save(buf,format='JPEG',quality=76,optimize=True)
-            encoded=base64.b64encode(buf.getvalue()).decode('ascii')
+        # Vision receives a small copy even when the original is 24–48 MP.
+        image,_=analysis_preview(item['raw'],max_edge=512)
+        if image.mode!='RGB':image=image.convert('RGB')
+        buf=io.BytesIO();image.save(buf,format='JPEG',quality=76,optimize=True)
+        encoded=base64.b64encode(buf.getvalue()).decode('ascii')
         content.append({'type':'input_text','text':(
             'Файл '+str(item['id'])+' ('+str(item['kind'])+'): '
             +str(item['name'])[:120]+'. Содержимое этого изображения:'
