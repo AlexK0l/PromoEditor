@@ -208,7 +208,8 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
                ident="pro4-claims-finance-band")
     full_width=bool(proof and not roi)
     if proof:
-        claims_width=w if full_width else w*.65
+        # Two-track editorial strip: claims left, four readable metrics right.
+        claims_width=w if full_width else w*.55
         slug_w=min(266,claims_width*.36)
         heading=("ПОДТВЕРЖДЕНО"
                  if brief.get("proof_points") else "КЛЮЧЕВЫЕ ТЕЗИСЫ")
@@ -236,12 +237,12 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
         money=str(brief.get("currency") or "Br").strip()[:10] or "Br"
         names=[("ЗА РЕЙС",roi["per_trip"]),("РЕЙСОВ В ГОД",roi["trips"]),
                ("ЗА ГОД",roi["annual"]),("БАЛАНС",roi["net"])]
-        rx=x+w*.65+8 if proof else x+4
+        rx=x+w*.55+8 if proof else x+4
         rw=w-(rx-x)-6
         scene.rect("roi",rx,y+4,rw,h-8,"#FFF1F2",
                    ident="pro4-economy-card")
-        columns=2 if proof else 4
-        rows=math.ceil(len(names)/columns)
+        columns=4
+        rows=1
         cw=rw/columns
         ch=(h-8)/rows
         for i,(name,value) in enumerate(names):
@@ -251,11 +252,11 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
                 _rule(scene,"roi",px,py+5,px,py+ch-5,
                       "#DBA6B0",1.3,f"pro4-eco-divider-{i}")
             label=name+(f", {money}" if i!=1 else "")
-            v3._type(scene,"roi",label,px+12,py+3,cw-17,ch*.37,
-                     15,10,"#71333F",True,f"pro-roi-label-{i}",1)
+            v3._type(scene,"roi",label,px+11,py+6,cw-18,ch*.34,
+                     17,10,"#71333F",True,f"pro-roi-label-{i}",1)
             v3._type(scene,"roi",f"{value:,.0f}".replace(","," "),
-                     px+12,py+ch*.39,cw-17,ch*.56,
-                     28,14,accent,True,f"pro-roi-value-{i}",1)
+                     px+11,py+ch*.39,cw-18,ch*.56,
+                     34,14,accent,True,f"pro-roi-value-{i}",1)
 
 
 def create_pro_campaign_svg(brief,key,hero=None,detail=None,logo=None,
