@@ -260,3 +260,69 @@ def test_prompt_endpoint_from_selected_assets():
     assert 'logo-blue.png' in text
     assert 'НЕ ИСПОЛЬЗОВАТЬ' in text
     assert 'CorelDRAW' in text
+
+
+
+def test_photo_can_be_assigned_drawing_without_reupload(monkeypatch):
+    """A schematic JPEG in the main photo input must reach the drawing SVG layer."""
+    from app import main as main_module
+    monkeypatch.setattr(main_module, "_guard_rate", lambda request: None)
+    with Image.open(io.BytesIO(photo("white",(680,420),17))) as original:
+        buffer=io.BytesIO()
+        original.save(buffer,format="JPEG",quality=89)
+    files=[
+        ("photos", ("tech-drawing.jpg", buffer.getvalue(), "image/jpeg")),
+        ("photos", ("product.png", photo("yellow",(870,570),10), "image/png")),
+        ("logos", ("brand.png", photo("blue",(280,200),21), "image/png")),
+    ]
+    prefs={"photo_1":"drawing"}
+    reviewed=analyze(files=files,prefs=prefs)
+    assert reviewed.status_code==200,reviewed.text
+    report=reviewed.json()
+    selected=report["selected_assets"]
+    assert selected["drawing"]=="photo_1"
+    assert selected["primary_photo"]=="photo_2"
+    assert selected["secondary_photo"] is None
+    record=next(x for x in report["project_assets"] if x["id"]=="photo_1")
+    assert record["kind"]=="drawing"
+    assert record["manual_drawing"] is True
+    assert record["assignment"]=="drawing"
+    assert record["forced_include"] is True
+    assert record["selected"] is True
+
+    response=generate(files=files,prefs=prefs,report=report)
+    assert response.status_code==200,response.text
+    result=response.json()
+    assert result["selected_assets"]["drawing"]=="photo_1"
+    assert result["selected_assets"]["primary_photo"]=="photo_2"
+    svg=client.get(result["corel"]["4x3"]).content
+    root=ET.fromstring(svg)
+    ids=[el.attrib["id"] for el in root.findall(".//s:image",NS)]
+    assert any("original-drawing" in name for name in ids)
+    assert any("original-product-photo" in name for name in ids)
+
+
+def test_manual_drawing_role_rejects_invalid_kind_and_two_forced_drawings():
+    files=[
+        ("photos", ("plan.jpg", photo("white",(500,300),17), "image/jpeg")),
+        ("logos", ("brand.png", photo("blue",(250,180)), "image/png")),
+        ("drawings", ("explicit.png", photo("white",(600,350),8),"image/png")),
+    ]
+    forbidden=analyze(files=files,prefs={"logo_1":"drawing"})
+    assert forbidden.status_code==400
+    assert "только фотографию" in forbidden.json()["detail"]
+    conflicts=analyze(files=files,prefs={"photo_1":"drawing","drawing_1":"include"})
+    assert conflicts.status_code==400
+    assert "drawing" in conflicts.json()["detail"]
+    accepted=analyze(files=files,prefs={"photo_1":"drawing"})
+    assert accepted.status_code==200,accepted.text
+    assert accepted.json()["selected_assets"]["drawing"]=="photo_1"
+
+
+def test_main_upload_exposes_drawing_before_advanced_settings():
+    page=client.get("/").text
+    assert page.count('id="drawing"')==1
+    assert page.index('id="drawing"')<page.index('id="advanced-settings"')
+    assert "Использовать как чертёж" in page
+    scripts=client.get("/static/assets.js").text
+    assert "option('drawing','Использовать как чертёж')" in scripts

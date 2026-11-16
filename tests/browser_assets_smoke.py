@@ -22,6 +22,8 @@ def main():
         errors=[]
         page.on('pageerror',lambda e:errors.append(str(e)))
         page.goto(BASE,wait_until='domcontentloaded')
+        assert page.locator('.media-column label[for="drawing"]').count()==1
+        assert page.locator('#advanced-settings label[for="drawing"]').count()==0
         # Regression: after the PRO style rollout, filling a demo must remain
         # clickable and must NOT silently change the chosen layout to industrial.
         page.locator('[data-style="reference_pro"]').click()
@@ -87,6 +89,15 @@ def main():
             assert 'poster_'+key+'.png' in archive.namelist()
             assert 'poster_'+key+'.jpg' in archive.namelist()
             assert 'corel_'+key+'.svg' in archive.namelist()
+        # The photographed engineering drawing can be reassigned in-place:
+        # the report must show it in the DRAWING slot rather than as a photo.
+        page.locator('[data-asset-id="photo_2"] .asset-pref').select_option('drawing')
+        page.locator('#asset-rebuild').click()
+        page.wait_for_function(
+            'document.getElementById("assets-analysis-status").textContent.includes("Анализ выполнен")')
+        picked=page.locator('#asset-picked').inner_text()
+        assert 'Чертёж' in picked and 'large.png' in picked
+        assert page.locator('[data-asset-id="photo_2"] .asset-pref').input_value()=='drawing'
         # Remove an individual logo; current report becomes stale, preventing
         # silent generation with old IDs.
         page.locator('[data-asset-id="logo_1"] .asset-remove').click()

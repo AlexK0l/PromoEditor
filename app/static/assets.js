@@ -66,7 +66,7 @@
       const copy=element('div','asset-file-copy');
       copy.appendChild(element('strong','asset-file-name',entry.file.name));
       copy.appendChild(element('small','asset-file-info',
-        LABELS[entry.field]+' · '+(entry.file.size/1024/1024).toFixed(2)+' МБ'));
+        (preferences[entry.id]==='drawing'?'Чертёж (назначен вручную)':LABELS[entry.field])+' · '+(entry.file.size/1024/1024).toFixed(2)+' МБ'));
       const known=!dirty&&(report?.project_assets||[]).find(a=>a.id===entry.id);
       if(known)copy.appendChild(element('small','asset-file-decision',
         known.selected?'✓ Выбран: '+(known.assignment==='analysis_only'?'для анализа':known.assignment):
@@ -75,13 +75,25 @@
       const controls=element('div','asset-file-controls');
       const select=element('select','asset-pref');
       select.setAttribute('aria-label','Приоритет файла '+entry.file.name);
-      select.append(option('auto','AI выбирает'),
+      select.append(option('auto','Автовыбор'),
                     option('include',entry.kind==='document'?'Приоритет анализа':'Обязательно использовать'),
                     option('exclude','Не использовать'));
+      if(entry.kind==='photo'){
+        select.append(option('drawing','Использовать как чертёж'));
+      }
       select.value=preferences[entry.id]||'auto';
       select.addEventListener('change',()=>{
+        // One manually designated drawing at a time. Automatically restore
+        // older manual-drawing choices when another photo takes the role.
+        if(select.value==='drawing'){
+          for(const other of current){
+            if(other.id!==entry.id && preferences[other.id]==='drawing')
+              delete preferences[other.id];
+          }
+        }
         preferences[entry.id]=select.value;
-        markStale('Приоритеты изменились. Нажмите «Пересобрать выбор».');
+        markStale('Назначение материалов изменено. Нажмите «Пересобрать выбор».');
+        renderFiles();
       });
       controls.appendChild(select);
       const remove=element('button','asset-remove','✕');
@@ -316,7 +328,7 @@
     $('asset-files-list').scrollIntoView({behavior:'smooth',block:'center'});
     const first=$('asset-files-list').querySelector('select');
     if(first)first.focus({preventScroll:true});
-    announce('Для каждого файла выберите «Обязательно использовать», «AI выбирает» или «Не использовать». После изменений пересоберите выбор.');
+    announce('В выпадающем списке можно назначить загруженную фотографию чертежом. После изменения нажмите «Пересобрать выбор».');
   });
   renderFiles();
   window.PromoAssets={
