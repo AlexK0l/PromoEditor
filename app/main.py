@@ -148,7 +148,7 @@ def _normalize(data):
     clean['accent']=valid_hex(data.get('accent','#E31B26'))
     clean['style']=str(data.get('style','industrial')) if data.get('style') in {'industrial','graphite','minimal','reference_pro'} else 'industrial'
     clean['vat']=bool(data.get('vat',True));clean['show_roi']=bool(data.get('show_roi',False))
-    for key,count,lim in [('benefits',12,160),('hero_claims',4,120),('phones',2,48)]:
+    for key,count,lim in [('benefits',12,160),('hero_claims',4,120),('proof_points',4,160),('phones',2,48)]:
         value=data.get(key,[])
         clean[key]=[str(v).strip()[:lim] for v in value[:count] if str(v).strip()] if isinstance(value,list) else []
     for key,n in [('specs',12),('dimensions',8)]:
