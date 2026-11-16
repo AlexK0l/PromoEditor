@@ -240,7 +240,10 @@ def _specs(scene, facts, x, y, w, h, accent, portrait):
         _rule(scene, "specs", sep-9, by+9, sep-9,
               by+rh-9, "#E1E5EA", 2, "pro-spec-divider")
         title_size = 23 if rh>=60 else 20
-        val_size = 33 if row == 0 and rh>=57 else 28
+        # The shared SVG wrapper inserts an ellipsis when splitting a word.
+        # For long technical values use a readable smaller font up front, so
+        # full material names survive instead of appearing truncated.
+        val_size = 19 if value_length >= 12 else (33 if row == 0 and rh>=57 else 28)
         _copy(scene, "specs", name, bx+92, by+6,
               max(20, sep-bx-102), rh-11,
               title_size, 12, INK, True,
