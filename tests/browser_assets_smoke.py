@@ -22,6 +22,24 @@ def main():
         errors=[]
         page.on('pageerror',lambda e:errors.append(str(e)))
         page.goto(BASE,wait_until='domcontentloaded')
+        # Regression: after the PRO style rollout, filling a demo must remain
+        # clickable and must NOT silently change the chosen layout to industrial.
+        page.locator('[data-style="reference_pro"]').click()
+        assert page.locator('#style').input_value()=='reference_pro'
+        page.locator('#proof-points').fill('Старый факт из другого проекта')
+        page.locator('#reset-btn').click()
+        page.wait_for_function(
+            "document.getElementById('reset-btn').textContent==='Очистить форму'")
+        assert page.locator('#model').input_value()=='ZubrTrail 500'
+        assert page.locator('#style').input_value()=='reference_pro'
+        assert page.locator('#proof-points').input_value()==''
+        assert page.locator('#use-demo').is_checked()
+        assert not page.locator('#reset-btn').is_disabled()
+        assert 'Пример заполнен' in page.locator('#modebanner').inner_text()
+        page.locator('#reset-btn').click()
+        assert page.locator('#model').input_value()==''
+        assert page.locator('#reset-btn').inner_text()=='Заполнить пример'
+        assert not errors,errors
         page.locator('#model').fill('Промышленный подъёмник A1')
         upload(page,'hero','small.png',png('yellow',(360,240),15),'image/png')
         upload(page,'hero','large.png',png('red',(1320,840),10),'image/png')
