@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const fileIds = ['hero','documents','logo','detail','drawing','references'];
-  const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo'];
+  const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','proof-points','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo'];
   const placeholders = {documents:'Несколько документов · PDF / Word / Excel',logo:'Несколько логотипов',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Несколько референсов; система отберёт до 2'};
   let latest = null;
   let apiReady = false;
@@ -31,7 +31,7 @@
       brand:get('brand').trim(),model:get('model').trim(),category:get('category').trim(),
       slogan:get('slogan').trim(),design_notes:get('design-notes').trim(),design_actions:get('design-actions').trim(),
       style:get('style'),accent:get('accent'),
-      hero_claims:lines('claims').slice(0,4),specs:pairs('specs'),benefits:lines('benefits'),dimensions:pairs('dimensions'),
+      hero_claims:lines('claims').slice(0,4),specs:pairs('specs'),benefits:lines('benefits'),proof_points:lines('proof-points').slice(0,4),dimensions:pairs('dimensions'),
       price:get('price').trim(),currency:get('currency'),vat:checked('vat'),phones:lines('phones').slice(0,2),
       show_roi:checked('show-roi'),roi:{extra_payload:get('extra-payload'),distance:get('distance'),rate:get('rate'),trips:get('trips'),years:get('years'),baseline_price:get('baseline-price')}
     };
@@ -231,7 +231,7 @@
     updateRoi();refreshStyle();
   }
   function clearForm(){
-    for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','dimensions','price','phones','promo-prompt'])set(id,'');
+    for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','proof-points','dimensions','price','phones','promo-prompt'])set(id,'');
     markPromptStale();
     set('currency','Br');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
@@ -303,7 +303,7 @@
   }
   document.querySelectorAll('[data-style]').forEach(button=>button.addEventListener('click',()=>{
     set('style',button.dataset.style);
-    const accents={industrial:'#e31b26',graphite:'#344054',minimal:'#315ddc'};
+    const accents={industrial:'#e31b26',reference_pro:'#e31b26',graphite:'#344054',minimal:'#315ddc'};
     set('accent',accents[button.dataset.style]);$('color-label').textContent=get('accent').toUpperCase();
     refreshStyle();markPromptStale();invalidateResult();
   }));

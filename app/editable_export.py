@@ -24,6 +24,7 @@ STYLES={
     "industrial":"яркий высококонтрастный рекламный постер в красно-белой палитре; крупная техника, сильный заголовок, выразительные карточки подтверждённых ТТХ, широкая полоса с преимуществами и заметный CTA",
     "graphite":"премиальный графитовый промышленный дизайн, чистая типографика",
     "minimal":"воздушный минималистичный дизайн с выразительными заголовками",
+    "reference_pro":"динамичная промышленная реклама по композиционным принципам эталона: красно-белые диагональные плашки, выразительные технические карточки, векторные пиктограммы и CTA; факты только из формы",
 }
 
 
@@ -75,6 +76,7 @@ def build_promo_prompt(brief:dict, asset_report:dict|None=None)->str:
         f"Основной рекламный тезис: {field('slogan',250)}.",
         f"Ключевые утверждения: {items('hero_claims',4)}.",
         f"Преимущества (публиковать только данные формы): {items('benefits')}.",
+        f"Дополнительные подтверждённые факты (только данные формы): {items('proof_points',4)}.",
         f"Технические характеристики (дословно): {rows('specs')}.",
         f"Габариты (дословно): {rows('dimensions')}.",
         f"Цена: {field('price',30)} {field('currency',12)}. НДС: {'да' if brief.get('vat',True) else 'нет'}.",
@@ -235,6 +237,11 @@ def create_editable_svg(brief,key,hero=None,detail=None,logo=None,drawing=None,
     # SVG is an editable campaign scene, not a blank fixed spec-card grid.
     # Keep the legacy implementation below temporarily for compatibility,
     # while routing all existing styles through the redesigned layout.
+    if brief.get("style") == "reference_pro":
+        from .campaign_pro import create_pro_campaign_svg
+        return create_pro_campaign_svg(brief,key,hero=hero,detail=detail,
+                                       logo=logo,drawing=drawing,backdrop=backdrop,
+                                       ai_product=ai_product)
     from .campaign_layout import create_campaign_svg
     return create_campaign_svg(brief,key,hero=hero,detail=detail,logo=logo,
                                drawing=drawing,backdrop=backdrop,ai_product=ai_product)
