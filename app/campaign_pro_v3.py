@@ -65,6 +65,8 @@ def _spec_index(name, row):
     word = str(name).casefold()
     if any(x in word for x in ("объём", "объем", "кузов")):
         return 0
+    if "полная масса" in word or "полный вес" in word:
+        return 2  # full vehicle silhouette, distinct from payload / tare KG
     if any(x in word for x in ("груз", "масса", "вес", "кг")):
         return 1
     if any(x in word for x in ("тормоз", "диск")):
