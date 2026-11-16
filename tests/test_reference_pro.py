@@ -232,10 +232,17 @@ def test_pro_v3_landscape_anchors_match_reference_structure():
         ("pro3-benefits-stage","rect",(0,741,1440,142),.77),
         ("pro-cta","rect",(0,968,1440,112),.88),
     )
+    overlap_scores=[]
     for ident,tag,expected,minimum in sections:
         el=_shape(root,ident,tag)
         actual=tuple(float(el.attrib[k]) for k in ("x","y","width","height"))
-        assert _area_iou(expected,actual)>=minimum,(ident,actual)
+        overlap=_area_iou(expected,actual)
+        assert overlap>=minimum,(ident,actual,overlap)
+        overlap_scores.append(overlap)
+    # The reference was manually annotated into five large compositional zones.
+    # This 90% criterion measures geometric hierarchy, NOT photographic
+    # similarity (the two vehicles and their surroundings are different).
+    assert sum(overlap_scores)/len(overlap_scores)>=.90
     spec_first=_shape(root,"pro-spec-card-0","polygon")
     assert float(spec_first.attrib["points"].split()[0].split(",")[0])>=930
     assert "ZubrTrail 500" in words(root)
