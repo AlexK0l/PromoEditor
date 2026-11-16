@@ -130,7 +130,7 @@ def test_pro_v2_numeric_units_and_dimension_cards():
         assert "2 550 мм" in text
         assert "pro-dimension-measure-0" in svg.decode()
         assert "pro-benefit-icon-0" in svg.decode()
-        assert "pro-hero-depth-0" in svg.decode()
+        assert ("pro5-stage-perspective" in svg.decode() if format_key == "4x3" else "pro-hero-depth-0" in svg.decode())
         assert not root.findall(".//s:script", SVG)
 
 
@@ -227,7 +227,7 @@ def test_pro_v3_landscape_anchors_match_reference_structure():
     sections=(
         # expected reference bounding zones normalized to 1440x1080
         ("pro-header", "rect", (0,0,1440,166), .90),
-        ("pro3-hero-scene","rect",(0,166,920,405),.80),
+        ("pro5-studio-background","rect",(0,166,920,405),.80),
         ("pro3-dim-stage","rect",(0,555,920,180),.75),
         ("pro3-benefits-stage","rect",(0,741,1440,142),.77),
         ("pro-cta","rect",(0,968,1440,112),.88),
