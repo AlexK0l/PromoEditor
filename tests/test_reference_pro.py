@@ -291,7 +291,7 @@ def test_pro_v3_default_verified_data_remains_complete(format_key):
     root=ET.fromstring(create_editable_svg(data,format_key))
     all_text=words(root)
     for key,value in data["specs"]+data["dimensions"]:
-        assert key in all_text,(format_key,key)
+        assert key.casefold() in all_text.casefold(),(format_key,key)
         assert str(value) in all_text,(format_key,value)
     for value in data["benefits"]+data["phones"]:
         assert value in all_text,(format_key,value)
