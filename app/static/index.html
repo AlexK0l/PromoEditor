@@ -56,10 +56,11 @@
           <div class="mini-uploads">
             <label for="documents" class="mini-upload"><span class="mini-icon" aria-hidden="true">▤</span><span><strong>Документы</strong><small id="file-documents">Можно загрузить несколько · PDF, Excel, Word</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Документы с характеристиками"></label>
             <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотипы</strong><small id="file-logo">Можно загрузить несколько</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Логотипы и бренд-материалы, можно выбрать несколько"></label>
+            <label class="mini-upload" for="drawing"><span class="mini-icon" aria-hidden="true">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">JPG, PNG или PDF · сразу в основной форме</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf" aria-label="Загрузить технический чертёж"></label>
           </div>
-          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button></div>
+          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button></div>
           <button type="button" id="inspect-btn" class="quick-extract" hidden>Извлечь характеристики из документов <span aria-hidden="true">→</span></button>
-          <p class="asset-intro">Добавьте несколько фото, документов, логотипов и референсов. Система проанализирует их и выберет наиболее подходящие. <strong>Не все загруженные файлы попадут в промо.</strong></p>
+          <p class="asset-intro">Добавьте фотографии, чертёж, документы и логотип. Если чертёж уже попал в фотографии, назначьте ему роль «Использовать как чертёж» в списке ниже. <strong>Не все загруженные файлы попадут в промо.</strong></p>
           <div id="asset-files-list" class="asset-files-list" role="list" aria-label="Загруженные материалы и приоритеты"></div>
           <p id="file-feedback" class="file-feedback" role="status" aria-live="polite">Файлы не загружены.</p>
         </div>
@@ -168,10 +169,9 @@
           <div class="group-title"><h3>Другие материалы</h3><p>Дополнительные изображения не обязательны.</p></div>
           <div class="extra-uploads">
             <label class="mini-upload" for="detail"><span class="mini-icon">▣</span><span><strong>Второе фото</strong><small id="file-detail">Дополнительный ракурс</small></span><span class="mini-plus">+</span><input id="detail" type="file" accept="image/png,image/jpeg,image/webp"></label>
-            <label class="mini-upload" for="drawing"><span class="mini-icon">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">PNG, JPG или PDF</small></span><span class="mini-plus">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf"></label>
             <label class="mini-upload" for="references"><span class="mini-icon">▧</span><span><strong>Референсы</strong><small id="file-references">Можно несколько; до 2 попадут в AI-сцену</small></span><span class="mini-plus">+</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>
           </div>
-          <div class="extra-clear"><button type="button" data-clear="detail" hidden>Убрать второе фото</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="references" hidden>Убрать референсы</button></div>
+          <div class="extra-clear"><button type="button" data-clear="detail" hidden>Убрать второе фото</button><button type="button" data-clear="references" hidden>Убрать референсы</button></div>
         </div>
         <div class="advanced-group">
           <div class="group-title"><h3>Цена и контакты</h3></div>
@@ -308,7 +308,7 @@
 
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
-  <script src="/static/assets.js?v=20261113-multifiles-1" defer></script>
+  <script src="/static/assets.js?v=20261116-drawing-role-1" defer></script>
   <script src="/static/app.js?v=20261116-demo-button-fix" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
