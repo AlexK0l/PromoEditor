@@ -39,7 +39,8 @@ def brief():
 
 
 def words(root):
-    return " ".join("".join(n.itertext()) for n in root.findall(".//s:text", SVG))
+    # Each SVG tspan is a visually separate line; preserve its word boundary.
+    return " ".join(" ".join(t for t in n.itertext() if t) for n in root.findall(".//s:text", SVG))
 
 
 @pytest.mark.parametrize("format_key,dimensions", [
@@ -171,8 +172,9 @@ def test_pro_v2_unprovided_dimensions_and_claims_are_absent(format_key):
         "phones": [], "price": "",
     }
     svg = create_editable_svg(minimal, format_key).decode()
-    assert "Полезная нагрузка" in svg
-    assert "20 т" in svg
+    text = words(ET.fromstring(svg))
+    assert "Полезная нагрузка" in text
+    assert "20 т" in text
     assert "ГАБАРИТ" not in svg
     assert "pro-dimensions-title" not in svg
     assert "pro-proof-panel" not in svg
