@@ -76,6 +76,7 @@ def build_promo_prompt(brief:dict, asset_report:dict|None=None)->str:
         f"Основной рекламный тезис: {field('slogan',250)}.",
         f"Ключевые утверждения: {items('hero_claims',4)}.",
         f"Преимущества (публиковать только данные формы): {items('benefits')}.",
+        f"Дополнительные подтверждённые факты (только данные формы): {items('proof_points',4)}.",
         f"Технические характеристики (дословно): {rows('specs')}.",
         f"Габариты (дословно): {rows('dimensions')}.",
         f"Цена: {field('price',30)} {field('currency',12)}. НДС: {'да' if brief.get('vat',True) else 'нет'}.",
