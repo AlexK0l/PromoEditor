@@ -176,6 +176,15 @@ def _hero(scene, brief, hero, detail, backdrop, ai_product,
     category=str(brief.get("category") or "").casefold()
     grain=any(t in category for t in ("зерно","сельхоз","агро"))
     _new_atmosphere(scene,x,y,w,h,accent,grain=grain)
+    if backdrop is None and not ai_product:
+        # Original editable vector ground shadow: visually anchors a cutout
+        # without fabricating a photographic background or hiding the chassis.
+        for radius,alpha in ((.43,.08),(.37,.09),(.30,.09)):
+            scene.el("photos","ellipse","pro3-ground-shadow",{
+                "cx":x+w*.53,"cy":y+h*.89,
+                "rx":w*radius,"ry":h*.085,
+                "fill":"#2E3843","opacity":alpha
+            })
     if backdrop is not None and not ai_product:
         _photo(scene,backdrop,x,y,w,h,"pro-ai-background",cover=True)
         scene.rect("photos",x,y,w,h,"#FFFFFF",opacity=".06",
@@ -696,7 +705,12 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
         both=bool(proof and has_roi)
         # A split 146px band made the proof title and claims illegible.
         # Use two full-width editorial bands when both types are supplied.
-        specs_h=(370 if both else 411) if facts else 0
+        specs_h=0
+        if facts:
+            limit=370 if both else 411
+            row_count=math.ceil(len(facts)/2)
+            # Do not reserve four large rows for a 1–2-fact submission.
+            specs_h=min(limit,116*row_count+7*(row_count-1))
         dims_h=(176 if both else 202) if with_dim else 0
         benefit_h=(188 if both else 224) if benefits else 0
         proof_h=(101 if both else 0)
