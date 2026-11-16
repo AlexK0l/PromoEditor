@@ -133,3 +133,40 @@ def test_pro_v4_verified_ribbon_headline_is_not_truncated():
     caption = "".join(titles[0].itertext())
     assert "…" not in caption
     assert caption == "ПОДТВЕРЖДЕНО"
+
+
+def test_pro_v5_photo_is_primary_and_fictional_silos_are_gone():
+    """Fallback background should not pretend to be a verified grain terminal."""
+    data = default_brief()
+    data["style"] = "reference_pro"
+    hero = Image.new("RGBA", (1400, 680), (236, 180, 36, 255))
+    root = ET.fromstring(create_editable_svg(data, "4x3", hero=hero))
+    assert named(root, "pro5-studio-background", "rect")
+    assert named(root, "pro5-stage-floor", "polygon")
+    assert not named(root, "pro3-silo-", "rect")
+    assert not named(root, "pro3-horizon-", "polygon")
+    bitmap = named(root, "original-product-photo", "image")
+    assert len(bitmap) == 1
+    assert float(bitmap[0].attrib["width"]) >= 900
+
+
+def test_pro_v5_roi_metrics_share_a_single_readable_row():
+    data = default_brief()
+    data["style"] = "reference_pro"
+    root = ET.fromstring(create_editable_svg(data, "4x3"))
+    values = named(root, "pro-roi-value-", "text")
+    assert len(values) == 4
+    assert len({float(node.attrib["y"]) for node in values}) == 1
+    assert min(float(node.attrib["font-size"]) for node in values) >= 24
+    assert {"142", "240", "34 200", "90 501"}.issubset(
+        {"".join(node.itertext()) for node in values})
+
+
+def test_pro_v5_does_not_invent_photo_background_when_none_uploaded():
+    data = default_brief()
+    data["style"] = "reference_pro"
+    svg = create_editable_svg(data, "4x3")
+    root = ET.fromstring(svg)
+    assert named(root, "pro5-studio-background", "rect")
+    assert not named(root, "pro-ai-background", "image")
+    assert not named(root, "ai-product-bitmap", "image")

@@ -61,16 +61,43 @@ def _specs_four(scene, facts, x, y, w, h, accent):
                  12,accent,True,f"pro-spec-value-{i}",2)
 
 
+def _studio_stage(scene, x, y, w, h, accent):
+    """Neutral SVG graphic for photos without a supplied real backdrop.
+
+    No made-up agricultural silos, quarry equipment or location. A bright,
+    geometric stage ensures the trailer (not a cartoon background) dominates.
+    """
+    scene.rect("photos", x, y, w, h, "#EDF1F5", ident="pro5-studio-background")
+    scene.polygon("photos", [
+        (x, y), (x+w*.39, y),
+        (x+w*.13, y+h), (x, y+h)
+    ], "#F7F9FA", ident="pro5-studio-beam-left")
+    scene.polygon("photos", [
+        (x+w*.77, y), (x+w, y),
+        (x+w*.58, y+h), (x+w*.39, y+h)
+    ], "#FFFFFF", opacity=".64", ident="pro5-studio-beam-right")
+    scene.polygon("photos", [
+        (x, y+h*.71), (x+w, y+h*.55),
+        (x+w, y+h), (x, y+h)
+    ], "#DDE4EA", ident="pro5-stage-floor")
+    _rule(scene, "photos", x+12, y+h*.72, x+w-14,
+          y+h*.58, "#FFFFFF", 2.5, "pro5-stage-perspective")
+    scene.rect("photos", x, y, 8, h, accent,
+               ident="pro5-hero-edge")
+
+
 def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
     category=str(brief.get("category") or "").casefold()
     grain=any(token in category for token in ("зерн","агро","сельхоз"))
     photo_height=min(395,h*.72) if _lines(brief,"dimensions",4) else h
-    v3._new_atmosphere(scene,x,y,w,photo_height,accent,grain)
+    # Without a verified real backdrop, use neutral editorial geometry.
+    # This keeps the source product dominant and avoids fictional scenery.
+    _studio_stage(scene,x,y,w,photo_height,accent)
     if backdrop is not None and not ai_product:
         _photo(scene,backdrop,x,y,w,photo_height,"pro-ai-background",cover=True)
         scene.rect("photos",x,y,w,photo_height,"#FFFFFF",opacity=".065",
                    ident="pro4-photo-veil")
-    for j,(radius,opacity) in enumerate(((.45,.075),(.37,.10),(.29,.12))):
+    for j,(radius,opacity) in enumerate(((.43,.055),(.36,.07),(.29,.09))):
         scene.el("photos","ellipse",f"pro4-ground-shadow-{j}",{
             "cx":x+w*.53,"cy":y+photo_height*.87,
             "rx":w*radius,"ry":photo_height*.077,"fill":"#1D242D",
@@ -85,7 +112,7 @@ def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
         else:
             # Keep the original product a separate, editable bitmap.
             # Its bounding rectangle ends above the dimensions panel.
-            _photo(scene,image,x+64,y+5,w-110,min(390,h*.72),
+            _photo(scene,image,x+7,y+2,w-18,min(395,h*.75),
                    "original-product-photo",trim=True)
     scene.polygon("photos",[(x,y+photo_height-9),(x+w-98,y+photo_height-9),
                             (x+w-112,y+photo_height),(x,y+photo_height)],
@@ -181,7 +208,8 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
                ident="pro4-claims-finance-band")
     full_width=bool(proof and not roi)
     if proof:
-        claims_width=w if full_width else w*.65
+        # Two-track editorial strip: claims left, four readable metrics right.
+        claims_width=w if full_width else w*.55
         slug_w=min(266,claims_width*.36)
         heading=("ПОДТВЕРЖДЕНО"
                  if brief.get("proof_points") else "КЛЮЧЕВЫЕ ТЕЗИСЫ")
@@ -209,12 +237,12 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
         money=str(brief.get("currency") or "Br").strip()[:10] or "Br"
         names=[("ЗА РЕЙС",roi["per_trip"]),("РЕЙСОВ В ГОД",roi["trips"]),
                ("ЗА ГОД",roi["annual"]),("БАЛАНС",roi["net"])]
-        rx=x+w*.65+8 if proof else x+4
+        rx=x+w*.55+8 if proof else x+4
         rw=w-(rx-x)-6
         scene.rect("roi",rx,y+4,rw,h-8,"#FFF1F2",
                    ident="pro4-economy-card")
-        columns=2 if proof else 4
-        rows=math.ceil(len(names)/columns)
+        columns=4
+        rows=1
         cw=rw/columns
         ch=(h-8)/rows
         for i,(name,value) in enumerate(names):
@@ -224,11 +252,11 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
                 _rule(scene,"roi",px,py+5,px,py+ch-5,
                       "#DBA6B0",1.3,f"pro4-eco-divider-{i}")
             label=name+(f", {money}" if i!=1 else "")
-            v3._type(scene,"roi",label,px+12,py+3,cw-17,ch*.37,
-                     15,10,"#71333F",True,f"pro-roi-label-{i}",1)
+            v3._type(scene,"roi",label,px+11,py+6,cw-18,ch*.34,
+                     17,10,"#71333F",True,f"pro-roi-label-{i}",1)
             v3._type(scene,"roi",f"{value:,.0f}".replace(","," "),
-                     px+12,py+ch*.39,cw-17,ch*.56,
-                     28,14,accent,True,f"pro-roi-value-{i}",1)
+                     px+11,py+ch*.39,cw-18,ch*.56,
+                     34,14,accent,True,f"pro-roi-value-{i}",1)
 
 
 def create_pro_campaign_svg(brief,key,hero=None,detail=None,logo=None,
