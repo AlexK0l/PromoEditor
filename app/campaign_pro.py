@@ -332,8 +332,9 @@ def _dimensions(scene, facts, drawing, x, y, w, h, accent, portrait):
                   bx+cw-17, ly+4, accent, 1.8,
                   f"pro-dimension-measure-right-{i}")
 
+
 def _benefit_icon(scene, x, y, index, accent):
-    # Neutral, illustrative pictograms (no invented safety certification).
+    """Simple semantic-neutral original vector marks, not certifications."""
     shapes = (
         f"M {x-20} {y-8} L {x} {y-21} L {x+20} {y-8} L {x} {y+4} Z "
         f"M {x-20} {y+2} L {x} {y+15} L {x+20} {y+2}",
@@ -351,16 +352,14 @@ def _benefit_icon(scene, x, y, index, accent):
         f"M {x} {y-22} A 22 22 0 1 1 {x-.01} {y-22} "
         f"M {x} {y-16} L {x} {y} L {x+12} {y+8}"
     )
-    scene.el("benefits", "path", f"pro-benefit-icon-{index}", {
+    return scene.el("benefits", "path", f"pro-benefit-icon-{index}", {
         "d": shapes[index%len(shapes)], "stroke": accent,
-        "stroke-width": 3.5, "stroke-linecap": "round",
+        "stroke-width": 3.8, "stroke-linecap": "round",
         "stroke-linejoin": "round", "fill": "none"
     })
 
-
-
 def _benefits(scene, benefits, x, y, w, h, accent, portrait):
-    """One legible editorial claim per cell; pictograms remain SVG vectors."""
+    """Large pictograms and readable claims for either orientation."""
     if not benefits:
         return
     scene.rect("benefits", x, y, w, h, "#FFFFFF",
@@ -378,22 +377,42 @@ def _benefits(scene, benefits, x, y, w, h, accent, portrait):
         bx=x+12+(i%cols)*col_w
         by=y+caption_h+10+(i//cols)*row_h
         if i%cols:
-            _rule(scene, "benefits", bx, by+7,
-                  bx, by+row_h-9, accent, 1.8,
+            _rule(scene, "benefits", bx, by+6,
+                  bx, by+row_h-6, accent, 1.8,
                   f"pro-benefit-divider-{i}")
-        cy=by+min(31,row_h*.38)
-        cx=bx+col_w*.5
-        scene.el("benefits", "circle", f"pro-benefit-halo-{i}", {
-            "cx":cx, "cy":cy, "r":28,
-            "fill":"#FFF0F1", "stroke":accent, "stroke-width":1.5
-        })
-        _benefit_icon(scene, cx, cy, i, accent)
-        text_top=by+min(64,row_h*.62)
-        _copy(scene, "benefits", claim, bx+12,
-              text_top, col_w-24,
-              max(21,by+row_h-text_top-7),
-              22 if not portrait else 22, 12, INK,
-              True, f"pro-benefit-{i}", 2)
+        # Horizontal cards at low heights prevent icon/text collisions.
+        horizontal = (not portrait) or row_h < 106
+        if horizontal:
+            cx=bx+45
+            cy=by+row_h*.50
+            radius=min(27,max(15,row_h*.36))
+            scene.el("benefits", "circle", f"pro-benefit-halo-{i}", {
+                "cx":cx, "cy":cy, "r":radius,
+                "fill":"#FFF0F1", "stroke":accent, "stroke-width":1.5
+            })
+            pictogram=_benefit_icon(scene,cx,cy,i,accent)
+            # Scale only the pictogram, not its editable containing group.
+            if pictogram is not None and radius<26:
+                scale=radius/26
+                pictogram.set("transform",
+                    f"translate({cx*(1-scale):.2f} {cy*(1-scale):.2f}) "
+                    f"scale({scale:.3f})")
+            _copy(scene, "benefits", claim, bx+86,
+                  by+8, col_w-97, row_h-15,
+                  23, 12, INK, True,
+                  f"pro-benefit-{i}", 2)
+        else:
+            cx=bx+col_w*.5
+            cy=by+30
+            scene.el("benefits", "circle", f"pro-benefit-halo-{i}", {
+                "cx":cx, "cy":cy, "r":28,
+                "fill":"#FFF0F1", "stroke":accent, "stroke-width":1.5
+            })
+            _benefit_icon(scene,cx,cy,i,accent)
+            _copy(scene, "benefits", claim, bx+12,
+                  by+65, col_w-24, row_h-71,
+                  22, 12, INK, True,
+                  f"pro-benefit-{i}", 2)
 
 def _proof(scene, claims, x, y, w, h, accent, portrait):
     if not claims:
@@ -532,69 +551,111 @@ def _footer(scene, brief, accent, portrait):
                   28, 17, "#FFFFFF", True,
                   f"pro-phone-{i}", 1)
 
+
 def create_pro_campaign_svg(brief, key, hero=None, detail=None,
                             logo=None, drawing=None, backdrop=None,
                             ai_product=False):
-    """Render both exact sizes with source-only claims and Corel-editable layers."""
+    """Render a dense but legible reference-style campaign in both SVG sizes.
+
+    Every numeric value and claim comes from the supplied form, never the
+    reference. Missing sections are omitted, giving the hero more space.
+    """
     if key not in ("4x3", "9x16"):
         raise ValueError("Неизвестное соотношение сторон.")
-    portrait=key=="9x16"
-    scene=Scene(key, brief.get("accent"), "industrial")
-    accent=scene.accent
+    portrait = key == "9x16"
+    scene = Scene(key, brief.get("accent"), "industrial")
+    accent = scene.accent
     _tint(scene, accent)
-    scene.rect("decor", 0, 0, scene.w, scene.h, PAPER,
-               ident="pro-paper")
-    facts=_lines(brief, "specs", 8)
-    dims=_lines(brief, "dimensions", 4)
-    benefits=[str(v).strip()[:150] for v in (brief.get("benefits") or [])
-              if str(v).strip()][:6]
-    # Only explicit approved text; a reference photo is never a fact source.
-    proof=[str(v).strip()[:180] for v in (brief.get("proof_points") or [])
-           if str(v).strip()][:4]
-    has_roi=bool(brief.get("show_roi") and compute_roi(brief))
+    scene.rect("decor", 0, 0, scene.w, scene.h,
+               PAPER, ident="pro-paper")
+
+    facts = _lines(brief, "specs", 8)
+    dimensions = _lines(brief, "dimensions", 4)
+    benefits = [str(v).strip()[:150]
+                for v in (brief.get("benefits") or [])
+                if str(v).strip()][:6]
+    proof = [str(v).strip()[:180]
+             for v in (brief.get("proof_points") or [])
+             if str(v).strip()][:4]
+    has_roi = bool(brief.get("show_roi") and compute_roi(brief))
     _header(scene, brief, logo, accent, portrait)
-    bottom=1733 if portrait else 949
-    top=271 if portrait else 188
-    gap=10 if portrait else 9
-    segments=[]
+
+    top = 277 if portrait else 195
+    bottom = 1711 if portrait else 941
+    gap = 9 if portrait else 8
+    segments = []
+
     if portrait and facts:
-        segments.append(("specs", 364))
-    if dims or drawing is not None:
-        segments.append(("dimensions", 183 if portrait else 132))
-    if benefits:
-        segments.append(("benefits", 211 if portrait else 142))
-    if proof:
-        segments.append(("proof", 117 if portrait else 77))
-    if has_roi:
-        segments.append(("roi", 110 if portrait else 75))
-    reserved=sum(h for _,h in segments)+gap*len(segments)
-    hero_h=bottom-top-reserved
-    # No unsupported sections are rendered; the product receives their space.
-    if portrait:
-        _hero(scene, hero, detail, backdrop, ai_product, brief,
-              accent, 20, top, scene.w-40, hero_h)
-    else:
-        photo_width=892 if facts else scene.w-40
-        _hero(scene, hero, detail, backdrop, ai_product, brief,
-              accent, 20, top, photo_width, hero_h)
-        if facts:
-            _specs(scene, facts, 923, top, scene.w-944,
-                   hero_h, accent, False)
-    cursor=top+hero_h+gap
-    for kind, height in segments:
-        x=20
-        w=scene.w-40
-        if kind=="specs":
-            _specs(scene, facts, x, cursor, w, height, accent, True)
-        elif kind=="dimensions":
-            _dimensions(scene, dims, drawing, x, cursor, w, height,
-                        accent, portrait)
-        elif kind=="benefits":
-            _benefits(scene, benefits, x, cursor, w, height, accent, portrait)
-        elif kind=="proof":
-            _proof(scene, proof, x, cursor, w, height, accent, portrait)
+        # Two large columns of specs below the portrait product.
+        segments.append(("specs", 355 if len(facts)<=6 else 372))
+    if dimensions or drawing is not None:
+        if portrait:
+            dim_h = 222 if drawing is not None else (
+                197 if len(dimensions)>3 else 165)
         else:
-            _roi(scene, brief, x, cursor, w, height, accent)
-        cursor+=height+gap
-    _footer(scene, brief, accent, portrait)
+            dim_h = 184 if drawing is not None else (
+                164 if len(dimensions)>3 else 135)
+        segments.append(("dimensions", dim_h))
+    if benefits:
+        if portrait:
+            benefits_h = 228 if len(benefits)>3 else 162
+        else:
+            benefits_h = 179 if len(benefits)>4 else 133
+        segments.append(("benefits", benefits_h))
+    if proof:
+        segments.append(("proof", 120 if portrait else 73))
+    if has_roi:
+        segments.append(("roi", 96 if portrait else 72))
+
+    # Dense campaigns can otherwise shrink the landscape photograph to a
+    # postage stamp. Shrink optional strip heights without hiding any claims.
+    reserved = sum(size for _,size in segments)+len(segments)*gap
+    minimum_hero = 395 if portrait else 305
+    overflow = max(0, minimum_hero-(bottom-top-reserved))
+    if overflow and not portrait:
+        floors = {"benefits":126,"dimensions":134 if drawing else 112,
+                  "proof":64,"roi":64}
+        adapted=[]
+        for kind,height in segments:
+            reduction=min(overflow,max(0,height-floors.get(kind,height)))
+            adapted.append((kind,height-reduction))
+            overflow-=reduction
+        segments=adapted
+    reserved=sum(size for _,size in segments)+len(segments)*gap
+    hero_height=bottom-top-reserved
+    if hero_height < 185:
+        # Narrow unexpected content must not emit inverted SVG viewports.
+        raise ValueError("Слишком много элементов для рекламного макета.")
+
+    if portrait:
+        _hero(scene,hero,detail,backdrop,ai_product,brief,accent,
+              18,top,scene.w-36,hero_height)
+    else:
+        if facts:
+            _hero(scene,hero,detail,backdrop,ai_product,brief,accent,
+                  15,top,909,hero_height)
+            _specs(scene,facts,939,top,
+                   scene.w-955,hero_height,accent,False)
+        else:
+            _hero(scene,hero,detail,backdrop,ai_product,brief,accent,
+                  15,top,scene.w-30,hero_height)
+
+    cursor=top+hero_height+gap
+    for kind,height in segments:
+        x=18 if portrait else 15
+        w=scene.w-2*x
+        if kind=="specs":
+            _specs(scene,facts,x,cursor,w,height,accent,True)
+        elif kind=="dimensions":
+            _dimensions(scene,dimensions,drawing,x,cursor,w,height,
+                        accent,portrait)
+        elif kind=="benefits":
+            _benefits(scene,benefits,x,cursor,w,height,accent,portrait)
+        elif kind=="proof":
+            _proof(scene,proof,x,cursor,w,height,accent,portrait)
+        elif kind=="roi":
+            _roi(scene,brief,x,cursor,w,height,accent)
+        cursor += height+gap
+
+    _footer(scene,brief,accent,portrait)
     return scene.export()
