@@ -81,9 +81,10 @@
         <div class="choices-row">
           <div class="style-wrap">
             <span class="control-label">Стиль оформления <span class="field-hint">яркий рекламный — ближе к эталону</span></span>
-            <select id="style" class="sr-only" aria-label="Выбранный стиль"><option value="industrial">Контрастный</option><option value="graphite">Премиальный</option><option value="minimal">Минимальный</option></select>
+            <select id="style" class="sr-only" aria-label="Выбранный стиль"><option value="industrial">Контрастный</option><option value="reference_pro">Рекламный PRO — как эталон</option><option value="graphite">Премиальный</option><option value="minimal">Минимальный</option></select>
             <div class="style-pills" role="group" aria-label="Стиль оформления">
-              <button type="button" class="style-pill is-active" data-style="industrial" aria-pressed="true"><span class="style-dot dot-red"></span>Рекламный · как эталон</button>
+              <button type="button" class="style-pill is-active" data-style="industrial" aria-pressed="true"><span class="style-dot dot-red"></span>Контрастный</button>
+              <button type="button" class="style-pill" data-style="reference_pro" aria-pressed="false"><span class="style-dot dot-red"></span>Рекламный PRO · как эталон</button>
               <button type="button" class="style-pill" data-style="graphite" aria-pressed="false"><span class="style-dot dot-graphite"></span>Премиальный</button>
               <button type="button" class="style-pill" data-style="minimal" aria-pressed="false"><span class="style-dot dot-light"></span>Минимальный</button>
             </div>
@@ -307,7 +308,7 @@
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261113-multifiles-1" defer></script>
-  <script src="/static/app.js?v=20261113-prompt-corel" defer></script>
+  <script src="/static/app.js?v=20261116-reference-pro" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>
