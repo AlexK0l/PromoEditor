@@ -2,7 +2,8 @@
 from __future__ import annotations
 import hashlib, hmac, io, json, math, os, secrets
 from pathlib import Path
-from PIL import Image,ImageFilter,ImageOps,ImageStat
+from PIL import Image,ImageFilter,ImageStat
+from .image_analysis import analysis_preview, ANALYSIS_RESIZE_THRESHOLD
 from .documents import extract_text,heuristics
 
 GROUPS={'photos':'photo','logos':'logo','documents':'document','references':'reference','drawings':'drawing'}
@@ -67,25 +68,29 @@ def records_from_groups(groups):
 
 def _tech_score(raw,kind):
     try:
-        with Image.open(io.BytesIO(raw)) as source:
-            w,h=source.size
-            if min(w,h)<32 or max(w,h)>10000 or w*h>20_000_000:
-                raise ValueError('Слишком большое или маленькое изображение.')
-            img=ImageOps.exif_transpose(source)
-            img.thumbnail((300,300),Image.Resampling.LANCZOS)
-            alpha=(img.mode in ('RGBA','LA') or 'transparency' in img.info)
-            gray=img.convert('L')
-            edge=ImageStat.Stat(gray.filter(ImageFilter.FIND_EDGES)).var[0]
-            sharp=min(1.0,math.sqrt(max(0,edge))/22)
-            pixels=min(1.0,math.sqrt(w*h)/1500)
-            score=round(min(100,23+47*pixels+27*sharp+(12 if kind=='logo' and alpha else 0)))
-            pixels=list(gray.resize((9,8),Image.Resampling.LANCZOS).getdata())
-            dh=0
-            for y in range(8):
-                for x in range(8):dh=(dh<<1)|int(pixels[y*9+x]>pixels[y*9+x+1])
-            reason=f'{w}×{h} px; резкость {"выше средней" if sharp>.45 else "умеренная" if sharp>.19 else "низкая"}'
-            if alpha and kind=='logo':reason+='; прозрачный фон'
-            return score,reason,w,h,alpha,dh,ImageStat.Stat(img.convert('RGB')).mean
+        # The original photo stays in r['raw']; only this disposable thumbnail
+        # is decoded for local sharpness, dHash and tonal scoring.
+        img,(w,h)=analysis_preview(raw,max_edge=300)
+        alpha=(img.mode in ('RGBA','LA') or 'transparency' in img.info)
+        gray=img.convert('L')
+        edge=ImageStat.Stat(gray.filter(ImageFilter.FIND_EDGES)).var[0]
+        sharp=min(1.0,math.sqrt(max(0,edge))/22)
+        pixels=min(1.0,math.sqrt(w*h)/1500)
+        score=round(min(100,23+47*pixels+27*sharp+(12 if kind=='logo' and alpha else 0)))
+        small=list(gray.resize((9,8),Image.Resampling.LANCZOS).getdata())
+        dh=0
+        for y in range(8):
+            for x in range(8):
+                dh=(dh<<1)|int(small[y*9+x]>small[y*9+x+1])
+        resized=w*h>ANALYSIS_RESIZE_THRESHOLD
+        reason=f'{w}×{h} px; резкость {"выше средней" if sharp>.45 else "умеренная" if sharp>.19 else "низкая"}'
+        if alpha and kind=='logo':reason+='; прозрачный фон'
+        if resized:
+            reason+=(f'; для анализа уменьшено до {img.width}×{img.height} px '
+                     '(оригинал сохранён для макета)')
+        return (score,reason,w,h,alpha,dh,
+                ImageStat.Stat(img.convert('RGB')).mean,
+                (img.width,img.height),resized)
     except ValueError:raise
     except Exception as exc:raise ValueError('Не удалось проверить изображение.') from exc
 
@@ -131,8 +136,20 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     for i,r in enumerate(records):
         r.update(index=i,preference=prefs.get(r['id'],'auto'),score=50,quality='',selected=False,assignment='',reason='')
         if r['kind'] in ('photo','logo','reference') or (r['kind']=='drawing' and Path(r['name']).suffix.lower() in ('.png','.jpg','.jpeg','.webp')):
-            score,quality,w,h,alpha,dhash,tone=_tech_score(r['raw'],r['kind'])
-            r.update(score=score,quality=quality,width=w,height=h,alpha=alpha)
+            try:
+                score,quality,w,h,alpha,dhash,tone,preview_size,resized=_tech_score(
+                    r['raw'],r['kind'])
+            except ValueError as exc:
+                raise ValueError(f"{r['name']}: {exc}") from exc
+            r.update(score=score,quality=quality,width=w,height=h,alpha=alpha,
+                     analysis_width=preview_size[0],analysis_height=preview_size[1],
+                     analysis_resized=resized)
+            if resized:
+                warnings.append(
+                    f"{r['name']}: {w}×{h} px — для анализа использована "
+                    f"уменьшенная копия {preview_size[0]}×{preview_size[1]} px. "
+                    "Оригинальное изображение не изменено и остаётся для макета."
+                )
             exact=(r['kind'],r['sha256'])
             if exact in seen:r['duplicate_of']=seen[exact]
             else:
@@ -249,7 +266,8 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     public=[]
     for r in records:
         keys=('id','kind','name','size','sha256','preference','score','quality','selected','assignment','reason',
-              'width','height','alpha','ai_score','ai_reason','ai_role','duplicate_of')
+              'width','height','analysis_width','analysis_height','analysis_resized',
+              'alpha','ai_score','ai_reason','ai_role','duplicate_of')
         row={key:r[key] for key in keys if key in r}
         suffix=Path(r['name']).suffix.lower()
         row['mime']={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg',

@@ -24,6 +24,7 @@ from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_pn
 from .openai_service import analyze_documents, generate_visuals
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
+from .image_analysis import validate_image_dimensions
 from .editable_export import build_promo_prompt, create_editable_svg, rasterize_svg
 from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
@@ -133,9 +134,16 @@ async def _files(form,field,extensions,collection=False):
         if not raw:continue
         if extension in ALLOWED_IMAGES:
             try:
-                img=Image.open(io.BytesIO(raw));img.verify()
-                if img.width>10000 or img.height>10000:raise ValueError('large image')
-            except Exception:raise HTTPException(400,detail=f'{name}: файл не является корректным изображением')
+                with Image.open(io.BytesIO(raw)) as img:
+                    # Validate the ORIGINAL before decoding. Bigger images
+                    # are previewed at 300/512 px during analysis, not uploaded
+                    # with destructive resizing or substituted in final output.
+                    validate_image_dimensions(*img.size)
+                    img.verify()
+            except ValueError as exc:
+                raise HTTPException(400,detail=f'{name}: {exc}') from exc
+            except Exception as exc:
+                raise HTTPException(400,detail=f'{name}: файл не является корректным изображением') from exc
         out.append((name,raw))
     return out
 
