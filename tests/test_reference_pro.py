@@ -280,3 +280,23 @@ def test_pro_v3_missing_sections_never_claim_dimensions_or_warranty():
         assert "pro-proof-panel" not in source
         assert "ГАРАНТИЯ" not in source
         assert "Сталь" in source
+
+
+@pytest.mark.parametrize("format_key", ["4x3", "9x16"])
+def test_pro_v3_default_verified_data_remains_complete(format_key):
+    """All eight facts, three dimensions and contact details must be complete."""
+    from app.render import default_brief
+    data=default_brief()
+    data["style"]="reference_pro"
+    root=ET.fromstring(create_editable_svg(data,format_key))
+    all_text=words(root)
+    for key,value in data["specs"]+data["dimensions"]:
+        assert key in all_text,(format_key,key)
+        assert str(value) in all_text,(format_key,value)
+    for value in data["benefits"]+data["phones"]:
+        assert value in all_text,(format_key,value)
+    assert "229 998" in all_text
+    for node in root.findall(".//s:text", SVG):
+        assert "…" not in "".join(node.itertext()), (format_key,node.get("id"))
+    # No text or brand is imported from the other advertised trailer.
+    assert "ZUBRTRAIL 118" not in all_text
