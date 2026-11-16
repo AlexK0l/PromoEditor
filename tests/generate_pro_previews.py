@@ -41,7 +41,14 @@ def main():
         png, _ = rasterize_svg(svg)
         (output / f"pro_v2_{key}.png").write_bytes(png)
         (output / f"pro_v2_{key}.svg").write_bytes(svg)
-    print("PRO v2 preview files:", sorted(str(p) for p in output.iterdir()))
+    # Public source-only modules for deeper offline visual QA against the
+    # user-provided reference and product images. Never package .env or jobs.
+    root = Path(__file__).resolve().parents[1]
+    for original in (root / "app").rglob("*.py"):
+        target = output / "review_source" / original.relative_to(root)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(original.read_bytes())
+    print("PRO preview files:", sorted(str(p) for p in output.iterdir()))
 
 
 if __name__ == "__main__":
