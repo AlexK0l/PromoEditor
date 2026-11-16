@@ -300,3 +300,23 @@ def test_pro_v3_default_verified_data_remains_complete(format_key):
         assert "…" not in "".join(node.itertext()), (format_key,node.get("id"))
     # No text or brand is imported from the other advertised trailer.
     assert "ZUBRTRAIL 118" not in all_text
+
+
+@pytest.mark.parametrize("format_key", ["4x3", "9x16"])
+def test_pro_v3_long_verified_proof_claims_are_not_cut(format_key):
+    from app.render import default_brief
+    data=default_brief()
+    data["style"]="reference_pro"
+    data["proof_points"]=[
+        "Подтверждённая гарантия при соблюдении условий договора",
+        "Отдельное сервисное обслуживание по условиям договора",
+        "Наличие документации на все основные комплектующие",
+        "Техническая консультация по вопросам эксплуатации",
+    ]
+    root=ET.fromstring(create_editable_svg(data,format_key))
+    content=words(root)
+    for fact in data["proof_points"]:
+        assert fact in content,(format_key,fact)
+    for element in root.findall(".//s:text",SVG):
+        if element.get("id","").startswith("pro3-proof-"):
+            assert "…" not in "".join(element.itertext())
