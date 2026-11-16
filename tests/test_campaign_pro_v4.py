@@ -118,3 +118,18 @@ def test_pro_v4_long_user_approved_copy_survives():
         assert value in text
     assert all("…" not in "".join(n.itertext())
                for n in named(root,"pro4-proof-statement-","text"))
+
+
+
+def test_pro_v4_verified_ribbon_headline_is_not_truncated():
+    brief = default_brief()
+    brief["style"] = "reference_pro"
+    brief["proof_points"] = [
+        "Только подтверждённый текст", "Подтверждено документом"
+    ]
+    root = ET.fromstring(create_editable_svg(brief, "4x3"))
+    titles = named(root, "pro4-trust-title-text", "text")
+    assert len(titles) == 1
+    caption = "".join(titles[0].itertext())
+    assert "…" not in caption
+    assert caption == "ПОДТВЕРЖДЕНО"
