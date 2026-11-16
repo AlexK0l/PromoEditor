@@ -526,11 +526,13 @@ def _proof(scene, facts, x, y, w, h, accent):
         })
         _check(scene,"benefits",px+11,py+rh*.5-7,
                14,accent,f"pro3-proof-check-{i}")
-        text_h=min(56,rh-9)
+        # Full 3–4-line factual statements must not be replaced by a
+        # sentence fragment with an ellipsis.
+        text_h=max(14,rh-3)
         _type(scene,"benefits",fact,px+35,
               py+(rh-text_h)/2,
-              cw-44,text_h,19,11,
-              INK,True,f"pro3-proof-{i}",2)
+              cw-44,text_h,18,10,
+              INK,True,f"pro3-proof-{i}",4)
 
 
 def _bottom_band(scene, brief, proof, x, y, w, h, accent):
@@ -670,32 +672,44 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
     proof=[str(s).strip()[:180] for s in (brief.get("proof_points") or [])
            if str(s).strip()][:4]
     with_dim=bool(dims or drawing is not None)
-    with_band=bool(proof or (brief.get("show_roi") and compute_roi(brief)))
+    has_roi=bool(brief.get("show_roi") and compute_roi(brief))
+    with_band=bool(proof or has_roi)
+    long_proof=bool(proof and has_roi and
+                    (len(proof)>2 or max(len(s) for s in proof)>35))
     _header(scene,brief,logo,accent,portrait)
 
     if not portrait:
         # 4:3 proportions mirror reference sections rather than spreadsheet rows.
         main_y=171
-        if benefits:
+        if long_proof:
+            main_bottom=680 if benefits else 808
+        elif benefits:
             main_bottom=720 if with_dim else 724
         else:
             # Omitted benefits must not leave a blank white quarter-poster.
             main_bottom=874 if with_band else 959
         left_w=928 if facts else 1440
         spec_x=943
-        hero_h=(main_bottom-main_y-163) if with_dim else main_bottom-main_y
+        dimensions_h=153 if long_proof else 163
+        hero_h=(main_bottom-main_y-dimensions_h) if with_dim else main_bottom-main_y
         _hero(scene,brief,hero,detail,backdrop,ai_product,
               0,main_y,left_w,hero_h,accent,False)
         if facts:
             _specs(scene,facts,spec_x,181,486,main_bottom-185,accent,False)
         if with_dim:
-            _dims(scene,brief,detail,drawing,0,main_bottom-163,
-                  left_w,163,accent,False)
-        benefit_y=731
-        benefit_h=140 if with_band else 230
+            _dims(scene,brief,detail,drawing,0,
+                  main_bottom-dimensions_h,left_w,dimensions_h,
+                  accent,False)
+        benefit_y=main_bottom+11 if long_proof else 731
+        benefit_h=123 if long_proof else (140 if with_band else 230)
         if benefits:
             _benefits(scene,benefits,0,benefit_y,1440,benefit_h,accent,False)
-        if with_band:
+        if long_proof:
+            # More source text requires its own full-width factual row.
+            # The optional ROI receives the following short quantitative row.
+            _proof(scene,proof,0,820,1440,73,accent)
+            _roi(scene,brief,0,899,1440,60,accent)
+        elif with_band:
             _bottom_band(scene,brief,proof,0,881,1440,77,accent)
         _footer(scene,brief,accent,False)
     else:
