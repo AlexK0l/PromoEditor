@@ -31,6 +31,22 @@ def _copy(scene, group, value, x, y, w, h, size=24, minimum=13,
     return node
 
 
+def _fit_fact(scene, group, value, x, y, w, h, preferred, color, ident):
+    """Use the largest font that fits exactly, without internal ellipses."""
+    width=max(20,int(w))
+    height=max(15,h)
+    chosen=12
+    for size in range(int(preferred),11,-1):
+        wrapped=_wrap(str(value),width,size,True)
+        if (len(wrapped)<=2
+                and all("…" not in part for part in wrapped)
+                and len(wrapped)*size*1.25<=height):
+            chosen=size
+            break
+    return scene.text(group,value,x,y,width,height,chosen,chosen,
+                      color,True,ident,2)
+
+
 def _tint(scene, accent):
     defs = scene.root.find(f"{{{SVG_NS}}}defs")
     gradient = ET.SubElement(defs, f"{{{SVG_NS}}}linearGradient", {
@@ -240,25 +256,15 @@ def _specs(scene, facts, x, y, w, h, accent, portrait):
         _rule(scene, "specs", sep-9, by+9, sep-9,
               by+rh-9, "#E1E5EA", 2, "pro-spec-divider")
         title_size = 23 if rh>=60 else 20
-        _copy(scene, "specs", name, bx+92, by+6,
-              max(20, sep-bx-102), rh-11,
-              title_size, 12, INK, True,
-              f"pro-spec-name-{i}", 2)
-        value_w=max(20, bx+col_w-sep-12)
-        value_h=rh-10
-        preferred=33 if row == 0 and rh>=57 else 28
-        # The common text wrapper marks midword splits with '…'.
-        # Find the largest font that fits the factual value without it.
-        font=12
-        for candidate in range(preferred,11,-1):
-            wrapped=_wrap(value,int(value_w),candidate,True)
-            if (len(wrapped)<=2 and all("…" not in part for part in wrapped)
-                    and len(wrapped)*candidate*1.25<=value_h):
-                font=candidate
-                break
-        scene.text("specs", value, sep+2, by+5, value_w,
-                   value_h, font, font, accent, True,
-                   f"pro-spec-value-{i}", 2)
+        title_w=max(20,sep-bx-102)
+        _fit_fact(scene, "specs", name, bx+92, by+6,
+                  title_w, rh-11, title_size, INK,
+                  f"pro-spec-name-{i}")
+        value_w=max(20,bx+col_w-sep-12)
+        preferred=33 if row==0 and rh>=57 else 28
+        _fit_fact(scene, "specs", value, sep+2, by+5,
+                  value_w, rh-10, preferred, accent,
+                  f"pro-spec-value-{i}")
 
 def _ribbon(scene, layer, text, x, y, width, height, accent, ident):
     scene.polygon(layer, [(x, y), (x+width, y),
