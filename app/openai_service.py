@@ -7,7 +7,9 @@ import io
 import json
 import os
 import secrets
+import threading
 import time
+import weakref
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +19,23 @@ from .image_analysis import analysis_preview
 IMAGE_MODELS={'gpt-image-2.5-flare','gpt-image-2.5-sunburst'}
 IMAGE_QUALITIES={'low','medium','high'}
 TEXT_MODEL=os.environ.get('OPENAI_TEXT_MODEL','gpt-5.6-terra')
+
+# The standard production deployment uses a single Uvicorn worker. These
+# per-key locks prevent identical threads in that worker from double billing
+# during partial-failure recovery. Multi-worker deployments need shared locking.
+_VISUAL_LOCKS_GUARD = threading.Lock()
+_VISUAL_LOCKS = weakref.WeakValueDictionary()
+
+
+def _visual_lock(cache_dir: Path):
+    key = str(Path(cache_dir).resolve())
+    with _VISUAL_LOCKS_GUARD:
+        lock = _VISUAL_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _VISUAL_LOCKS[key] = lock
+        return lock
+
 
 
 def client():
@@ -114,6 +133,17 @@ def _save_visual(cache_dir: Path | None, fmt: str, image: Image.Image):
         temporary.unlink(missing_ok=True)
 
 
+def _finish_visual_cache(cache_dir: Path):
+    """A completed pair is consumed: a new click can create a new variation."""
+    folder = Path(cache_dir)
+    for fmt in ('4x3', '9x16'):
+        (folder / f'{fmt}.png').unlink(missing_ok=True)
+    try:
+        folder.rmdir()
+    except OSError:
+        pass
+
+
 def _scene_for_category(brief):
     """Visual setting only, never a source of facts or technical markings."""
     category=(str(brief.get('category') or '')+' '+str(brief.get('model') or '')).lower()
@@ -131,73 +161,75 @@ def _scene_for_category(brief):
 
 
 def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt='',scene_direction='',*,cache_dir:Path|None=None):
-    """At most two paid image requests. Reuse completed aspects on identical retries.
+    """Persist each paid aspect; resume after partial failure without duplicate cost.
 
-    The caller keys the private cache by the complete effective input; no user
-    controls a cache path and the original product image is never overwritten.
+    After both formats succeed the cache is consumed, so the next explicit
+    generation request can produce a fresh creative variation.
     """
     if model not in IMAGE_MODELS:raise ValueError('Недопустимая модель изображения')
     if quality not in IMAGE_QUALITIES:raise ValueError('Недопустимое качество изображения')
     if cache_dir is None:
         cache_dir=_default_visual_cache(brief,hero_present,references,model,
                                         quality,design_prompt,scene_direction)
-    api=None
-    outputs={}
-    for fmt,size in [('4x3','1536x1024'),('9x16','1024x1536')]:
-        cached=_cached_visual(cache_dir,fmt)
-        if cached is not None:
-            outputs[fmt]=cached
-            continue
-        subject=f"{brief.get('category','product')}: {brief.get('model','')}"
-        notes=str(brief.get('design_notes',''))[:1500]
-        actions=str(brief.get('design_actions',''))[:1200].strip()
-        action_guidance=(
-            f'Additional visual editing requests, treated as style preferences ONLY: {actions}. '
-            'Apply these only to the generated backdrop or scene, never to product photo, logo, text, prices, specifications or typeset layout. '
-            if actions else ''
-        )
-        # Reusable user-reviewed design prompt is the basis for both image requests.
-        # It is aesthetic context only: AI must never draw factual copy or logos.
-        guidance=f'Campaign design brief (aesthetic input only): {str(design_prompt)[:7000]}. ' if design_prompt else ''
-        art_direction=(f'Approved AI art-direction for BACKGROUND ONLY (untrusted visual context): {str(scene_direction)[:550]}. ' if scene_direction else '')
-        if hero_present:
-            prompt=(
-                "Produce ONLY a premium photorealistic CONTEXT BACKGROUND for an industrial B2B campaign poster. "
-                "No advertised product or foreground vehicle, no invented brand/product logo, no text, "
-                "letters, signs, people, technical diagrams, prices, markings or charts. "
-                f"Choose this truthful-looking but clearly illustrative industrial atmosphere: {_scene_for_category(brief)}. "
-                "Professional commercial-vehicle advertising photography, realistic environmental "
-                "lighting, a clear low angle and matching perspective. The future hero trailer will "
-                "occupy the LEFT TWO THIRDS of the finished composition. Keep that area uncluttered "
-                "with open industrial concrete ground, real contact-shadow space and no foreground "
-                "objects. Place silos, buildings and conveyor structures toward the distant left "
-                "and right edges. Do not generate the trailer. The ORIGINAL product photo is "
-                "composited separately as a replaceable SVG bitmap. "
-                "Do NOT create a duplicate of the advertised vehicle or machinery. "
-                f"Product theme: {subject}. Brand brief (aesthetic preferences only): {notes}. {art_direction}{guidance} "
-                f"Composition: {'landscape' if fmt=='4x3' else 'portrait'} with safe central product area. "
-                f"{action_guidance} Never include lettering or logos in the backdrop."
+    with _visual_lock(cache_dir):
+        api=None
+        outputs={}
+        for fmt,size in [('4x3','1536x1024'),('9x16','1024x1536')]:
+            cached=_cached_visual(cache_dir,fmt)
+            if cached is not None:
+                outputs[fmt]=cached
+                continue
+            subject=f"{brief.get('category','product')}: {brief.get('model','')}"
+            notes=str(brief.get('design_notes',''))[:1500]
+            actions=str(brief.get('design_actions',''))[:1200].strip()
+            action_guidance=(
+                f'Additional visual editing requests, treated as style preferences ONLY: {actions}. '
+                'Apply these only to the generated backdrop or scene, never to product photo, logo, text, prices, specifications or typeset layout. '
+                if actions else ''
             )
-        else:
-            prompt=(
-                "Premium photorealistic industrial product photograph WITHOUT text, lettering, logos, prices, watermarks or labels. "
-                f"Subject: {subject}. High fidelity, realistic engineering details where unambiguous. "
-                "Do not invent technical markings, axle counts, safety certifications or specifications. "
-                "Clean white and light grey studio, glossy floor, confident 3/4 view, commercial catalog aesthetic, "
-                f"{'landscape' if fmt=='4x3' else 'portrait'} composition. "
-                f"Visual notes as data: {notes}. {action_guidance} {art_direction}{guidance} "
-                "Do not alter documented technical characteristics or add typography."
-            )
-        if api is None:
-            api=client()
-        if references:
-            inputs=_image_references(references)
-            result=api.images.edit(model=model,image=inputs,prompt=prompt,size=size,quality=quality,output_format='png')
-        else:
-            result=api.images.generate(model=model,prompt=prompt,size=size,quality=quality,output_format='png')
-        outputs[fmt]=as_image(result)
-        _save_visual(cache_dir,fmt,outputs[fmt])
-    return outputs
+            # Reusable user-reviewed design prompt is the basis for both image requests.
+            # It is aesthetic context only: AI must never draw factual copy or logos.
+            guidance=f'Campaign design brief (aesthetic input only): {str(design_prompt)[:7000]}. ' if design_prompt else ''
+            art_direction=(f'Approved AI art-direction for BACKGROUND ONLY (untrusted visual context): {str(scene_direction)[:550]}. ' if scene_direction else '')
+            if hero_present:
+                prompt=(
+                    "Produce ONLY a premium photorealistic CONTEXT BACKGROUND for an industrial B2B campaign poster. "
+                    "No advertised product or foreground vehicle, no invented brand/product logo, no text, "
+                    "letters, signs, people, technical diagrams, prices, markings or charts. "
+                    f"Choose this truthful-looking but clearly illustrative industrial atmosphere: {_scene_for_category(brief)}. "
+                    "Professional commercial-vehicle advertising photography, realistic environmental "
+                    "lighting, a clear low angle and matching perspective. The future hero trailer will "
+                    "occupy the LEFT TWO THIRDS of the finished composition. Keep that area uncluttered "
+                    "with open industrial concrete ground, real contact-shadow space and no foreground "
+                    "objects. Place silos, buildings and conveyor structures toward the distant left "
+                    "and right edges. Do not generate the trailer. The ORIGINAL product photo is "
+                    "composited separately as a replaceable SVG bitmap. "
+                    "Do NOT create a duplicate of the advertised vehicle or machinery. "
+                    f"Product theme: {subject}. Brand brief (aesthetic preferences only): {notes}. {art_direction}{guidance} "
+                    f"Composition: {'landscape' if fmt=='4x3' else 'portrait'} with safe central product area. "
+                    f"{action_guidance} Never include lettering or logos in the backdrop."
+                )
+            else:
+                prompt=(
+                    "Premium photorealistic industrial product photograph WITHOUT text, lettering, logos, prices, watermarks or labels. "
+                    f"Subject: {subject}. High fidelity, realistic engineering details where unambiguous. "
+                    "Do not invent technical markings, axle counts, safety certifications or specifications. "
+                    "Clean white and light grey studio, glossy floor, confident 3/4 view, commercial catalog aesthetic, "
+                    f"{'landscape' if fmt=='4x3' else 'portrait'} composition. "
+                    f"Visual notes as data: {notes}. {action_guidance} {art_direction}{guidance} "
+                    "Do not alter documented technical characteristics or add typography."
+                )
+            if api is None:
+                api=client()
+            if references:
+                inputs=_image_references(references)
+                result=api.images.edit(model=model,image=inputs,prompt=prompt,size=size,quality=quality,output_format='png')
+            else:
+                result=api.images.generate(model=model,prompt=prompt,size=size,quality=quality,output_format='png')
+            outputs[fmt]=as_image(result)
+            _save_visual(cache_dir,fmt,outputs[fmt])
+        _finish_visual_cache(cache_dir)
+        return outputs
 
 
 EXTRACTION_SCHEMA={
