@@ -45,11 +45,11 @@ def test_successful_first_aspect_is_preserved_after_second_fails(monkeypatch, tm
     outputs = openai_service.generate_visuals(**params)
     assert set(outputs) == {'4x3', '9x16'}
     assert images.calls == ['1536x1024', '1024x1536', '1024x1536']
-    assert (tmp_path / 'private-cache' / '9x16.png').is_file()
-
-    # A later retry must incur zero paid calls.
+    assert not (tmp_path / 'private-cache' / '9x16.png').exists()
+    # A completed pair is consumed; a new click creates a new variation.
     openai_service.generate_visuals(**params)
-    assert len(images.calls) == 3
+    assert images.calls == ['1536x1024', '1024x1536', '1024x1536',
+                            '1536x1024', '1024x1536']
 
 
 def test_corrupt_cached_file_is_regenerated(monkeypatch, tmp_path):
@@ -70,8 +70,9 @@ def test_corrupt_cached_file_is_regenerated(monkeypatch, tmp_path):
         default_brief(), True, [], cache_dir=root)
     assert set(result) == {'4x3', '9x16'}
     assert images.calls == ['1536x1024', '1024x1536']
-    with Image.open(root / '4x3.png') as image:
-        image.verify()
+    # A successfully completed pair is not sticky across later requests.
+    assert not (root / '4x3.png').exists()
+    assert not (root / '9x16.png').exists()
 
 
 def test_automatic_cache_key_includes_request_inputs_and_has_ttl(monkeypatch, tmp_path):
@@ -102,3 +103,44 @@ def test_automatic_cache_key_includes_request_inputs_and_has_ttl(monkeypatch, tm
         brief, True, [], 'gpt-image-2.5-flare', 'high', 'design', '')
     assert newer != first
     assert not first.exists()
+
+
+def test_concurrent_retry_avoids_duplicate_paid_landscape(monkeypatch, tmp_path):
+    """Identical attempts in one worker must serialize around a partial pair."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    paused = threading.Event()
+    release = threading.Event()
+    calls = []
+    guard = threading.Lock()
+
+    class Images:
+        def generate(self, **kwargs):
+            size = kwargs['size']
+            with guard:
+                calls.append(size)
+                portrait_call = calls.count('1024x1536')
+            if size == '1024x1536' and portrait_call == 1:
+                paused.set()
+                if not release.wait(10):
+                    raise AssertionError('test worker did not resume')
+                raise RuntimeError('temporary portrait failure')
+            return _encoded_result('blue')
+
+    api = type('API', (), {'images': Images()})()
+    monkeypatch.setattr(openai_service, 'client', lambda: api)
+    params = dict(brief=default_brief(), hero_present=True, references=[],
+                  cache_dir=tmp_path / 'shared')
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(openai_service.generate_visuals, **params)
+        assert paused.wait(10), 'first request never reached the second paid call'
+        second = executor.submit(openai_service.generate_visuals, **params)
+        release.set()
+        with pytest.raises(RuntimeError, match='temporary portrait failure'):
+            first.result(timeout=10)
+        assert set(second.result(timeout=10)) == {'4x3', '9x16'}
+
+    assert calls == ['1536x1024', '1024x1536', '1024x1536']
+    assert not (tmp_path / 'shared' / '4x3.png').exists()
