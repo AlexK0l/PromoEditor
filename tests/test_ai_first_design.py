@@ -180,6 +180,18 @@ def test_ai_first_requires_key_and_never_silently_changes_to_template(monkeypatc
     assert "OPENAI_API_KEY" in result.json()["detail"]
 
 
+def test_ai_first_requires_product_photo_or_explicit_demo(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY","fake-ci-key")
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    response=client.post("/api/generate",data={
+        "payload":json.dumps(default_brief(),ensure_ascii=False),
+        "design_mode":"ai_first","use_openai":"false",
+        "use_demo":"false",
+    })
+    assert response.status_code==400,response.text
+    assert "фотографию товара" in response.json()["detail"]
+
+
 def test_ai_first_end_to_end_generate_and_export_optional_reference(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY","fake-ci-key")
     monkeypatch.setattr(main,"_guard_rate",lambda request:None)
