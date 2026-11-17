@@ -38,6 +38,7 @@ jobs:
           done
           python tests/browser_editor_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
           python tests/browser_assets_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
+          python tests/browser_ai_concepts_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
       - name: Browser password form with Origin null
         run: |
           export PROMO_AUTH_ENABLED=1
