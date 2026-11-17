@@ -419,12 +419,18 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             warnings.append('Габариты отсутствуют в форме: векторная схема размеров без данных не создавалась.')
         if not brief.get('price'):
             warnings.append('Цена не указана: вместо числа используется общий призыв запросить предложение.')
-        if len(brief.get('specs') or [])>7:
-            warnings.append('Горизонтальный макет содержит первые 7 подтверждённых ТТХ; весь список сохранён в JSON-брифе.')
+        spec_limit=8 if design_mode=='ai_first' else 7
+        if len(brief.get('specs') or [])>spec_limit:
+            warnings.append(
+                f'Режим {design_mode}: на постере показаны первые '
+                f'{spec_limit} подтверждённых ТТХ; остальные сохранены в JSON-брифе.')
         if len(brief.get('dimensions') or [])>4:
             warnings.append('В макете используются первые 4 габарита; остальные сохранены в JSON-брифе.')
-        if len(brief.get('benefits') or [])>5:
-            warnings.append('В рекламной полосе показаны первые 5 преимуществ; остальные сохранены в JSON-брифе.')
+        benefit_limit=6 if design_mode=='ai_first' else 5
+        if len(brief.get('benefits') or [])>benefit_limit:
+            warnings.append(
+                f'На постере показаны первые {benefit_limit} преимуществ; '
+                'остальные сохранены в JSON-брифе.')
         if brief.get('design_actions') and not (
                 use_openai or design_mode=='ai_first'):
             warnings.append(
