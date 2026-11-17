@@ -24,7 +24,7 @@ from .campaign_pro_v3 import _type
 from .campaign_pro_v4 import _side_elevation, _tight_product_photo
 from .render import compute_roi
 
-REGIONS = ("header", "hero", "specs", "drawing", "benefits", "finance", "footer")
+REGIONS = ("header", "hero", "specs", "drawing", "benefits", "proof", "finance", "footer")
 SIZES = {"4x3": (1440, 1080), "9x16": (1080, 1920)}
 IMAGE_SIZES = {"4x3": "1536x1024", "9x16": "1024x1536"}
 HEX = re.compile(r"#[0-9a-fA-F]{6}\Z")
@@ -79,6 +79,7 @@ def _active(brief: dict) -> set[str]:
         ("specs", bool(brief.get("specs"))),
         ("drawing", bool(brief.get("dimensions")) or bool(brief.get("_has_drawing"))),
         ("benefits", bool(brief.get("benefits"))),
+        ("proof", bool(brief.get("proof_points") or brief.get("hero_claims"))),
         ("finance", bool(brief.get("show_roi") and compute_roi(brief))),
     ):
         if cond:
@@ -110,11 +111,13 @@ def validate_plan(plan: Any, brief: dict) -> dict:
         mins = {
             "4x3": {"header": (900, 103), "hero": (480, 250),
                     "specs": (305, 275), "drawing": (500, 122),
-                    "benefits": (650, 65), "finance": (650, 70),
+                    "benefits": (650, 65), "proof": (650, 48),
+                    "finance": (650, 68),
                     "footer": (900, 103)},
             "9x16": {"header": (650, 145), "hero": (550, 300),
                      "specs": (570, 280), "drawing": (580, 150),
-                     "benefits": (560, 125), "finance": (560, 115),
+                     "benefits": (560, 125), "proof": (560, 110),
+                     "finance": (560, 115),
                      "footer": (650, 165)},
         }[key]
         for name in active:
@@ -181,14 +184,18 @@ def generate_plan(brief: dict, *, references: list[bytes] | None = None,
         "layout are integer [x,y,width,height] in a 1000x1000 normalized grid. "
         "Place header at top, footer at bottom. The hero should dominate. "
         "Here are safe EXAMPLE placements to understand the geometry (not "
-        "a mandatory template): landscape header [0,0,1000,150], hero "
-        "[0,150,645,410], specs [650,150,350,410], drawing "
-        "[0,560,1000,170], benefits [0,730,1000,85], finance "
-        "[0,815,1000,80], footer [0,895,1000,105]; portrait header "
-        "[0,0,1000,125], hero [0,125,1000,270], specs "
-        "[0,395,1000,185], drawing [0,580,1000,135], benefits "
-        "[0,715,1000,100], finance [0,815,1000,90], footer "
-        "[0,905,1000,95]. Create your own art-directed variation while "
+        "a mandatory template): landscape header [0,0,1000,145], hero "
+        "[0,145,645,380], specs [650,145,350,380], drawing "
+        "[0,525,1000,155], benefits [0,680,1000,75], proof "
+        "[0,755,1000,55], finance [0,810,1000,70], footer "
+        "[0,880,1000,120]; portrait header [0,0,1000,120], "
+        "hero [0,120,1000,250], specs [0,370,1000,190], "
+        "drawing [0,560,1000,128], benefits [0,688,1000,98], "
+        "proof [0,786,1000,75], finance [0,861,1000,90], "
+        "footer [0,951,1000,49]. "
+        "IMPORTANT: footer portrait must be >=165 pixels high, so "
+        "move other sections up and reserve at least 90 normalized units. "
+        "Create your own safe art-directed variation while "
         "maintaining these minimum visual areas and a coherent hierarchy. "
         "Reserve genuinely separate, sufficiently large areas for specifications, "
         "real technical drawing, benefits and finance where supplied. "
@@ -496,6 +503,34 @@ def render_ai_poster(brief: dict, key: str, plan: dict,
             _text(scene,"benefits",item,xx+40,yy+3,cw-49,ch-5,
                   min(25,int(ch*.30)),12,
                   colors["ink"],True,f"ai-benefit-{i}",3)
+
+    if "proof" in active:
+        x,y,bw,bh=_pos(layout,key,"proof")
+        _panel(scene,"claims",x,y,bw,bh,colors["surface"],"ai-proof-panel")
+        statements=[str(t).strip() for t in (
+            brief.get("proof_points") or brief.get("hero_claims") or [])
+            if str(t).strip()][:4]
+        heading="ПОДТВЕРЖДЁННЫЕ ФАКТЫ" if brief.get("proof_points") else "КЛЮЧЕВЫЕ ТЕЗИСЫ"
+        lead=min(218,bw*.26)
+        scene.rect("claims",x+4,y+4,lead,bh-8,a,
+                   rad=5,ident="ai-proof-label-bg")
+        _text(scene,"claims",heading,x+14,y+bh*.17,
+              lead-19,bh*.70,min(23,int(bh*.31)),11,
+              "#FFFFFF",True,"ai-proof-heading",2)
+        ww=max(80,bw-lead-14)
+        cols=4 if ww>=800 else 2
+        cols=min(cols,len(statements))
+        rows=math.ceil(len(statements)/max(cols,1))
+        cw=ww/cols
+        ch=bh/rows
+        for i,item in enumerate(statements):
+            xx=x+lead+12+(i%cols)*cw
+            yy=y+(i//cols)*ch
+            _check(scene,"claims",xx+4,yy+ch*.32,
+                   min(17,max(9,ch*.23)),a,f"ai-proof-check-{i}")
+            _text(scene,"claims",item,xx+27,yy+3,
+                  cw-32,ch-5,min(19,int(ch*.27)),11,
+                  colors["ink"],True,f"ai-proof-statement-{i}",3)
 
     if "finance" in active:
         roi=compute_roi(brief)
