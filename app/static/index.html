@@ -58,8 +58,9 @@
             <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотипы</strong><small id="file-logo">Можно загрузить несколько</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Логотипы и бренд-материалы, можно выбрать несколько"></label>
             <label class="mini-upload" for="drawing"><span class="mini-icon" aria-hidden="true">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">JPG, PNG или PDF · сразу в основной форме</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf" aria-label="Загрузить технический чертёж"></label>
             <label class="mini-upload" for="background"><span class="mini-icon" aria-hidden="true">▧</span><span><strong>Фотофон / промышленная сцена</strong><small id="file-background">Необязательно · JPG, PNG или WEBP · без платного AI</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="background" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Загрузить собственное фото промышленной площадки для фона постера"></label>
+            <label class="mini-upload" for="reference_example"><span class="mini-icon" aria-hidden="true">✦</span><span><strong>Рекламный эталон</strong><small id="file-reference_example">Необязательно — AI создаст концепцию и без примера</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="reference_example" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Необязательный пример рекламного дизайна"></label>
           </div>
-          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="background" hidden>Убрать фон-сцену</button></div>
+          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="background" hidden>Убрать фон-сцену</button><button type="button" data-clear="reference_example" hidden>Убрать эталон</button></div>
           <button type="button" id="inspect-btn" class="quick-extract" hidden>Извлечь характеристики из документов <span aria-hidden="true">→</span></button>
           <p class="asset-intro">Добавьте фотографии, чертёж, документы и логотип. Для реалистичного промышленного окружения загрузите отдельное фото фона или включите OpenAI. Если чертёж попал в фотографии, назначьте ему роль «Использовать как чертёж» в списке ниже. <strong>Не все загруженные файлы попадут в промо.</strong></p>
           <div id="asset-files-list" class="asset-files-list" role="list" aria-label="Загруженные материалы и приоритеты"></div>
@@ -80,6 +81,22 @@
       </div>
 
       <div class="composer-bottom">
+        <fieldset class="mode-choice" id="generation-mode">
+          <legend>Способ создания макета</legend>
+          <label><input type="radio" name="generation_mode" id="mode-ai-pro" value="ai_pro" checked><span><strong>AI PRO — OpenAI проектирует весь дизайн</strong><small>Три концепции, выбор композиции, точные данные и редактируемый SVG</small></span></label>
+          <label><input type="radio" name="generation_mode" id="mode-template" value="template"><span><strong>Быстрый шаблон</strong><small>Старый генератор без платного планирования дизайна</small></span></label>
+        </fieldset>
+        <div class="ai-creative-settings" id="ai-creative-settings">
+          <label class="field" for="design-style"><span>Характер рекламы</span><select id="design-style">
+            <option value="premium">Премиальный</option><option value="technical">Технический</option>
+            <option value="bold">Яркий / энергичный</option><option value="minimal">Минималистичный</option>
+          </select></label>
+          <label class="field" for="design-goal"><span>Главная задача</span><select id="design-goal">
+            <option value="sales">Продажи</option><option value="engineering">Техническая убедительность</option>
+            <option value="prestige">Имидж бренда</option><option value="balanced">Универсальная подача</option>
+          </select></label>
+          <p class="field-tip">Эталон не требуется. OpenAI определит композицию по данным, фотографиям и выбранной задаче. Стоимость AI-запроса возникает только при нажатии «Создать концепции».</p>
+        </div>
         <div class="choices-row">
           <div class="style-wrap">
             <span class="control-label">Стиль оформления <span class="field-hint">яркий рекламный — ближе к эталону</span></span>
@@ -91,7 +108,7 @@
               <button type="button" class="style-pill" data-style="minimal" aria-pressed="false"><span class="style-dot dot-light"></span>Минимальный</button>
             </div>
           </div>
-          <label class="ai-choice" for="use-openai"><span class="ai-text"><strong>Фотореалистичный фон для PRO · OpenAI</strong><small id="ai-description">Для сцены как в эталоне: зерновой терминал / промышленная площадка. 2 платных запроса при включении</small></span><input id="use-openai" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span></label>
+          <label class="ai-choice" for="use-openai"><span class="ai-text"><strong>Дополнительно создать AI-фон в финале</strong><small id="ai-description">Не обязательно: два платных запроса для двух форматов; исходная техника и текст остаются отдельными слоями</small></span><input id="use-openai" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span></label>
         </div>
         <section id="asset-workflow" class="asset-workflow" aria-labelledby="asset-workflow-title">
           <div class="asset-workflow-head">
@@ -144,9 +161,18 @@
           </label>
           <p id="promo-prompt-status" class="prompt-status" aria-live="polite">Промпт будет сформирован из данных формы. Изменение исходных полей делает его устаревшим.</p>
         </section>
+        <section id="ai-concepts-workflow" class="ai-concepts-workflow" aria-labelledby="ai-concepts-title">
+          <div class="prompt-head"><div>
+            <span class="step-label">ШАГ 3 · AI-КОНЦЕПЦИИ</span>
+            <h3 id="ai-concepts-title">Выберите рекламную композицию</h3>
+            <p>OpenAI создаст три разных плана 4:3 и 9:16. Каждый предпросмотр сразу использует ваши настоящие фото, чертёж и проверенные факты. Эталон — по желанию.</p>
+          </div><button type="button" id="generate-concepts-btn" class="primary-button">Создать 3 AI-концепции</button></div>
+          <p id="ai-concepts-status" role="status" aria-live="polite">Сначала проанализируйте материалы, затем создайте концепции. Это отдельный платный запрос к OpenAI.</p>
+          <div id="ai-concept-cards" class="ai-concept-grid" role="group" aria-label="Варианты рекламного дизайна" hidden></div>
+        </section>
         <div class="generate-row">
           <span id="modebanner" class="modebanner" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span><strong>Без расходов на API</strong><small>Обычная сборка изображений</small></span></span>
-          <button type="button" id="generate-btn" class="primary-button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Создать PNG · JPEG · SVG <span aria-hidden="true">→</span></button>
+          <button type="button" id="generate-btn" class="primary-button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Собрать выбранный макет <span aria-hidden="true">→</span></button>
         </div>
       </div>
     </section>
@@ -309,7 +335,7 @@
 
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
-  <script src="/static/assets.js?v=20261117-premium-scene-2" defer></script>
+  <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
   <script src="/static/app.js?v=20261116-demo-button-fix" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
