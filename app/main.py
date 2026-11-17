@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 import os
@@ -26,6 +27,8 @@ from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .image_analysis import validate_image_dimensions
 from .editable_export import build_promo_prompt, create_editable_svg, rasterize_svg
+from .ai_layout import generate_concepts, STYLES, GOALS
+from .ai_concept_renderer import render_ai_concept_svg
 from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
@@ -48,7 +51,8 @@ RATE=defaultdict(list)
 LOCK=threading.Lock()
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
 FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
-       'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','edit.png'}
+       'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','layout_spec.json','edit.png'}
+FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16')})
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
@@ -90,7 +94,8 @@ def config():
             'logout_csrf_token':issue_form_token('logout') if auth_enabled() else None,
             'image_models':['gpt-image-2.5-flare','gpt-image-2.5-sunburst'],
             'max_file_mb':20,'max_files':MAX_FILES,'multi_assets':True,'asset_analysis':True,'formats':[{'id':'4x3','size':[1440,1080]},{'id':'9x16','size':[1080,1920]}],
-            'preview':False,'export_formats':['png','jpeg','svg'],'editable_format':'svg'}
+            'preview':True,'generation_modes':['ai_pro','template'],'ai_concepts':3,'reference_required':False,
+            'export_formats':['png','jpeg','svg'],'editable_format':'svg'}
 
 
 @app.get('/api/demo')
@@ -191,8 +196,10 @@ async def _asset_groups(form):
     drawings+=await _files(form,'drawing',ALLOWED_IMAGES|{'.pdf'},collection=True)
     backgrounds=await _files(form,'background',ALLOWED_IMAGES,collection=True)
     backgrounds+=await _files(form,'backgrounds',ALLOWED_IMAGES,collection=True)
+    examples=await _files(form,'reference_example',ALLOWED_IMAGES,collection=True)
     groups={'photos':photos,'logos':logos,'documents':docs,
-            'references':refs,'drawings':drawings,'backgrounds':backgrounds}
+            'references':refs,'drawings':drawings,'backgrounds':backgrounds,
+            'reference_examples':examples}
     all_items=sum(groups.values(),[])
     if len(all_items)>MAX_FILES:
         raise HTTPException(400,detail=f'Не более {MAX_FILES} файлов в проекте.')
@@ -265,7 +272,8 @@ def _demo_hero():
 
 def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                    use_demo,use_openai,model,quality,design_prompt,asset_report=None,
-                   background_raw=None):
+                   background_raw=None,concept=None,concept_set_id=None,
+                   reference_example_raw=None):
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
@@ -282,7 +290,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         if use_openai:
             visuals=generate_visuals(brief,hero_present=(hero is not None),
                                      references=references,model=model,
-                                     quality=quality,design_prompt=design_prompt)
+                                     quality=quality,design_prompt=design_prompt,
+                                     scene_direction=concept['scene_prompt'] if concept else '')
             ai_product=hero is None
         paths={};jpeg_paths={};corel_paths={}
         for key in ('4x3','9x16'):
@@ -292,8 +301,13 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             # the customer's own licensed industrial photo is used as the
             # separate scene layer beneath the unchanged product bitmap.
             scene=None if ai_product else (visual if visual is not None else user_backdrop)
-            svg=create_editable_svg(brief,key,hero=photo,detail=detail,logo=logo,
-                                    drawing=drawing,backdrop=scene,ai_product=ai_product)
+            if concept is None:
+                svg=create_editable_svg(brief,key,hero=photo,detail=detail,logo=logo,
+                                        drawing=drawing,backdrop=scene,ai_product=ai_product)
+            else:
+                svg=render_ai_concept_svg(brief,key,concept,hero=photo,detail=detail,
+                                          logo=logo,drawing=drawing,backdrop=scene,
+                                          ai_product=ai_product)
             # The SVG is the master. PNG and JPEG are rendered from the SAME
             # vector scene, so opening the SVG in CorelDRAW has matching layout.
             png,jpeg=rasterize_svg(svg)
@@ -307,10 +321,17 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             jpeg_paths[key]=f'/files/{job_id}/{jpg_name}'
             corel_paths[key]=f'/files/{job_id}/{svg_name}'
         (folder/'promo_prompt.txt').write_text(design_prompt,encoding='utf-8')
+        if concept is not None:
+            (folder/'layout_spec.json').write_text(
+                json.dumps({'generation_mode':'ai_pro','concept_set_id':concept_set_id,
+                            'selected_concept':concept},ensure_ascii=False,indent=2),
+                encoding='utf-8')
         (folder/'asset_selection.json').write_text(json.dumps(asset_report or {},ensure_ascii=False,indent=2),encoding='utf-8')
         briefing=dict(brief)
         briefing['_metadata']={
-            'generator':'PromoEditor SVG scene 2.0',
+            'generator':'AI-directed editable SVG' if concept else 'PromoEditor SVG template',
+            'generation_mode':'ai_pro' if concept else 'template',
+            'concept_set_id':concept_set_id,
             'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
             'ai_product_visualization':ai_product,
             'verified_specs':False,
@@ -341,8 +362,12 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'poster_4x3.png','poster_9x16.png',
             'poster_4x3.jpg','poster_9x16.jpg',
             'corel_4x3.svg','corel_9x16.svg',
-            'promo_prompt.txt','brief.json','asset_selection.json','CORELDRAW_README.txt'
+            'promo_prompt.txt','brief.json','asset_selection.json',
+            'CORELDRAW_README.txt'
         ]
+        if concept is not None:
+            names.append('layout_spec.json')
+
         with zipfile.ZipFile(folder/'promo_kit.zip','w',
                             compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
             for filename in names:
@@ -360,7 +385,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                                  ('secondary_photo',detail_raw),
                                  ('drawing',drawing_raw),
                                  ('logo',logo_raw),
-                                 ('background',background_raw)):
+                                 ('background',background_raw),
+                                 ('reference_example',reference_example_raw)):
                 asset=originals.get(selected.get(role))
                 if not payload or not asset:continue
                 extension=Path(str(asset.get('name') or '')).suffix.lower()
@@ -388,12 +414,112 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'prompt_file':f'/files/{job_id}/promo_prompt.txt',
             'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
             'asset_selection':f'/files/{job_id}/asset_selection.json',
+            'layout_spec':f'/files/{job_id}/layout_spec.json',
+            'generation_mode':'ai_pro' if concept else 'template',
             'selected_assets':(asset_report or {}).get('selected_assets',{}),
             'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
         }
     except Exception:
         shutil.rmtree(folder,ignore_errors=True)
         raise
+
+
+def _concept_fingerprint(brief:dict,report:dict)->str:
+    """Tie AI-authored geometry to validated copy and the current source files."""
+    assets=[(item.get('id'),item.get('sha256')) for item in
+            report.get('project_assets',[]) if isinstance(item,dict)]
+    blob=json.dumps({'brief':brief,'assets':assets,
+                     'selected':report.get('selected_assets',{})},
+                    ensure_ascii=False,sort_keys=True,
+                    separators=(',',':')).encode('utf-8')
+    return hashlib.sha256(blob).hexdigest()
+
+
+@app.post('/api/concepts')
+async def create_ai_concepts(request:Request):
+    """AI plans three editable concepts; reference-example upload is OPTIONAL.
+
+    Each preview uses the existing original images, exact facts and generic
+    neutral/user-supplied backgrounds. Final photorealistic scene generation
+    is a separate, explicitly selected paid step.
+    """
+    _guard_rate(request)
+    if not os.getenv('OPENAI_API_KEY'):
+        raise HTTPException(400,detail='Для AI PRO настройте OPENAI_API_KEY. Шаблонный режим доступен без ключа.')
+    if int(request.headers.get('content-length') or 0)>MAX_ALL:
+        raise HTTPException(413,detail='Превышен общий лимит 68 МБ.')
+    form=await request.form()
+    raw=form.get('payload','{}')
+    if not isinstance(raw,str) or len(raw)>48000:
+        raise HTTPException(400,detail='Слишком большой бриф.')
+    try:
+        brief=_normalize(json.loads(raw))
+    except (json.JSONDecodeError,ValueError) as exc:
+        raise HTTPException(400,detail='Некорректный бриф.') from exc
+    if not brief.get('model'):
+        raise HTTPException(400,detail='Укажите модель товара.')
+    style=str(form.get('design_style','premium'))
+    goal=str(form.get('design_goal','sales'))
+    if style not in STYLES or goal not in GOALS:
+        raise HTTPException(400,detail='Недопустимый стиль или цель рекламы.')
+    groups=await _asset_groups(form)
+    prefs,cached=_asset_review(form)
+    try:
+        report,records=await asyncio.to_thread(
+            analyze_project,groups,prefs,cached_report=cached,use_ai=False)
+        hero_raw=chosen_bytes(report,records,'primary_photo')
+        reference_raw=chosen_bytes(report,records,'reference_example')
+        concepts=await asyncio.to_thread(
+            generate_concepts,brief,hero=hero_raw,reference=reference_raw,
+            style=style,goal=goal)
+        hero=load_image(hero_raw)
+        detail=load_image(chosen_bytes(report,records,'secondary_photo'))
+        logo=load_image(chosen_bytes(report,records,'logo'))
+        drawing_raw=chosen_bytes(report,records,'drawing')
+        drawing_id=report['selected_assets'].get('drawing')
+        if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
+            drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
+        drawing=load_image(drawing_raw)
+        backdrop=load_image(chosen_bytes(report,records,'background'))
+        _clean_jobs()
+        job_id=secrets.token_hex(16)
+        folder=STORAGE/job_id
+        folder.mkdir(mode=0o700)
+        try:
+            saved={'version':1,'brief_hash':_concept_fingerprint(brief,report),
+                   'style':style,'goal':goal,'reference_used':reference_raw is not None,
+                   'concepts':concepts}
+            (folder/'concepts.json').write_text(
+                json.dumps(saved,ensure_ascii=False,indent=2),encoding='utf-8')
+            cards=[]
+            for i,concept in enumerate(concepts):
+                previews={}
+                for fmt in ('4x3','9x16'):
+                    svg=render_ai_concept_svg(
+                        brief,fmt,concept,hero=hero,detail=detail,logo=logo,
+                        drawing=drawing,backdrop=backdrop)
+                    png,_=rasterize_svg(svg)
+                    name=f'concept_{i}_{fmt}.png'
+                    (folder/name).write_bytes(png)
+                    previews[fmt]=f'/files/{job_id}/{name}'
+                cards.append({'index':i,'name':concept['name'],
+                              'rationale':concept['rationale'],
+                              'previews':previews,'layout_spec':concept['layouts']})
+        except Exception:
+            shutil.rmtree(folder,ignore_errors=True)
+            raise
+        return {'concept_set_id':job_id,'concepts':cards,
+                'reference_used':reference_raw is not None,
+                'style':style,'goal':goal,
+                'message':'AI разработал три композиции. Выберите одну для финальной сборки.'}
+    except ValueError as exc:
+        raise HTTPException(400,detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            502,detail=f'Не удалось создать AI-концепции. Проверьте OpenAI API ({type(exc).__name__}).'
+        ) from exc
 
 
 @app.post('/api/prompt')
@@ -457,15 +583,44 @@ async def generate(request:Request):
     drawing_raw=chosen_bytes(report,records,'drawing')
     background_raw=chosen_bytes(report,records,'background')
     references=chosen_bytes(report,records,'references')
+    reference_example_raw=chosen_bytes(report,records,'reference_example')
+    mode=str(form.get('generation_mode','template'))
+    if mode not in ('ai_pro','template'):
+        raise HTTPException(400,detail='Неподдерживаемый режим создания.')
+    concept=None
+    concept_set_id=None
+    if mode=='ai_pro':
+        concept_set_id=str(form.get('concept_set_id',''))
+        if not JOB_ID.fullmatch(concept_set_id):
+            raise HTTPException(400,detail='Сначала создайте и выберите AI-концепцию.')
+        path=STORAGE/concept_set_id/'concepts.json'
+        if not path.is_file() or time.time()-path.stat().st_mtime>TTL_SECONDS:
+            raise HTTPException(410,detail='Срок хранения AI-концепций истёк. Создайте новые.')
+        try:
+            stored=json.loads(path.read_text(encoding='utf-8'))
+            index=int(str(form.get('concept_index','-1')))
+            if index not in (0,1,2):
+                raise ValueError('Выберите одну из трёх AI-концепций.')
+            if stored.get('brief_hash')!=_concept_fingerprint(brief,report):
+                raise HTTPException(409,detail='Материалы или данные изменились. Пересоздайте AI-концепции.')
+            concept=stored['concepts'][index]
+            from .ai_layout import validate_concept
+            validate_concept({k:v for k,v in concept.items() if k!='id'})
+        except HTTPException:
+            raise
+        except (ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:
+            raise HTTPException(400,detail='AI-концепция повреждена или не выбрана.') from exc
     drawing_id=report['selected_assets']['drawing']
     if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
         try:drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
         except ValueError as exc:raise HTTPException(400,detail=str(exc))
     try:
+        image_references=([reference_example_raw] if reference_example_raw else [])+references
         result=await asyncio.to_thread(
             _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
-            references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
-            str(form.get('quality','medium')),design_prompt,report,background_raw)
+            image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
+            str(form.get('quality','medium')),design_prompt,report,background_raw,
+            concept,concept_set_id,reference_example_raw)
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:

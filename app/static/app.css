@@ -49,7 +49,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
 .remove-link,.remove-uploads button,.extra-clear button{border:0;background:transparent;color:#5b6b88;font-size:11px;padding:6px 0;text-decoration:underline;text-underline-offset:3px}
 .remove-link:hover,.remove-uploads button:hover,.extra-clear button:hover{color:var(--blue)}
 .mini-uploads{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
-.mini-uploads>label[for="drawing"],.mini-uploads>label[for="background"]{grid-column:1/-1}
+.mini-uploads>label[for="drawing"],.mini-uploads>label[for="background"],.mini-uploads>label[for="reference_example"]{grid-column:1/-1}
 .mini-upload{min-height:73px;position:relative;display:flex;gap:9px;align-items:center;border:1px solid var(--line);background:#fff;border-radius:11px;padding:11px 10px;cursor:pointer;transition:border .15s,background .15s;min-width:0}
 .mini-upload:hover,.mini-upload:focus-within{background:#f8faff;border-color:#a8bcf1}
 .mini-upload.has-file{background:#f5fbf7;border-color:#b5dbc6}
@@ -208,3 +208,44 @@ button:disabled{cursor:not-allowed;opacity:.48}
 .result-warnings strong{display:block;margin-bottom:6px;font-size:13px}
 .result-warnings ul{margin:4px 0 0;padding-left:19px}
 .result-warnings li{margin:5px 0;line-height:1.52}
+
+
+/* AI-first workflow: clearly separate paid concept planning from final export. */
+.mode-choice{border:1px solid #36475f;border-radius:17px;margin:16px 0 12px;
+  padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mode-choice legend{font-weight:800;color:#dbeafe;padding:0 8px}
+.mode-choice label{display:flex;gap:11px;align-items:flex-start;padding:14px;
+  border:1px solid #41516a;border-radius:12px;cursor:pointer;background:#1b293b}
+.mode-choice label:has(input:checked){border-color:#86b0ff;background:#253953;box-shadow:inset 0 0 0 1px #86b0ff}
+.mode-choice input{margin-top:4px;accent-color:#96baff}
+.mode-choice strong,.mode-choice small{display:block}
+.mode-choice strong{font-weight:800;color:#f4f7fc}
+.mode-choice small{font-size:12px;color:#b9c8db;margin-top:5px;line-height:1.45}
+.ai-creative-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;
+  padding:14px 16px;border:1px solid #36475f;border-radius:16px;margin:12px 0 18px;background:#172438}
+.ai-creative-settings .field-tip{grid-column:1/-1;margin:0;color:#b7c8e2}
+.ai-concepts-workflow{margin-top:18px;padding:20px;border:1px solid #42546d;
+  border-radius:16px;background:#17263a}
+.ai-concepts-workflow .prompt-head{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.ai-concepts-workflow .prompt-head p{color:#b9c9de}
+#ai-concepts-status{color:#c8d5e8;font-size:13px;line-height:1.55;margin:12px 0}
+.ai-concept-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:15px}
+.ai-concept-card{border:2px solid #425572;border-radius:13px;background:#1d2e46;
+  padding:12px;display:flex;flex-direction:column;gap:9px;color:#edf4ff;min-width:0}
+.ai-concept-card.is-selected{border-color:#75a8ff;box-shadow:0 0 0 2px #75a8ff33;background:#243954}
+.ai-concept-card img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;
+  border-radius:6px;background:#eef2f6}
+.ai-concept-card strong{font-size:15px;line-height:1.3}
+.ai-concept-card p{font-size:12px;line-height:1.5;color:#bfd0e7;margin:0;flex:1}
+.ai-concept-card button{cursor:pointer;border:1px solid #8fb5ff;background:#233e62;
+  color:#fff;border-radius:8px;padding:10px;font-weight:700}
+.ai-concept-card.is-selected button{background:#346bc1}
+.ai-concept-card .concept-switch{font-size:12px;color:#a9c1e9;display:flex;gap:9px;align-items:center}
+.ai-concept-card .concept-switch a{color:#a9c1e9}
+@media(max-width:900px){
+  .mode-choice,.ai-creative-settings{grid-template-columns:1fr}
+  .ai-concept-grid{grid-template-columns:1fr}
+  .ai-concepts-workflow .prompt-head{flex-direction:column;align-items:stretch}
+}
+
+.ai-creative-settings[hidden],.ai-concepts-workflow[hidden],.ai-concept-grid[hidden]{display:none!important}

@@ -22,6 +22,13 @@ def main():
         errors=[]
         page.on('pageerror',lambda e:errors.append(str(e)))
         page.goto(BASE,wait_until='domcontentloaded')
+        assert page.locator('#mode-ai-pro').is_checked()
+        assert page.locator('#reference_example').count()==1
+        assert page.locator('#file-reference_example').is_visible()
+        # CI deliberately has no API key: the explicit low-cost fallback
+        # must still support the complete existing browser workflow.
+        page.locator('#mode-template').check()
+        assert page.locator('#ai-concepts-workflow').is_hidden()
         assert page.locator('.media-column label[for="drawing"]').count()==1
         assert page.locator('#advanced-settings label[for="drawing"]').count()==0
         # Regression: after the PRO style rollout, filling a demo must remain
@@ -44,6 +51,9 @@ def main():
         assert page.locator('#model').input_value()==''
         assert page.locator('#reset-btn').inner_text()=='Заполнить пример'
         assert not errors,errors
+        # Reset intentionally restores AI-first default. Re-enter fallback
+        # for the existing no-key, deterministic browser round-trip test.
+        page.locator('#mode-template').check()
         page.locator('#model').fill('Промышленный подъёмник A1')
         upload(page,'hero','small.png',png('yellow',(360,240),15),'image/png')
         upload(page,'hero','large.png',png('red',(1320,840),10),'image/png')

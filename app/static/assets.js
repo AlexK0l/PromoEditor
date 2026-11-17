@@ -3,11 +3,11 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const FIELDS=['hero','logo','documents','references','detail','drawing','background'];
+  const FIELDS=['hero','logo','documents','references','detail','drawing','background','reference_example'];
   const LABELS={hero:'Фото',logo:'Логотип',documents:'Документ',references:'Референс',
-                detail:'Дополнительное фото',drawing:'Чертёж',background:'Фон-сцена'};
+                detail:'Дополнительное фото',drawing:'Чертёж',background:'Фон-сцена',reference_example:'Рекламный эталон (необязательно)'};
   const SERVER={hero:'photos',logo:'logos',documents:'documents',references:'references',
-                detail:'detail',drawing:'drawing',background:'background'};
+                detail:'detail',drawing:'drawing',background:'background',reference_example:'reference_example'};
   const files=Object.fromEntries(FIELDS.map(id=>[id,[]]));
   const preferences={};
   const thumbs=[];
@@ -31,6 +31,7 @@
     add('references','reference');
     add('drawing','drawing');
     add('background','background');
+    add('reference_example','reference_example');
     return out;
   }
   function fileCount(){return rows().length;}
@@ -233,6 +234,7 @@
       picked('Логотип',selected.logo),
       picked('Чертёж',selected.drawing),
       picked('Фон-сцена',selected.background),
+      picked('Рекламный эталон (по желанию)',selected.reference_example),
       picked('Референсы',selected.references||[]),
       picked('Документы для анализа',selected.documents||[])
     );

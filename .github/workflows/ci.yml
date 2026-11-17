@@ -38,6 +38,7 @@ jobs:
           done
           python tests/browser_editor_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
           python tests/browser_assets_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
+          python tests/browser_ai_concepts_smoke.py || (cat /tmp/promo-browser-app.log && exit 1)
       - name: Browser password form with Origin null
         run: |
           export PROMO_AUTH_ENABLED=1
@@ -91,6 +92,14 @@ jobs:
         with:
           name: premium-pro-visual-previews
           path: /tmp/promo-premium-pro/
+          if-no-files-found: error
+      - name: Generate AI-first editable layout visual samples
+        run: PYTHONPATH=. python tests/generate_ai_concept_previews.py
+      - name: Publish AI-first concept preview PNG and SVG
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-first-editable-previews
+          path: /tmp/promo-ai-concepts/
           if-no-files-found: error
       - name: Container diagnostics
         if: always()

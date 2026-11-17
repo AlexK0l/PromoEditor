@@ -1,15 +1,17 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const fileIds = ['hero','documents','logo','detail','drawing','references','background'];
-  const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','proof-points','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo'];
-  const placeholders = {documents:'Несколько документов · PDF / Word / Excel',logo:'Несколько логотипов',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Несколько референсов; система отберёт до 2',background:'Фото сцены (необязательно)'};
+  const fileIds = ['hero','documents','logo','detail','drawing','references','background','reference_example'];
+  const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','proof-points','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo','design-style','design-goal'];
+  const placeholders = {documents:'Несколько документов · PDF / Word / Excel',logo:'Несколько логотипов',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Несколько референсов; система отберёт до 2',background:'Фото сцены (необязательно)',reference_example:'Необязательный рекламный пример'};
   let latest = null;
   let apiReady = false;
   let isBusy = false;
   let hasDemo = false;
   let isDemoLoading = false;
   let promptDirty = true;
+  let aiConceptSet = null;
+  let selectedAiConcept = null;
 
   // Optional new fields should not disable the entire UI if an older HTML
   // document briefly remains in the browser cache after deployment.
@@ -100,14 +102,116 @@
     });
   }
   function updateAi(){
-    $('ai-description').textContent=apiReady?'Два платных запроса за комплект':'На сервере не настроен API-ключ';
+    $('ai-description').textContent=apiReady?
+      'Необязательные 2 платных запроса на фоны при финальном экспорте. Концепции создаются отдельно.':
+      'Нет API-ключа. Быстрый шаблон доступен без OpenAI.';
     $('use-openai').disabled=!apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
+    refreshGenerationMode();
+  }
+
+  function isAiPro(){return checked('mode-ai-pro');}
+
+  function refreshGenerationMode(){
+    const ai=isAiPro();
+    $('ai-creative-settings').hidden=!ai;
+    $('ai-concepts-workflow').hidden=!ai;
+    $('prompt-workflow').hidden=ai;
+    $('generate-btn').textContent=ai
+      ?'Собрать выбранную AI-концепцию →':'Создать PNG · JPEG · SVG →';
+    $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
+    $('generate-concepts-btn').disabled=isBusy||!apiReady;
     if(!isBusy){
-      if(checked('use-openai'))setStatus('OpenAI включён','Два платных запроса для 4:3 и 9:16.');
-      else setStatus('Без расходов на API','Обычная сборка изображений.');
+      if(ai){
+        setStatus(apiReady?'AI PRO · OpenAI':'AI PRO недоступен',
+          apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
+            'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
+      }else{
+        setStatus(checked('use-openai')?'Шаблон + AI-фон':'Быстрый шаблон',
+          checked('use-openai')?'2 платных запроса на изображение':'Без затрат на OpenAI.');
+      }
     }
   }
+
+  function invalidateAiConcepts(){
+    aiConceptSet=null;
+    selectedAiConcept=null;
+    $('ai-concept-cards').replaceChildren();
+    $('ai-concept-cards').hidden=true;
+    $('ai-concepts-status').textContent=
+      'Материалы или бриф изменились. Создайте новые AI-концепции для актуальных данных.';
+    refreshGenerationMode();
+  }
+
+  function renderAiConcepts(){
+    const panel=$('ai-concept-cards');
+    panel.replaceChildren();
+    if(!aiConceptSet?.concepts?.length){panel.hidden=true;return;}
+    panel.hidden=false;
+    for(const item of aiConceptSet.concepts){
+      const card=document.createElement('article');
+      card.className='ai-concept-card'+(item.index===selectedAiConcept?' is-selected':'');
+      const img=document.createElement('img');
+      img.src=item.previews['4x3'];img.alt='Концепция '+(item.index+1)+': '+item.name;
+      img.loading='lazy';card.appendChild(img);
+      const heading=document.createElement('strong');
+      heading.textContent=String.fromCharCode(65+item.index)+' · '+item.name;
+      card.appendChild(heading);
+      const caption=document.createElement('p');caption.textContent=item.rationale;
+      card.appendChild(caption);
+      const links=document.createElement('div');links.className='concept-switch';
+      const portrait=document.createElement('a');portrait.href=item.previews['9x16'];
+      portrait.target='_blank';portrait.rel='noopener';
+      portrait.textContent='Посмотреть 9:16';
+      links.appendChild(portrait);card.appendChild(links);
+      const choose=document.createElement('button');choose.type='button';
+      choose.textContent=item.index===selectedAiConcept?'✓ Концепция выбрана':'Выбрать эту концепцию';
+      choose.setAttribute('aria-pressed',String(item.index===selectedAiConcept));
+      choose.addEventListener('click',()=>{
+        selectedAiConcept=item.index;
+        renderAiConcepts();refreshGenerationMode();
+        $('ai-concepts-status').textContent='Выбрана концепция '+String.fromCharCode(65+item.index)+
+          '. Нажмите «Собрать выбранную AI-концепцию».';
+      });
+      card.appendChild(choose);panel.appendChild(card);
+    }
+  }
+
+  async function generateAiConcepts(){
+    clearError();
+    if(!apiReady){showError('Для AI PRO требуется OPENAI_API_KEY. Переключитесь на быстрый шаблон.');return;}
+    if(!get('model').trim()){showError('Укажите модель товара.','model');return;}
+    const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
+      showError('Сначала проанализируйте материалы и подтвердите выбор.');return;
+    }
+    invalidateAiConcepts();busy(true);
+    $('ai-concepts-status').textContent='OpenAI разрабатывает три композиции для 4:3 и 9:16…';
+    setStatus('Создаём AI-концепции','Планирование дизайна — один платный запрос к OpenAI.','working');
+    try {
+      const form=new FormData();
+      form.append('payload',JSON.stringify(formBrief()));
+      if(window.PromoAssets)window.PromoAssets.append(form);
+      else fileIds.forEach(id=>appendFiles(form,id));
+      form.append('design_style',get('design-style'));
+      form.append('design_goal',get('design-goal'));
+      const response=await fetch('/api/concepts',{method:'POST',body:form});
+      if(!response.ok)throw new Error(await readError(response));
+      const result=await response.json();
+      if(!result?.concept_set_id||result.concepts?.length!==3)
+        throw new Error('Не удалось получить три полноценные концепции.');
+      aiConceptSet=result;selectedAiConcept=null;
+      renderAiConcepts();refreshGenerationMode();
+      $('ai-concepts-status').textContent=
+        'Три концепции готовы. Эталон '+(result.reference_used?'использован как стилистический ориентир.':'не потребовался.')+
+        ' Выберите понравившуюся композицию.';
+      $('ai-concepts-workflow').scrollIntoView({behavior:'smooth',block:'center'});
+    }catch(error){
+      $('ai-concepts-status').textContent='Не удалось создать концепции.';
+      showError(error.message||'Ошибка AI-концепций.');
+    }finally{busy(false);}
+  }
+
   function validateFiles(){
     const all=fileIds.flatMap(id=>Array.from($(id).files));
     if(all.length>16)return 'Слишком много вложений: не более 16 файлов за один комплект.';
@@ -119,6 +223,7 @@
   function busy(on){
     isBusy=on;
     $('generate-btn').disabled=on;
+    $('generate-concepts-btn').disabled=on || !apiReady;
     $('build-prompt-btn').disabled=on;
     $('analyze-assets-btn').disabled=on;
     $('asset-rebuild').disabled=on;
@@ -127,7 +232,7 @@
     $('loading').hidden=!on;
     const button=$('generate-btn');
     if(on)button.textContent='Создаём изображения…';
-    else button.textContent='Создать PNG · JPEG · SVG →';
+    else refreshGenerationMode();
   }
   function appendFiles(form,id){for(const file of $(id).files)form.append(id,file,file.name);}
   function download(path){
@@ -161,6 +266,9 @@
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
     }
     const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(isAiPro()&&(!aiConceptSet||selectedAiConcept===null)){
+      showError('Сначала создайте три AI-концепции и выберите одну из них.');return;
+    }
     if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
       showError('Сначала нажмите «Проанализировать материалы», проверьте выбор и при необходимости измените приоритеты.');return;
     }
@@ -178,6 +286,11 @@
       else fileIds.forEach(id=>appendFiles(form,id));
       form.append('use_openai',String(checked('use-openai')));
       form.append('use_demo',String(checked('use-demo')));
+      form.append('generation_mode',isAiPro()?'ai_pro':'template');
+      if(isAiPro()){
+        form.append('concept_set_id',aiConceptSet.concept_set_id);
+        form.append('concept_index',String(selectedAiConcept));
+      }
       form.append('model',get('image-model'));
       form.append('quality',get('image-quality'));
       const response=await fetch('/api/generate',{method:'POST',body:form});
@@ -193,7 +306,8 @@
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
-      setStatus('Готово','PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
+      setStatus('Готово',(isAiPro()?'Выбранный AI-дизайн':'Шаблон')+
+        ': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
@@ -235,6 +349,8 @@
   }
   function clearForm(){
     for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','proof-points','dimensions','price','phones','promo-prompt'])set(id,'');
+    invalidateAiConcepts();
+    $('mode-ai-pro').checked=true;$('mode-template').checked=false;
     markPromptStale();
     set('currency','Br');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
@@ -266,6 +382,7 @@
       const result=await response.json();
       if(!result?.brief?.model)throw new Error('Сервер вернул неполный пример.');
       fillBrief(result.brief);
+      invalidateAiConcepts();
       set('style',selectedStyle);set('accent',selectedAccent);
       $('color-label').textContent=selectedAccent.toUpperCase();
       for(const id of fileIds)$(id).value='';
@@ -304,7 +421,7 @@
   }
 
   for(const id of fileIds){
-    $(id).addEventListener('change',()=>{updateFileLabels();markPromptStale();invalidateResult();clearError();});
+    $(id).addEventListener('change',()=>{updateFileLabels();markPromptStale();invalidateResult();invalidateAiConcepts();clearError();});
   }
   for(const id of ['hero','documents','logo']){
     $('clear-'+id).addEventListener('click',()=>{$(id).value='';$(id).dispatchEvent(new Event('change',{bubbles:true}));});
@@ -319,15 +436,15 @@
       if(id==='accent')$('color-label').textContent=get('accent').toUpperCase();
       if(['show-roi','price','currency','extra-payload','distance','rate','trips','years','baseline-price'].includes(id))updateRoi();
       markPromptStale();
-      invalidateResult();
+      invalidateResult();invalidateAiConcepts();
     });
-    field.addEventListener('change',()=>{markPromptStale();invalidateResult();});
+    field.addEventListener('change',()=>{markPromptStale();invalidateResult();invalidateAiConcepts();});
   }
   document.querySelectorAll('[data-style]').forEach(button=>button.addEventListener('click',()=>{
     set('style',button.dataset.style);
     const accents={industrial:'#e31b26',reference_pro:'#e31b26',graphite:'#344054',minimal:'#315ddc'};
     set('accent',accents[button.dataset.style]);$('color-label').textContent=get('accent').toUpperCase();
-    refreshStyle();markPromptStale();invalidateResult();
+    refreshStyle();markPromptStale();invalidateResult();invalidateAiConcepts();
   }));
   $('use-openai').addEventListener('change',()=>{if(checked('use-openai')&&!apiReady){$('use-openai').checked=false;showError('OpenAI пока не подключён. Добавьте API-ключ на сервере.');}updateAi();invalidateResult();});
   $('show-roi').addEventListener('change',updateRoi);
@@ -403,7 +520,7 @@
       'Заполненные поля не изменены. При необходимости отредактируйте их вручную.');
   });
   window.addEventListener('promoeditor:assets-changed',()=>{
-    markPromptStale();invalidateResult();clearError();
+    markPromptStale();invalidateResult();invalidateAiConcepts();clearError();
   });
   $('build-prompt-btn').addEventListener('click',async()=>{
     clearError();
@@ -420,6 +537,12 @@
     invalidateResult();
   });
   $('reset-btn').addEventListener('click',resetDemo);
+  $('generate-concepts-btn').addEventListener('click',generateAiConcepts);
+  for(const id of ['mode-ai-pro','mode-template']){
+    $(id).addEventListener('change',()=>{
+      refreshGenerationMode();invalidateResult();clearError();
+    });
+  }
   $('generate-btn').addEventListener('click',generate);
   $('inspect-btn').addEventListener('click',inspect);
   $('apply-extracted').addEventListener('click',()=>{
