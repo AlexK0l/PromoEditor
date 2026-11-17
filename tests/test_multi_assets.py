@@ -215,7 +215,11 @@ def test_source_report_has_roles_mime_and_priority_flags():
 
 
 def test_large_documents_keep_each_source_in_ai_context(monkeypatch):
-    from app import openai_service
+    from app import openai_service, main as main_module
+    # This test checks the input-document context, not the rate limiter.
+    # The expanded AI-first suite would otherwise exhaust shared test-IP
+    # quota, causing an unrelated 429 late in the test run.
+    monkeypatch.setattr(main_module, "_guard_rate", lambda request: None)
     seen={}
     def document_eval(text,requirements):
         seen['text']=text
