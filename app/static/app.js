@@ -188,6 +188,10 @@
     if(designMode()==='ai_first'&&!apiReady){
       showError('AI-дизайнер требует OPENAI_API_KEY на VPS. Выберите SVG-шаблон для работы без API.');return;
     }
+    if(designMode()==='ai_first'&&!$('hero').files.length
+       &&!$('detail').files.length&&!checked('use-demo')){
+      showError('Загрузите фотографию товара для точной AI-композиции или нажмите «Заполнить пример». OpenAI не должен придумывать конструкцию техники.');return;
+    }
     if(checked('use-openai')&&!apiReady){showError('OpenAI не подключён на сервере. Используйте SVG-шаблон без AI-фона или настройте ключ в VPS.');return;}
     if(designMode()==='vector'&&!checked('use-openai')&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
       showError('Сначала добавьте фото товара или нажмите «Заполнить пример» для пробного комплекта.');return;
