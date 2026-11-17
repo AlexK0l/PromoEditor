@@ -580,15 +580,44 @@ async def generate(request:Request):
     drawing_raw=chosen_bytes(report,records,'drawing')
     background_raw=chosen_bytes(report,records,'background')
     references=chosen_bytes(report,records,'references')
+    reference_example_raw=chosen_bytes(report,records,'reference_example')
+    mode=str(form.get('generation_mode','template'))
+    if mode not in ('ai_pro','template'):
+        raise HTTPException(400,detail='Неподдерживаемый режим создания.')
+    concept=None
+    concept_set_id=None
+    if mode=='ai_pro':
+        concept_set_id=str(form.get('concept_set_id',''))
+        if not JOB_ID.fullmatch(concept_set_id):
+            raise HTTPException(400,detail='Сначала создайте и выберите AI-концепцию.')
+        path=STORAGE/concept_set_id/'concepts.json'
+        if not path.is_file() or time.time()-path.stat().st_mtime>TTL_SECONDS:
+            raise HTTPException(410,detail='Срок хранения AI-концепций истёк. Создайте новые.')
+        try:
+            stored=json.loads(path.read_text(encoding='utf-8'))
+            index=int(str(form.get('concept_index','-1')))
+            if index not in (0,1,2):
+                raise ValueError('Выберите одну из трёх AI-концепций.')
+            if stored.get('brief_hash')!=_concept_fingerprint(brief,report):
+                raise HTTPException(409,detail='Материалы или данные изменились. Пересоздайте AI-концепции.')
+            concept=stored['concepts'][index]
+            from .ai_layout import validate_concept
+            validate_concept({k:v for k,v in concept.items() if k!='id'})
+        except HTTPException:
+            raise
+        except (ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:
+            raise HTTPException(400,detail='AI-концепция повреждена или не выбрана.') from exc
     drawing_id=report['selected_assets']['drawing']
     if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
         try:drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
         except ValueError as exc:raise HTTPException(400,detail=str(exc))
     try:
+        image_references=([reference_example_raw] if reference_example_raw else [])+references
         result=await asyncio.to_thread(
             _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
-            references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
-            str(form.get('quality','medium')),design_prompt,report,background_raw)
+            image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
+            str(form.get('quality','medium')),design_prompt,report,background_raw,
+            concept,concept_set_id,reference_example_raw)
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:
