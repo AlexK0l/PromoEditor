@@ -212,3 +212,31 @@ def test_template_mode_still_available_without_openai(monkeypatch):
     concept=client.post("/api/concepts",data=_data(),files=_uploads())
     assert concept.status_code==400
     assert "OPENAI_API_KEY" in concept.json()["detail"]
+
+
+
+def test_narrow_portrait_economics_keeps_all_four_labels_and_amounts():
+    """Visual QA regression: avoid cropped 4-column microtype in 9:16."""
+    from app.ai_concept_renderer import render_ai_concept_svg
+    from app.render import compute_roi
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[0]
+    brief=default_brief()
+    root=ET.fromstring(render_ai_concept_svg(brief,"9x16",item))
+    labels=[
+        " ".join(node.itertext())
+        for node in root.findall(".//s:text",SVG)
+        if node.get("id","").startswith("ai-roi-name-")
+    ]
+    values=[
+        " ".join(node.itertext())
+        for node in root.findall(".//s:text",SVG)
+        if node.get("id","").startswith("ai-roi-value-")
+    ]
+    assert len(labels)==len(values)==4
+    for expected in ("ЗА РЕЙС, Br","РЕЙСОВ В ГОД","ЗА ГОД, Br","БАЛАНС, Br"):
+        assert expected in labels,(expected,labels)
+    from app.render import compute_roi
+    money=compute_roi(brief)
+    for amount in (money["per_trip"],money["trips"],money["annual"],money["net"]):
+        assert f"{amount:,.0f}".replace(","," ") in values
+    assert all("…" not in name for name in labels)
