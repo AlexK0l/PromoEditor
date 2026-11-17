@@ -69,10 +69,14 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
             label=name+(f", {money}" if i!=1 else "")
             v3._type(scene,"roi",label,px+10,y+11,cw-20,h*.29,
                      19,11,"#592C33",True,f"pro-roi-label-{i}",1)
-            v3._type(scene,"roi",f"{value:,.0f}".replace(","," "),
+            node=v3._type(scene,"roi",f"{value:,.0f}".replace(","," "),
                      px+11,y+h*.41,cw-21,h*.54,
                      49 if cw>195 else 40,17,accent,True,
                      f"pro-roi-value-{i}",1)
+            if node is not None:
+                # All four metrics share the same typographic baseline, even
+                # if a longer amount needs a 1px smaller fitted font.
+                node.set("y",str(round(y+h*.41+48,2)))
 
 
 def _premium_footer(scene,brief,accent):
