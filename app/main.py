@@ -23,6 +23,7 @@ from PIL import Image, ImageDraw
 
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
 from .openai_service import analyze_documents, generate_visuals
+from .ai_quota import QuotaExceeded, QuotaStoreUnavailable
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .image_analysis import validate_image_dimensions
@@ -243,6 +244,10 @@ async def analyze_assets(request:Request):
             analyze_project,groups,prefs,cached_report=cached,use_ai=use_ai,
             requirements=brief.get('design_notes','')+' '+brief.get('design_actions',''))
         prompt=build_promo_prompt(brief,report) if brief.get('model') else ''
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=429,detail=str(exc)) from exc
+    except QuotaStoreUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:
@@ -512,6 +517,10 @@ async def create_ai_concepts(request:Request):
                 'reference_used':reference_raw is not None,
                 'style':style,'goal':goal,
                 'message':'AI разработал три композиции. Выберите одну для финальной сборки.'}
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=429,detail=str(exc)) from exc
+    except QuotaStoreUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc)) from exc
     except HTTPException:
@@ -621,6 +630,10 @@ async def generate(request:Request):
             image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
             str(form.get('quality','medium')),design_prompt,report,background_raw,
             concept,concept_set_id,reference_example_raw)
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=429,detail=str(exc)) from exc
+    except QuotaStoreUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:
@@ -654,6 +667,10 @@ async def edit_existing_promo(request: Request):
             mask_raw=mask, model=str(form.get('model', 'gpt-image-2.5-flare')),
             quality=str(form.get('quality', 'medium'))
         )
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=429,detail=str(exc)) from exc
+    except QuotaStoreUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
     except Exception as exc:
@@ -698,6 +715,10 @@ async def inspect(request:Request):
         try:
             result['ai_suggestions']=await asyncio.to_thread(analyze_documents,joined,str(form.get('requirements','')))
             result['ai_used']=True
+        except QuotaExceeded as exc:
+            raise HTTPException(status_code=429,detail=str(exc)) from exc
+        except QuotaStoreUnavailable as exc:
+            raise HTTPException(status_code=503,detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(502,detail=f'Не удалось разобрать документы через OpenAI ({type(exc).__name__}).')
     return result

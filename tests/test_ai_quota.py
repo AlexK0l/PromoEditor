@@ -175,6 +175,6 @@ def test_exhausted_layout_budget_rejected_before_openai_request(quota_env, monke
         "/api/concepts",
         data={"payload": json.dumps(default_brief(), ensure_ascii=False)},
     )
-    assert response.status_code == 400, response.text
+    assert response.status_code == 429, response.text
     assert "отключены" in response.json()["detail"]
     assert upstream_calls == []
