@@ -227,3 +227,60 @@ def test_ai_first_end_to_end_generate_and_export_optional_reference(monkeypatch)
     assert second.json()["reference_used"] is True
     assert len(stub.requests)==1 and len(stub.calls)==2
     assert [method for method,_ in stub.calls]==["edit","edit"]
+
+
+
+def test_ai_plan_moves_real_svg_regions_not_only_background_pixels():
+    import xml.etree.ElementTree as ET
+    brief=default_brief()
+    art=Image.new("RGB",(120,90),"#d9e1ea")
+    hero=Image.new("RGB",(640,360),"yellow")
+    first=blueprint()
+    second=copy.deepcopy(first)
+    second["layouts"]["4x3"]["hero"]=[0,150,615,410]
+    second["layouts"]["4x3"]["specs"]=[620,150,380,410]
+    assert ai_director.validate_plan(second,brief)
+    originals=ET.fromstring(ai_director.render_ai_poster(
+        brief,"4x3",first,art,hero=hero))
+    changed=ET.fromstring(ai_director.render_ai_poster(
+        brief,"4x3",second,art,hero=hero))
+    def product_w(xml):
+        return next(float(e.get("width"))
+                    for e in xml.iter()
+                    if e.get("id","").startswith("original-product-photo"))
+    def spec_x(xml):
+        return next(float(e.get("x"))
+                    for e in xml.iter()
+                    if e.get("id","").startswith("ai-spec-panel"))
+    assert product_w(originals)>product_w(changed)
+    assert spec_x(originals)!=spec_x(changed)
+
+
+def test_invalid_ai_layout_stops_before_paid_image_requests(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY","fake-ci-key")
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    class InvalidPlan(StubAI):
+        def create(self,**kwargs):
+            self.requests.append(kwargs)
+            broken=blueprint()
+            broken["layouts"]["4x3"]["footer"]=[0,750,1000,120]
+            return type("Result",(),{"status":"completed",
+                                     "output_text":json.dumps(broken)})()
+    stub=InvalidPlan()
+    monkeypatch.setattr(ai_director,"client",lambda:stub)
+    payload={
+        "payload":json.dumps(default_brief(),ensure_ascii=False),
+        "design_mode":"ai_first","use_openai":"false",
+    }
+    result=client.post("/api/generate",data=payload)
+    assert result.status_code==400,result.text
+    assert "пересекаются" in result.json()["detail"]
+    assert len(stub.requests)==1
+    assert not stub.calls  # no paid image API request
+
+
+def test_typography_preflight_catches_truncated_critical_numbers():
+    brief=default_brief()
+    brief["specs"][0][1]="Очень длинное документально подтверждённое значение "*12
+    with pytest.raises(ValueError,match="обрезан|не помещается"):
+        ai_director.preflight_typography(brief,blueprint())
