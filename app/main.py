@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 import os
@@ -26,6 +27,8 @@ from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .image_analysis import validate_image_dimensions
 from .editable_export import build_promo_prompt, create_editable_svg, rasterize_svg
+from .ai_layout import generate_concepts, STYLES, GOALS
+from .ai_concept_renderer import render_ai_concept_svg
 from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
@@ -49,6 +52,7 @@ LOCK=threading.Lock()
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
 FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
        'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','edit.png'}
+FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16')})
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
@@ -90,7 +94,8 @@ def config():
             'logout_csrf_token':issue_form_token('logout') if auth_enabled() else None,
             'image_models':['gpt-image-2.5-flare','gpt-image-2.5-sunburst'],
             'max_file_mb':20,'max_files':MAX_FILES,'multi_assets':True,'asset_analysis':True,'formats':[{'id':'4x3','size':[1440,1080]},{'id':'9x16','size':[1080,1920]}],
-            'preview':False,'export_formats':['png','jpeg','svg'],'editable_format':'svg'}
+            'preview':True,'generation_modes':['ai_pro','template'],'ai_concepts':3,'reference_required':False,
+            'export_formats':['png','jpeg','svg'],'editable_format':'svg'}
 
 
 @app.get('/api/demo')
@@ -191,8 +196,10 @@ async def _asset_groups(form):
     drawings+=await _files(form,'drawing',ALLOWED_IMAGES|{'.pdf'},collection=True)
     backgrounds=await _files(form,'background',ALLOWED_IMAGES,collection=True)
     backgrounds+=await _files(form,'backgrounds',ALLOWED_IMAGES,collection=True)
+    examples=await _files(form,'reference_example',ALLOWED_IMAGES,collection=True)
     groups={'photos':photos,'logos':logos,'documents':docs,
-            'references':refs,'drawings':drawings,'backgrounds':backgrounds}
+            'references':refs,'drawings':drawings,'backgrounds':backgrounds,
+            'reference_examples':examples}
     all_items=sum(groups.values(),[])
     if len(all_items)>MAX_FILES:
         raise HTTPException(400,detail=f'Не более {MAX_FILES} файлов в проекте.')
