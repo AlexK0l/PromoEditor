@@ -43,7 +43,8 @@ def asset_prompt_section(report:dict|None)->str:
         ("primary_photo","Основное фото"),
         ("secondary_photo","Дополнительное фото"),
         ("logo","Логотип"),
-        ("drawing","Чертёж")):
+        ("drawing","Чертёж"),
+        ("background","Фотофон / промышленная сцена")):
         ident=selected.get(role)
         if ident in records:lines.append(f"{label}: {safe_name(ident)} [id: {ident}].")
     refs=[x for x in (selected.get("references") or []) if x in records]
