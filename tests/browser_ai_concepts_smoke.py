@@ -57,7 +57,7 @@ def main():
         assert page.locator(".ai-concept-card").nth(1).get_attribute("class").endswith("is-selected")
         assert not page.locator("#generate-btn").is_disabled()
         assert "Вариант B" in page.locator(".ai-concept-card").nth(1).inner_text()
-        page.locator("#price").fill("250000")
+        page.locator("#model").fill("TEST INDUSTRIAL MODEL UPDATED")
         assert page.locator("#generate-btn").is_disabled()
         assert page.locator(".ai-concept-card").count()==0
         page.locator("#mode-template").check()
