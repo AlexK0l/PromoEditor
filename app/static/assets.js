@@ -3,11 +3,11 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const FIELDS=['hero','logo','documents','references','detail','drawing'];
+  const FIELDS=['hero','logo','documents','references','detail','drawing','background'];
   const LABELS={hero:'Фото',logo:'Логотип',documents:'Документ',references:'Референс',
-                detail:'Дополнительное фото',drawing:'Чертёж'};
+                detail:'Дополнительное фото',drawing:'Чертёж',background:'Фон-сцена'};
   const SERVER={hero:'photos',logo:'logos',documents:'documents',references:'references',
-                detail:'detail',drawing:'drawing'};
+                detail:'detail',drawing:'drawing',background:'background'};
   const files=Object.fromEntries(FIELDS.map(id=>[id,[]]));
   const preferences={};
   const thumbs=[];
@@ -30,6 +30,7 @@
     add('documents','document');
     add('references','reference');
     add('drawing','drawing');
+    add('background','background');
     return out;
   }
   function fileCount(){return rows().length;}
@@ -231,6 +232,7 @@
       picked('Дополнительный ракурс',selected.secondary_photo),
       picked('Логотип',selected.logo),
       picked('Чертёж',selected.drawing),
+      picked('Фон-сцена',selected.background),
       picked('Референсы',selected.references||[]),
       picked('Документы для анализа',selected.documents||[])
     );
