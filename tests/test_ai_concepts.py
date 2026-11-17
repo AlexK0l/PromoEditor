@@ -240,3 +240,65 @@ def test_narrow_portrait_economics_keeps_all_four_labels_and_amounts():
     for amount in (money["per_trip"],money["trips"],money["annual"],money["net"]):
         assert f"{amount:,.0f}".replace(","," ") in values
     assert all("…" not in name for name in labels)
+
+
+@pytest.mark.parametrize("zone,new_height,error_fragment", [
+    ("specs", 180, "строк ТТХ"),
+    ("dimensions", 48, "чертежа и размеров"),
+    ("benefits", 48, "преимуществ"),
+    ("roi", 48, "экономики"),
+])
+def test_ai_layout_preflight_rejects_content_overflow(zone,new_height,error_fragment):
+    """The rectangles are valid geometrically, but cannot fit factual copy."""
+    from app.ai_concept_renderer import render_ai_concept_svg
+    concepts = _concepts()
+    concepts[0]["layouts"]["4x3"][zone]["h"] = new_height
+    payload = {"concepts": concepts}
+    assert len(ai_layout.normalize_concepts(payload)) == 3
+    brief = default_brief()
+    with pytest.raises(ValueError,match=error_fragment):
+        ai_layout.normalize_concepts(payload,brief=brief)
+    selected = ai_layout.normalize_concepts(payload)[0]
+    with pytest.raises(ValueError,match=error_fragment):
+        render_ai_concept_svg(brief,"4x3",selected)
+
+
+def test_preflight_uses_actual_number_of_spec_rows():
+    concepts = _concepts()
+    concepts[0]["layouts"]["4x3"]["specs"]["h"] = 180
+    brief = default_brief()
+    brief["specs"] = [["Полная масса","52,5 т"]]
+    assert len(ai_layout.normalize_concepts({"concepts":concepts},brief=brief)) == 3
+    brief["specs"] = default_brief()["specs"]
+    with pytest.raises(ValueError,match="строк ТТХ"):
+        ai_layout.normalize_concepts({"concepts":concepts},brief=brief)
+
+
+def test_drawing_preflight_uses_real_drawing_presence():
+    from app.ai_concept_renderer import render_ai_concept_svg
+    concepts = _concepts()
+    concepts[0]["layouts"]["4x3"]["dimensions"]["h"] = 48
+    item = ai_layout.normalize_concepts({"concepts":concepts})[0]
+    brief = default_brief()
+    brief["dimensions"] = []
+    # Nothing to draw in the dimensions zone: a short empty rectangle is fine.
+    render_ai_concept_svg(brief,"4x3",item)
+    # But the same rectangle must not silently swallow a user-provided drawing.
+    with pytest.raises(ValueError,match="чертежа и размеров"):
+        render_ai_concept_svg(brief,"4x3",item,drawing=Image.new("RGB",(320,180),"white"))
+
+
+def test_ai_accent_palette_is_visible_in_svg_even_with_brief_accent():
+    from app.ai_concept_renderer import render_ai_concept_svg
+    concepts = _concepts()
+    concepts[0]["palette"]["accent"] = "#126BA8"
+    item = ai_layout.normalize_concepts({"concepts":concepts})[0]
+    brief = default_brief()
+    assert brief["accent"] != item["palette"]["accent"]
+    svg = render_ai_concept_svg(brief,"4x3",item)
+    root = ET.fromstring(svg)
+    # Scene.id() appends a numeric suffix to every editable SVG object.
+    underline = next((node for node in root.iter()
+                      if node.get("id","").startswith("ai-hero-underline-")),None)
+    assert underline is not None
+    assert underline.get("fill") == "#126BA8"
