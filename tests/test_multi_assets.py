@@ -492,7 +492,14 @@ def test_supplied_photo_background_is_selected_and_preserved(monkeypatch):
     assert report["selected_assets"]["background"]=="background_1"
     row=next(r for r in report["project_assets"] if r["id"]=="background_1")
     assert row["assignment"]=="background"
-    result=generate(files=uploaded,report=report)
+    brief=default_brief()
+    brief["style"]="reference_pro"
+    result=client.post("/api/generate",data={
+        "payload":json.dumps(brief,ensure_ascii=False),
+        "asset_preferences":"{}",
+        "asset_report":json.dumps(report,ensure_ascii=False),
+        "use_openai":"false","use_demo":"false",
+    },files=uploaded)
     assert result.status_code==200,result.text
     data=result.json()
     svg=client.get(data["corel"]["4x3"]).content
