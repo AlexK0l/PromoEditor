@@ -201,18 +201,29 @@ def _economy(scene, brief, rect, colors):
            ("РЕЙСОВ В ГОД",data["trips"]),
            ("ЗА ГОД, "+unit,data["annual"]),
            ("БАЛАНС, "+unit,data["net"])]
-    cw=(w-12)/4
+    # Geometry is authored by AI, but the factual layout adapts to the
+    # available width. Four tiny columns previously truncated portrait labels.
+    columns=2 if w<520 else 4
+    rows=4//columns
+    cw=(w-12)/columns
+    cell_h=(h-title_h-10)/rows
     for i,(name,value) in enumerate(pairs):
-        bx=x+6+i*cw
-        if i:
-            scene.rect("roi",bx,y+title_h+5,1.5,h-title_h-11,
+        column=i%columns
+        row=i//columns
+        bx=x+6+column*cw
+        by=y+title_h+5+row*cell_h
+        if column:
+            scene.rect("roi",bx,by+3,1.5,cell_h-6,
                        "#E8B1B8",ident=f"ai-roi-divider-{i}")
-        scene.text("roi",name,bx+7,y+title_h+1,cw-14,(h-title_h)*.32,
-                   max(12,min(18,cw*.095)),10,ink,True,
-                   f"ai-roi-name-{i}",1)
+        if row and column==0:
+            scene.rect("roi",x+11,by-1,w-22,1.5,
+                       "#E8B1B8",ident="ai-roi-horizontal-rule")
+        scene.text("roi",name,bx+7,by+2,cw-14,cell_h*.34,
+                   max(12,min(18,cw*.093)),10,ink,True,
+                   f"ai-roi-name-{i}",2)
         scene.text("roi",f"{value:,.0f}".replace(","," "),
-                   bx+7,y+title_h+(h-title_h)*.35,cw-14,(h-title_h)*.6,
-                   max(20,min(44,cw*.18)),14,accent,True,
+                   bx+7,by+cell_h*.38,cw-14,cell_h*.55,
+                   max(20,min(42,cw*.185)),14,accent,True,
                    f"ai-roi-value-{i}",1)
 
 
