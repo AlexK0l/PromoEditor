@@ -189,8 +189,10 @@ async def _asset_groups(form):
     refs=await _files(form,'references',ALLOWED_IMAGES,collection=True)
     drawings=await _files(form,'drawings',ALLOWED_IMAGES|{'.pdf'},collection=True)
     drawings+=await _files(form,'drawing',ALLOWED_IMAGES|{'.pdf'},collection=True)
+    backgrounds=await _files(form,'background',ALLOWED_IMAGES,collection=True)
+    backgrounds+=await _files(form,'backgrounds',ALLOWED_IMAGES,collection=True)
     groups={'photos':photos,'logos':logos,'documents':docs,
-            'references':refs,'drawings':drawings}
+            'references':refs,'drawings':drawings,'backgrounds':backgrounds}
     all_items=sum(groups.values(),[])
     if len(all_items)>MAX_FILES:
         raise HTTPException(400,detail=f'Не более {MAX_FILES} файлов в проекте.')
@@ -262,7 +264,8 @@ def _demo_hero():
 
 
 def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
-                   use_demo,use_openai,model,quality,design_prompt,asset_report=None):
+                   use_demo,use_openai,model,quality,design_prompt,asset_report=None,
+                   background_raw=None):
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
@@ -271,6 +274,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         detail=load_image(detail_raw)
         logo=load_image(logo_raw)
         drawing=load_image(drawing_raw)
+        user_backdrop=load_image(background_raw)
         if hero is None and use_demo and not use_openai:
             hero=_demo_hero()
         visuals={}
@@ -284,7 +288,10 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         for key in ('4x3','9x16'):
             visual=visuals.get(key)
             photo=visual if ai_product else hero
-            scene=None if ai_product else visual
+            # An explicitly requested OpenAI image takes priority; otherwise
+            # the customer's own licensed industrial photo is used as the
+            # separate scene layer beneath the unchanged product bitmap.
+            scene=None if ai_product else (visual if visual is not None else user_backdrop)
             svg=create_editable_svg(brief,key,hero=photo,detail=detail,logo=logo,
                                     drawing=drawing,backdrop=scene,ai_product=ai_product)
             # The SVG is the master. PNG and JPEG are rendered from the SAME
@@ -352,7 +359,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             for role,payload in (('primary_photo',hero_raw),
                                  ('secondary_photo',detail_raw),
                                  ('drawing',drawing_raw),
-                                 ('logo',logo_raw)):
+                                 ('logo',logo_raw),
+                                 ('background',background_raw)):
                 asset=originals.get(selected.get(role))
                 if not payload or not asset:continue
                 extension=Path(str(asset.get('name') or '')).suffix.lower()
@@ -447,6 +455,7 @@ async def generate(request:Request):
     detail_raw=chosen_bytes(report,records,'secondary_photo')
     logo_raw=chosen_bytes(report,records,'logo')
     drawing_raw=chosen_bytes(report,records,'drawing')
+    background_raw=chosen_bytes(report,records,'background')
     references=chosen_bytes(report,records,'references')
     drawing_id=report['selected_assets']['drawing']
     if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
@@ -456,7 +465,7 @@ async def generate(request:Request):
         result=await asyncio.to_thread(
             _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
             references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
-            str(form.get('quality','medium')),design_prompt,report)
+            str(form.get('quality','medium')),design_prompt,report,background_raw)
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:
