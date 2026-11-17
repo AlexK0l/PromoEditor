@@ -9,17 +9,51 @@ from typing import Optional
 
 from PIL import Image
 from .image_analysis import analysis_preview
+from .ai_quota import reserve_paid_call
 
 IMAGE_MODELS={'gpt-image-2.5-flare','gpt-image-2.5-sunburst'}
 IMAGE_QUALITIES={'low','medium','high'}
 TEXT_MODEL=os.environ.get('OPENAI_TEXT_MODEL','gpt-5.6-terra')
 
 
+class _QuotaEndpoint:
+    """Transparent proxy for only the app's supported paid SDK operations."""
+    def __init__(self, delegate, charged_methods):
+        self._delegate=delegate
+        self._charged_methods=charged_methods
+
+    def __getattr__(self, name):
+        method=getattr(self._delegate,name)
+        kind=self._charged_methods.get(name)
+        if kind is None:
+            return method
+
+        def metered(*args, **kwargs):
+            # Reserve before sending the API call. A timeout may still cost
+            # money upstream, so failed reservations are never refunded.
+            reserve_paid_call(kind)
+            return method(*args,**kwargs)
+
+        return metered
+
+
+class _QuotaClient:
+    def __init__(self, delegate):
+        self._delegate=delegate
+        self.images=_QuotaEndpoint(delegate.images,
+                                   {'generate':'image','edit':'image'})
+        self.responses=_QuotaEndpoint(delegate.responses,{'create':'text'})
+
+    def __getattr__(self, name):
+        return getattr(self._delegate,name)
+
+
 def client():
     if not os.getenv('OPENAI_API_KEY'):
         raise ValueError('OPENAI_API_KEY не задан на сервере. Выберите предпросмотр без AI или настройте .env.')
     from openai import OpenAI
-    return OpenAI(api_key=os.environ['OPENAI_API_KEY'],timeout=180,max_retries=0)
+    sdk=OpenAI(api_key=os.environ['OPENAI_API_KEY'],timeout=180,max_retries=0)
+    return _QuotaClient(sdk)
 
 
 def as_image(result):
