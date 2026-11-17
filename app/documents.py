@@ -21,7 +21,16 @@ def _decode(raw: bytes):
     return raw.decode('utf-8',errors='replace')
 
 
-def extract_text(name:str,raw:bytes):
+def extract_text(name: str, raw: bytes):
+    """Keep lightweight text/CSV local; isolate complex archive/PDF parsers."""
+    ext = Path(name).suffix.lower()
+    if ext in ('.pdf', '.docx', '.xlsx'):
+        from .document_worker import run_document_worker
+        return run_document_worker("extract", name, raw)
+    return _extract_text_direct(name, raw)
+
+
+def _extract_text_direct(name:str,raw:bytes):
     ext=Path(name).suffix.lower()
     if ext not in ALLOWED_DOCS: raise ValueError(f'Неподдерживаемый тип документа: {ext or "без расширения"}')
     out=[];warnings=[]
@@ -87,10 +96,16 @@ def heuristics(text:str):
     return results[:24]
 
 
-def pdf_first_page_png(raw:bytes)->bytes:
+def pdf_first_page_png(raw: bytes) -> bytes:
+    """Render user-supplied PDF drawings in the same bounded child process."""
+    from .document_worker import run_document_worker
+    return run_document_worker("pdf_preview", "drawing.pdf", raw)
+
+
+def _pdf_first_page_png_direct(raw:bytes)->bytes:
     """Convert only the first page of a user-supplied PDF drawing to pixels."""
     try:
-        import fitz  # PyMuPDF, sandbox-free direct rasterization: no shell execution
+        import pymupdf as fitz  # Direct PDF rasterizer in resource-limited worker
         with fitz.open(stream=raw,filetype='pdf') as document:
             if document.needs_pass:raise ValueError('PDF-чертёж защищён паролем')
             if not document.page_count:raise ValueError('PDF-чертёж не содержит страниц')
