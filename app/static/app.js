@@ -266,6 +266,9 @@
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
     }
     const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(isAiPro()&&(!aiConceptSet||selectedAiConcept===null)){
+      showError('Сначала создайте три AI-концепции и выберите одну из них.');return;
+    }
     if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
       showError('Сначала нажмите «Проанализировать материалы», проверьте выбор и при необходимости измените приоритеты.');return;
     }
@@ -283,6 +286,11 @@
       else fileIds.forEach(id=>appendFiles(form,id));
       form.append('use_openai',String(checked('use-openai')));
       form.append('use_demo',String(checked('use-demo')));
+      form.append('generation_mode',isAiPro()?'ai_pro':'template');
+      if(isAiPro()){
+        form.append('concept_set_id',aiConceptSet.concept_set_id);
+        form.append('concept_index',String(selectedAiConcept));
+      }
       form.append('model',get('image-model'));
       form.append('quality',get('image-quality'));
       const response=await fetch('/api/generate',{method:'POST',body:form});
@@ -298,7 +306,8 @@
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
-      setStatus('Готово','PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
+      setStatus('Готово',(isAiPro()?'Выбранный AI-дизайн':'Шаблон')+
+        ': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
@@ -340,6 +349,8 @@
   }
   function clearForm(){
     for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','proof-points','dimensions','price','phones','promo-prompt'])set(id,'');
+    invalidateAiConcepts();
+    $('mode-ai-pro').checked=true;$('mode-template').checked=false;
     markPromptStale();
     set('currency','Br');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
@@ -371,6 +382,7 @@
       const result=await response.json();
       if(!result?.brief?.model)throw new Error('Сервер вернул неполный пример.');
       fillBrief(result.brief);
+      invalidateAiConcepts();
       set('style',selectedStyle);set('accent',selectedAccent);
       $('color-label').textContent=selectedAccent.toUpperCase();
       for(const id of fileIds)$(id).value='';
@@ -409,7 +421,7 @@
   }
 
   for(const id of fileIds){
-    $(id).addEventListener('change',()=>{updateFileLabels();markPromptStale();invalidateResult();clearError();});
+    $(id).addEventListener('change',()=>{updateFileLabels();markPromptStale();invalidateResult();invalidateAiConcepts();clearError();});
   }
   for(const id of ['hero','documents','logo']){
     $('clear-'+id).addEventListener('click',()=>{$(id).value='';$(id).dispatchEvent(new Event('change',{bubbles:true}));});
@@ -424,15 +436,15 @@
       if(id==='accent')$('color-label').textContent=get('accent').toUpperCase();
       if(['show-roi','price','currency','extra-payload','distance','rate','trips','years','baseline-price'].includes(id))updateRoi();
       markPromptStale();
-      invalidateResult();
+      invalidateResult();invalidateAiConcepts();
     });
-    field.addEventListener('change',()=>{markPromptStale();invalidateResult();});
+    field.addEventListener('change',()=>{markPromptStale();invalidateResult();invalidateAiConcepts();});
   }
   document.querySelectorAll('[data-style]').forEach(button=>button.addEventListener('click',()=>{
     set('style',button.dataset.style);
     const accents={industrial:'#e31b26',reference_pro:'#e31b26',graphite:'#344054',minimal:'#315ddc'};
     set('accent',accents[button.dataset.style]);$('color-label').textContent=get('accent').toUpperCase();
-    refreshStyle();markPromptStale();invalidateResult();
+    refreshStyle();markPromptStale();invalidateResult();invalidateAiConcepts();
   }));
   $('use-openai').addEventListener('change',()=>{if(checked('use-openai')&&!apiReady){$('use-openai').checked=false;showError('OpenAI пока не подключён. Добавьте API-ключ на сервере.');}updateAi();invalidateResult();});
   $('show-roi').addEventListener('change',updateRoi);
@@ -508,7 +520,7 @@
       'Заполненные поля не изменены. При необходимости отредактируйте их вручную.');
   });
   window.addEventListener('promoeditor:assets-changed',()=>{
-    markPromptStale();invalidateResult();clearError();
+    markPromptStale();invalidateResult();invalidateAiConcepts();clearError();
   });
   $('build-prompt-btn').addEventListener('click',async()=>{
     clearError();
@@ -525,6 +537,12 @@
     invalidateResult();
   });
   $('reset-btn').addEventListener('click',resetDemo);
+  $('generate-concepts-btn').addEventListener('click',generateAiConcepts);
+  for(const id of ['mode-ai-pro','mode-template']){
+    $(id).addEventListener('change',()=>{
+      refreshGenerationMode();invalidateResult();clearError();
+    });
+  }
   $('generate-btn').addEventListener('click',generate);
   $('inspect-btn').addEventListener('click',inspect);
   $('apply-extracted').addEventListener('click',()=>{
