@@ -65,12 +65,20 @@
       }
       const copy=element('div','asset-file-copy');
       copy.appendChild(element('strong','asset-file-name',entry.file.name));
-      copy.appendChild(element('small','asset-file-info',
-        (preferences[entry.id]==='drawing'?'Чертёж (назначен вручную)':LABELS[entry.field])+' · '+(entry.file.size/1024/1024).toFixed(2)+' МБ'));
       const known=!dirty&&(report?.project_assets||[]).find(a=>a.id===entry.id);
+      const assignedDrawing=known?.auto_drawing;
+      const shownKind=preferences[entry.id]==='drawing'
+        ?'Чертёж (назначен вручную)'
+        :assignedDrawing?'Чертёж (распознан автоматически)':LABELS[entry.field];
+      copy.appendChild(element('small','asset-file-info',
+        shownKind+' · '+(entry.file.size/1024/1024).toFixed(2)+' МБ'));
       if(known)copy.appendChild(element('small','asset-file-decision',
-        known.selected?'✓ Выбран: '+(known.assignment==='analysis_only'?'для анализа':known.assignment):
-          'Не включён в макет'));
+        known.selected?'✓ Выбран: '+(
+          known.assignment==='drawing'?'чертёж':
+          known.assignment==='primary_photo'?'главное фото':
+          known.assignment==='secondary_photo'?'дополнительный ракурс':
+          known.assignment==='analysis_only'?'для анализа':known.assignment
+        ):'Не включён в макет'));
       card.appendChild(copy);
       const controls=element('div','asset-file-controls');
       const select=element('select','asset-pref');
@@ -122,6 +130,17 @@
     announce(message||'Список изменился. Проанализируйте файлы перед генерацией.',true);
     $('asset-approve')?.classList.remove('is-accepted');
     $('asset-selection')?.classList.add('is-stale');
+    if(report){
+      // Do not display the OLD "Чертёж — Не выбран" after changing a role.
+      // That decision no longer describes what the next render will use.
+      $('asset-picked')?.replaceChildren(
+        element('p','asset-fineprint',
+          'Предыдущий выбор устарел. Нажмите «Пересобрать выбор», чтобы увидеть актуальные материалы.')
+      );
+      $('asset-unused')?.replaceChildren();
+    }else if($('asset-selection')){
+      $('asset-selection').hidden=true;
+    }
     window.dispatchEvent(new CustomEvent('promoeditor:assets-changed'));
   }
   function handleFiles(event){
@@ -328,7 +347,7 @@
     $('asset-files-list').scrollIntoView({behavior:'smooth',block:'center'});
     const first=$('asset-files-list').querySelector('select');
     if(first)first.focus({preventScroll:true});
-    announce('В выпадающем списке можно назначить загруженную фотографию чертежом. После изменения нажмите «Пересобрать выбор».');
+    announce('Чёрно-белые технические схемы распознаются автоматически. При необходимости выберите «Использовать как чертёж» и нажмите «Пересобрать выбор».');
   });
   renderFiles();
   window.PromoAssets={
