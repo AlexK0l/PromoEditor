@@ -102,14 +102,116 @@
     });
   }
   function updateAi(){
-    $('ai-description').textContent=apiReady?'Два платных запроса за комплект':'На сервере не настроен API-ключ';
+    $('ai-description').textContent=apiReady?
+      'Необязательные 2 платных запроса на фоны при финальном экспорте. Концепции создаются отдельно.':
+      'Нет API-ключа. Быстрый шаблон доступен без OpenAI.';
     $('use-openai').disabled=!apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
+    refreshGenerationMode();
+  }
+
+  function isAiPro(){return checked('mode-ai-pro');}
+
+  function refreshGenerationMode(){
+    const ai=isAiPro();
+    $('ai-creative-settings').hidden=!ai;
+    $('ai-concepts-workflow').hidden=!ai;
+    $('prompt-workflow').hidden=ai;
+    $('generate-btn').textContent=ai
+      ?'Собрать выбранную AI-концепцию →':'Создать PNG · JPEG · SVG →';
+    $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
+    $('generate-concepts-btn').disabled=isBusy||!apiReady;
     if(!isBusy){
-      if(checked('use-openai'))setStatus('OpenAI включён','Два платных запроса для 4:3 и 9:16.');
-      else setStatus('Без расходов на API','Обычная сборка изображений.');
+      if(ai){
+        setStatus(apiReady?'AI PRO · OpenAI':'AI PRO недоступен',
+          apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
+            'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
+      }else{
+        setStatus(checked('use-openai')?'Шаблон + AI-фон':'Быстрый шаблон',
+          checked('use-openai')?'2 платных запроса на изображение':'Без затрат на OpenAI.');
+      }
     }
   }
+
+  function invalidateAiConcepts(){
+    aiConceptSet=null;
+    selectedAiConcept=null;
+    $('ai-concept-cards').replaceChildren();
+    $('ai-concept-cards').hidden=true;
+    $('ai-concepts-status').textContent=
+      'Материалы или бриф изменились. Создайте новые AI-концепции для актуальных данных.';
+    refreshGenerationMode();
+  }
+
+  function renderAiConcepts(){
+    const panel=$('ai-concept-cards');
+    panel.replaceChildren();
+    if(!aiConceptSet?.concepts?.length){panel.hidden=true;return;}
+    panel.hidden=false;
+    for(const item of aiConceptSet.concepts){
+      const card=document.createElement('article');
+      card.className='ai-concept-card'+(item.index===selectedAiConcept?' is-selected':'');
+      const img=document.createElement('img');
+      img.src=item.previews['4x3'];img.alt='Концепция '+(item.index+1)+': '+item.name;
+      img.loading='lazy';card.appendChild(img);
+      const heading=document.createElement('strong');
+      heading.textContent=String.fromCharCode(65+item.index)+' · '+item.name;
+      card.appendChild(heading);
+      const caption=document.createElement('p');caption.textContent=item.rationale;
+      card.appendChild(caption);
+      const links=document.createElement('div');links.className='concept-switch';
+      const portrait=document.createElement('a');portrait.href=item.previews['9x16'];
+      portrait.target='_blank';portrait.rel='noopener';
+      portrait.textContent='Посмотреть 9:16';
+      links.appendChild(portrait);card.appendChild(links);
+      const choose=document.createElement('button');choose.type='button';
+      choose.textContent=item.index===selectedAiConcept?'✓ Концепция выбрана':'Выбрать эту концепцию';
+      choose.setAttribute('aria-pressed',String(item.index===selectedAiConcept));
+      choose.addEventListener('click',()=>{
+        selectedAiConcept=item.index;
+        renderAiConcepts();refreshGenerationMode();
+        $('ai-concepts-status').textContent='Выбрана концепция '+String.fromCharCode(65+item.index)+
+          '. Нажмите «Собрать выбранную AI-концепцию».';
+      });
+      card.appendChild(choose);panel.appendChild(card);
+    }
+  }
+
+  async function generateAiConcepts(){
+    clearError();
+    if(!apiReady){showError('Для AI PRO требуется OPENAI_API_KEY. Переключитесь на быстрый шаблон.');return;}
+    if(!get('model').trim()){showError('Укажите модель товара.','model');return;}
+    const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
+      showError('Сначала проанализируйте материалы и подтвердите выбор.');return;
+    }
+    invalidateAiConcepts();busy(true);
+    $('ai-concepts-status').textContent='OpenAI разрабатывает три композиции для 4:3 и 9:16…';
+    setStatus('Создаём AI-концепции','Планирование дизайна — один платный запрос к OpenAI.','working');
+    try {
+      const form=new FormData();
+      form.append('payload',JSON.stringify(formBrief()));
+      if(window.PromoAssets)window.PromoAssets.append(form);
+      else fileIds.forEach(id=>appendFiles(form,id));
+      form.append('design_style',get('design-style'));
+      form.append('design_goal',get('design-goal'));
+      const response=await fetch('/api/concepts',{method:'POST',body:form});
+      if(!response.ok)throw new Error(await readError(response));
+      const result=await response.json();
+      if(!result?.concept_set_id||result.concepts?.length!==3)
+        throw new Error('Не удалось получить три полноценные концепции.');
+      aiConceptSet=result;selectedAiConcept=null;
+      renderAiConcepts();refreshGenerationMode();
+      $('ai-concepts-status').textContent=
+        'Три концепции готовы. Эталон '+(result.reference_used?'использован как стилистический ориентир.':'не потребовался.')+
+        ' Выберите понравившуюся композицию.';
+      $('ai-concepts-workflow').scrollIntoView({behavior:'smooth',block:'center'});
+    }catch(error){
+      $('ai-concepts-status').textContent='Не удалось создать концепции.';
+      showError(error.message||'Ошибка AI-концепций.');
+    }finally{busy(false);}
+  }
+
   function validateFiles(){
     const all=fileIds.flatMap(id=>Array.from($(id).files));
     if(all.length>16)return 'Слишком много вложений: не более 16 файлов за один комплект.';
