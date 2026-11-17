@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import os
 import secrets
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -42,6 +44,39 @@ def _image_references(refs: list[bytes]):
         buf=io.BytesIO();img.convert('RGB').save(buf,'PNG');buf.seek(0);buf.name=f'reference_{i}.png'
         objects.append(buf)
     return objects
+
+
+def _default_visual_cache(brief, hero_present, references, model, quality,
+                          design_prompt, scene_direction):
+    """Private, content-addressed cache for retrying a partially failed pair.
+
+    The complete effective request is hashed. Untrusted prompts and source
+    bytes never appear in folder names; saved source originals are unaffected.
+    """
+    payload={
+        'version':1, 'brief':brief, 'hero_present':hero_present,
+        'references':[hashlib.sha256(ref).hexdigest() for ref in references],
+        'model':model, 'quality':quality, 'design_prompt':design_prompt,
+        'scene_direction':scene_direction,
+    }
+    digest=hashlib.sha256(json.dumps(
+        payload,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode('utf-8')
+    ).hexdigest()
+    base=Path(os.getenv('PROMO_DATA_DIR',str(Path(__file__).resolve().parent.parent/
+                                             'instance'/'jobs')))/'.paid_visual_cache'
+    ttl=max(300,int(os.getenv('PROMO_JOB_TTL_SECONDS','7200')))
+    if base.is_dir():
+        cutoff=time.time()-ttl
+        for entry in base.iterdir():
+            try:
+                if (entry.is_dir() and len(entry.name)==64 and
+                    all(ch in '0123456789abcdef' for ch in entry.name) and
+                    entry.stat().st_mtime<cutoff):
+                    import shutil
+                    shutil.rmtree(entry,ignore_errors=True)
+            except OSError:
+                pass
+    return base/digest
 
 
 def _cached_visual(cache_dir: Path | None, fmt: str):
@@ -103,6 +138,9 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
     """
     if model not in IMAGE_MODELS:raise ValueError('Недопустимая модель изображения')
     if quality not in IMAGE_QUALITIES:raise ValueError('Недопустимое качество изображения')
+    if cache_dir is None:
+        cache_dir=_default_visual_cache(brief,hero_present,references,model,
+                                        quality,design_prompt,scene_direction)
     api=None
     outputs={}
     for fmt,size in [('4x3','1536x1024'),('9x16','1024x1536')]:
