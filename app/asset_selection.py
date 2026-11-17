@@ -66,12 +66,64 @@ def records_from_groups(groups):
     if len(records)>MAX_ITEMS:raise ValueError(f'Не более {MAX_ITEMS} файлов.')
     return records
 
+
+def _looks_like_engineering_drawing(preview: Image.Image, original_size: tuple[int, int]) -> bool:
+    """Conservative offline recognition of black-on-white technical sheets.
+
+    The preview has already been downsampled. We distinguish thin monochrome
+    strokes distributed across the page from colored machinery photos, logos,
+    blank sheets and isolated foreground objects. No OCR, AI or source edits.
+    Ambiguous images remain photos; a manual choice always overrides this.
+    """
+    if min(original_size) < 300:
+        return False
+    if preview.mode in ("RGBA", "LA") and preview.getchannel("A").getextrema()[0] < 230:
+        return False
+    ink=paper=color=count=0
+    col_ink=[0]*6
+    col_total=[0]*6
+    row_ink=[0]*3
+    row_total=[0]*3
+    rgb=preview.convert("RGB")
+    width,height=rgb.size
+    pixels=rgb.load()
+    for y in range(0,height,2):
+        row=min(2,y*3//height)
+        for x in range(0,width,2):
+            column=min(5,x*6//width)
+            red,green,blue=pixels[x,y]
+            highest=max(red,green,blue)
+            lowest=min(red,green,blue)
+            chroma=highest-lowest
+            paper += (lowest>=220 and chroma<=28)
+            color += chroma>=35
+            stroke=(highest<185 and chroma<25)
+            ink += stroke
+            count+=1
+            col_total[column]+=1
+            row_total[row]+=1
+            if stroke:
+                col_ink[column]+=1
+                row_ink[row]+=1
+    if count==0 or not (
+        paper/count >= .78 and color/count <= .065
+        and .006 <= ink/count <= .105
+    ):
+        return False
+    # Real technical sheets have fine linework across most of the sheet.
+    # Black-and-white logos, isolated product drawings or monochrome photos
+    # should not be silently promoted based on the white background alone.
+    columns=sum(col_ink[i]/max(1,col_total[i])>.004 for i in range(6))
+    rows=sum(row_ink[i]/max(1,row_total[i])>.004 for i in range(3))
+    return columns>=5 and rows>=2
+
 def _tech_score(raw,kind):
     try:
         # The original photo stays in r['raw']; only this disposable thumbnail
         # is decoded for local sharpness, dHash and tonal scoring.
         img,(w,h)=analysis_preview(raw,max_edge=300)
         alpha=(img.mode in ('RGBA','LA') or 'transparency' in img.info)
+        drawing_like=(kind=='photo' and _looks_like_engineering_drawing(img,(w,h)))
         gray=img.convert('L')
         edge=ImageStat.Stat(gray.filter(ImageFilter.FIND_EDGES)).var[0]
         sharp=min(1.0,math.sqrt(max(0,edge))/22)
@@ -90,7 +142,7 @@ def _tech_score(raw,kind):
                      '(оригинал сохранён для макета)')
         return (score,reason,w,h,alpha,dh,
                 ImageStat.Stat(img.convert('RGB')).mean,
-                (img.width,img.height),resized)
+                (img.width,img.height),resized,drawing_like)
     except ValueError:raise
     except Exception as exc:raise ValueError('Не удалось проверить изображение.') from exc
 
@@ -133,6 +185,14 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     if cached_report is not None and not isinstance(cached_report,dict):
         raise ValueError('Некорректный отчёт анализа.')
     warnings=[];seen={};visual_hashes=[]
+    # A drawing uploaded in the dedicated field or assigned explicitly
+    # takes priority. Only run conservative auto-detection when the user
+    # has not already selected a technical drawing.
+    drawing_reserved=any(
+        (r['kind']=='drawing' and prefs.get(r['id'],'auto')!='exclude')
+        or prefs.get(r['id'])=='drawing'
+        for r in records
+    )
     for i,r in enumerate(records):
         preference=prefs.get(r['id'],'auto')
         if preference=='drawing':
@@ -146,10 +206,24 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
         r.update(index=i,preference=preference,score=50,quality='',selected=False,assignment='',reason='')
         if r['kind'] in ('photo','logo','reference') or (r['kind']=='drawing' and Path(r['name']).suffix.lower() in ('.png','.jpg','.jpeg','.webp')):
             try:
-                score,quality,w,h,alpha,dhash,tone,preview_size,resized=_tech_score(
+                score,quality,w,h,alpha,dhash,tone,preview_size,resized,drawing_like=_tech_score(
                     r['raw'],r['kind'])
             except ValueError as exc:
                 raise ValueError(f"{r['name']}: {exc}") from exc
+            if (r['kind']=='photo' and preference=='auto' and
+                    not drawing_reserved and drawing_like):
+                r['kind']='drawing'
+                r['auto_drawing']=True
+                quality='Автоматически распознан технический чертёж; '+quality
+                warnings.append(
+                    f"{r['name']}: распознан как чертёж по монохромным "
+                    "размерным линиям и выбран для технической схемы. "
+                    "Если это фотография, установите «Обязательно использовать» "
+                    "и пересоберите выбор."
+                )
+                # One automatically selected drawing is enough; further
+                # ambiguous scans stay photo candidates until a manual override.
+                drawing_reserved=True
             r.update(score=score,quality=quality,width=w,height=h,alpha=alpha,
                      analysis_width=preview_size[0],analysis_height=preview_size[1],
                      analysis_resized=resized)
@@ -276,7 +350,7 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     for r in records:
         keys=('id','kind','name','size','sha256','preference','score','quality','selected','assignment','reason',
               'width','height','analysis_width','analysis_height','analysis_resized',
-              'alpha','ai_score','ai_reason','ai_role','duplicate_of','manual_drawing')
+              'alpha','ai_score','ai_reason','ai_role','duplicate_of','manual_drawing','auto_drawing')
         row={key:r[key] for key in keys if key in r}
         suffix=Path(r['name']).suffix.lower()
         row['mime']={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg',
