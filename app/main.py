@@ -290,11 +290,20 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             # plates. Verified facts and real source files stay editable SVG
             # objects; there is intentionally NO silent fixed-layout fallback.
             plan_brief={**brief,'_has_drawing':drawing is not None}
-            design_plan=generate_plan(plan_brief,references=references,
-                                      hero_raw=hero_raw)
-            # Validate exact user copy BEFORE calling the paid image API.
-            preflight_typography(brief,design_plan,
-                                 drawing_present=drawing is not None)
+            feedback=''
+            for attempt in range(2):
+                try:
+                    design_plan=generate_plan(
+                        plan_brief,references=references,
+                        hero_raw=hero_raw,feedback=feedback)
+                    # Validate immutable copy BEFORE paid image generation.
+                    preflight_typography(
+                        brief,design_plan,drawing_present=drawing is not None)
+                    break
+                except ValueError as exc:
+                    if attempt == 1:
+                        raise
+                    feedback=str(exc)
             artwork=generate_artwork(
                 brief,design_plan,references=references,hero_raw=hero_raw,
                 scene_raw=background_raw,model=model,quality=quality,
