@@ -50,6 +50,8 @@ TTL_SECONDS=int(os.getenv('PROMO_JOB_TTL_SECONDS','7200'))
 LIMIT=int(os.getenv('PROMO_REQUESTS_PER_HOUR','20'))
 RATE=defaultdict(list)
 LOCK=threading.Lock()
+# Bound 6-preview renders inside a worker, especially on the 2-GB VPS.
+CONCEPT_RENDER_SLOTS=threading.BoundedSemaphore(1)
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
 FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
        'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','layout_spec.json','edit.png'}
@@ -127,6 +129,18 @@ def _guard_rate(request:Request):
         recent.append(now);RATE[ip]=recent
 
 
+def _validate_uploaded_image(name: str, raw: bytes) -> None:
+    """Verify Pillow image dimensions and integrity in a worker thread."""
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            validate_image_dimensions(*img.size)
+            img.verify()
+    except ValueError as exc:
+        raise HTTPException(400,detail=f'{name}: {exc}') from exc
+    except Exception as exc:
+        raise HTTPException(400,detail=f'{name}: файл не является корректным изображением') from exc
+
+
 async def _files(form,field,extensions,collection=False):
     items=form.getlist(field) if collection else [form.get(field)]
     out=[]
@@ -139,17 +153,7 @@ async def _files(form,field,extensions,collection=False):
         if len(raw)>MAX_FILE:raise HTTPException(413,detail=f'{name}: превышен лимит 20 МБ на файл')
         if not raw:continue
         if extension in ALLOWED_IMAGES:
-            try:
-                with Image.open(io.BytesIO(raw)) as img:
-                    # Validate the ORIGINAL before decoding. Bigger images
-                    # are previewed at 300/512 px during analysis, not uploaded
-                    # with destructive resizing or substituted in final output.
-                    validate_image_dimensions(*img.size)
-                    img.verify()
-            except ValueError as exc:
-                raise HTTPException(400,detail=f'{name}: {exc}') from exc
-            except Exception as exc:
-                raise HTTPException(400,detail=f'{name}: файл не является корректным изображением') from exc
+            await asyncio.to_thread(_validate_uploaded_image,name,raw)
         out.append((name,raw))
     return out
 
@@ -440,6 +444,52 @@ def _concept_fingerprint(brief:dict,report:dict)->str:
     return hashlib.sha256(blob).hexdigest()
 
 
+def _build_concept_previews_sync(brief, report, records, concepts,
+                                style, goal, hero_raw, reference_raw):
+    """Load sources and render all six previews with bounded worker concurrency."""
+    with CONCEPT_RENDER_SLOTS:
+        hero=load_image(hero_raw)
+        detail=load_image(chosen_bytes(report,records,'secondary_photo'))
+        logo=load_image(chosen_bytes(report,records,'logo'))
+        drawing_raw=chosen_bytes(report,records,'drawing')
+        drawing_id=report['selected_assets'].get('drawing')
+        if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
+            drawing_raw=pdf_first_page_png(drawing_raw)
+        drawing=load_image(drawing_raw)
+        backdrop=load_image(chosen_bytes(report,records,'background'))
+        _clean_jobs()
+        job_id=secrets.token_hex(16)
+        folder=STORAGE/job_id
+        folder.mkdir(mode=0o700)
+        try:
+            saved={'version':1,'brief_hash':_concept_fingerprint(brief,report),
+                   'style':style,'goal':goal,'reference_used':reference_raw is not None,
+                   'concepts':concepts}
+            (folder/'concepts.json').write_text(
+                json.dumps(saved,ensure_ascii=False,indent=2),encoding='utf-8')
+            cards=[]
+            for i,concept in enumerate(concepts):
+                previews={}
+                for fmt in ('4x3','9x16'):
+                    svg=render_ai_concept_svg(
+                        brief,fmt,concept,hero=hero,detail=detail,logo=logo,
+                        drawing=drawing,backdrop=backdrop)
+                    png,_=rasterize_svg(svg)
+                    name=f'concept_{i}_{fmt}.png'
+                    (folder/name).write_bytes(png)
+                    previews[fmt]=f'/files/{job_id}/{name}'
+                cards.append({'index':i,'name':concept['name'],
+                              'rationale':concept['rationale'],
+                              'previews':previews,'layout_spec':concept['layouts']})
+        except Exception:
+            shutil.rmtree(folder,ignore_errors=True)
+            raise
+        return {'concept_set_id':job_id,'concepts':cards,
+                'reference_used':reference_raw is not None,
+                'style':style,'goal':goal,
+                'message':'AI разработал три композиции. Выберите одну для финальной сборки.'}
+
+
 @app.post('/api/concepts')
 async def create_ai_concepts(request:Request):
     """AI plans three editable concepts; reference-example upload is OPTIONAL.
@@ -477,46 +527,9 @@ async def create_ai_concepts(request:Request):
         concepts=await asyncio.to_thread(
             generate_concepts,brief,hero=hero_raw,reference=reference_raw,
             style=style,goal=goal)
-        hero=load_image(hero_raw)
-        detail=load_image(chosen_bytes(report,records,'secondary_photo'))
-        logo=load_image(chosen_bytes(report,records,'logo'))
-        drawing_raw=chosen_bytes(report,records,'drawing')
-        drawing_id=report['selected_assets'].get('drawing')
-        if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
-            drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
-        drawing=load_image(drawing_raw)
-        backdrop=load_image(chosen_bytes(report,records,'background'))
-        _clean_jobs()
-        job_id=secrets.token_hex(16)
-        folder=STORAGE/job_id
-        folder.mkdir(mode=0o700)
-        try:
-            saved={'version':1,'brief_hash':_concept_fingerprint(brief,report),
-                   'style':style,'goal':goal,'reference_used':reference_raw is not None,
-                   'concepts':concepts}
-            (folder/'concepts.json').write_text(
-                json.dumps(saved,ensure_ascii=False,indent=2),encoding='utf-8')
-            cards=[]
-            for i,concept in enumerate(concepts):
-                previews={}
-                for fmt in ('4x3','9x16'):
-                    svg=render_ai_concept_svg(
-                        brief,fmt,concept,hero=hero,detail=detail,logo=logo,
-                        drawing=drawing,backdrop=backdrop)
-                    png,_=rasterize_svg(svg)
-                    name=f'concept_{i}_{fmt}.png'
-                    (folder/name).write_bytes(png)
-                    previews[fmt]=f'/files/{job_id}/{name}'
-                cards.append({'index':i,'name':concept['name'],
-                              'rationale':concept['rationale'],
-                              'previews':previews,'layout_spec':concept['layouts']})
-        except Exception:
-            shutil.rmtree(folder,ignore_errors=True)
-            raise
-        return {'concept_set_id':job_id,'concepts':cards,
-                'reference_used':reference_raw is not None,
-                'style':style,'goal':goal,
-                'message':'AI разработал три композиции. Выберите одну для финальной сборки.'}
+        return await asyncio.to_thread(
+            _build_concept_previews_sync, brief, report, records, concepts,
+            style, goal, hero_raw, reference_raw)
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
@@ -689,6 +702,20 @@ async def edit_existing_promo(request: Request):
             'warning': 'Проверьте текст, цифры, логотип и детали техники после AI-правки.'}
 
 
+def _inspect_documents_sync(docs):
+    """Parse documents outside the async HTTP handler."""
+    warnings=[];contents=[];parsed=[]
+    for name,raw in docs:
+        try:
+            text,issues=extract_text(name,raw)
+        except ValueError as exc:
+            raise HTTPException(400,detail=f'{name}: {exc}') from exc
+        contents.append(f'\n----- FILE {name} -----\n'+text)
+        warnings.extend([f'{name}: {msg}' for msg in issues])
+        parsed.append({'file':name,'characters':len(text)})
+    return warnings,parsed,'\n'.join(contents)[:35000]
+
+
 @app.post('/api/inspect')
 async def inspect(request:Request):
     if int(request.headers.get('content-length') or 0)>MAX_ALL:raise HTTPException(413,detail='Файлы слишком большие')
@@ -696,14 +723,7 @@ async def inspect(request:Request):
     docs=await _files(form,'documents',ALLOWED_DOCS,collection=True)
     if not docs:raise HTTPException(400,detail='Загрузите PDF, DOCX, XLSX, CSV или TXT')
     if len(docs)>MAX_FILES:raise HTTPException(400,detail='Слишком много документов')
-    warnings=[];contents=[];parsed=[]
-    for name,raw in docs:
-        try:text,issues=extract_text(name,raw)
-        except ValueError as exc:raise HTTPException(400,detail=f'{name}: {exc}')
-        contents.append(f'\n----- FILE {name} -----\n'+text)
-        warnings.extend([f'{name}: {msg}' for msg in issues])
-        parsed.append({'file':name,'characters':len(text)})
-    joined='\n'.join(contents)[:35000]
+    warnings,parsed,joined=await asyncio.to_thread(_inspect_documents_sync,docs)
     ai=str(form.get('use_ai','false')).lower()=='true'
     result={'files':parsed,'raw_text':joined[:18000],
             'suggested_specs':heuristics(joined),'warnings':warnings,'ai_used':False,'ai_suggestions':None,
