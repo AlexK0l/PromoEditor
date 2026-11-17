@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw
 
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
 from .openai_service import analyze_documents, generate_visuals
+from .ai_director import generate_plan, generate_artwork, render_ai_poster
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .image_analysis import validate_image_dimensions
@@ -85,7 +86,10 @@ def home():
 
 @app.get('/api/config')
 def config():
-    return {'openai_ready':bool(os.getenv('OPENAI_API_KEY')),
+    ready=bool(os.getenv('OPENAI_API_KEY'))
+    return {'openai_ready':ready,
+            'default_design_mode':'ai_first' if ready else 'vector',
+            'design_modes':['ai_first','vector'],'reference_optional':True,
             'auth_enabled':auth_enabled(),
             'logout_csrf_token':issue_form_token('logout') if auth_enabled() else None,
             'image_models':['gpt-image-2.5-flare','gpt-image-2.5-sunburst'],
@@ -265,7 +269,7 @@ def _demo_hero():
 
 def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                    use_demo,use_openai,model,quality,design_prompt,asset_report=None,
-                   background_raw=None):
+                   background_raw=None,design_mode='vector'):
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
@@ -275,27 +279,52 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         logo=load_image(logo_raw)
         drawing=load_image(drawing_raw)
         user_backdrop=load_image(background_raw)
-        if hero is None and use_demo and not use_openai:
-            hero=_demo_hero()
+        if design_mode not in ('ai_first','vector'):
+            raise ValueError('Неизвестный режим дизайна.')
+        design_plan=None
+        artwork={}
         visuals={}
         ai_product=False
-        if use_openai:
-            visuals=generate_visuals(brief,hero_present=(hero is not None),
-                                     references=references,model=model,
-                                     quality=quality,design_prompt=design_prompt)
-            ai_product=hero is None
+        if design_mode=='ai_first':
+            # AI plans ALL section geometry, then paints two art-direction
+            # plates. Verified facts and real source files stay editable SVG
+            # objects; there is intentionally NO silent fixed-layout fallback.
+            plan_brief={**brief,'_has_drawing':drawing is not None}
+            design_plan=generate_plan(plan_brief,references=references,
+                                      hero_raw=hero_raw)
+            artwork=generate_artwork(
+                brief,design_plan,references=references,hero_raw=hero_raw,
+                scene_raw=background_raw,model=model,quality=quality,
+                design_prompt=design_prompt)
+            (folder/'ai_design_plan.json').write_text(
+                json.dumps(design_plan,ensure_ascii=False,indent=2),
+                encoding='utf-8')
+        else:
+            if hero is None and use_demo and not use_openai:
+                hero=_demo_hero()
+            if use_openai:
+                visuals=generate_visuals(
+                    brief,hero_present=(hero is not None),
+                    references=references,model=model,quality=quality,
+                    design_prompt=design_prompt)
+                ai_product=hero is None
         paths={};jpeg_paths={};corel_paths={}
         for key in ('4x3','9x16'):
-            visual=visuals.get(key)
-            photo=visual if ai_product else hero
-            # An explicitly requested OpenAI image takes priority; otherwise
-            # the customer's own licensed industrial photo is used as the
-            # separate scene layer beneath the unchanged product bitmap.
-            scene=None if ai_product else (visual if visual is not None else user_backdrop)
-            svg=create_editable_svg(brief,key,hero=photo,detail=detail,logo=logo,
-                                    drawing=drawing,backdrop=scene,ai_product=ai_product)
-            # The SVG is the master. PNG and JPEG are rendered from the SAME
-            # vector scene, so opening the SVG in CorelDRAW has matching layout.
+            if design_mode=='ai_first':
+                svg=render_ai_poster(
+                    brief,key,design_plan,artwork[key],hero=hero,
+                    detail=detail,logo=logo,drawing=drawing)
+                artwork[key].save(folder/f'ai_art_{key}.png',format='PNG')
+            else:
+                visual=visuals.get(key)
+                photo=visual if ai_product else hero
+                # Explicit OpenAI background or supplied original photo.
+                scene=None if ai_product else (
+                    visual if visual is not None else user_backdrop)
+                svg=create_editable_svg(
+                    brief,key,hero=photo,detail=detail,logo=logo,
+                    drawing=drawing,backdrop=scene,ai_product=ai_product)
+            # SVG is the master for BOTH modes; export retains editable copy.
             png,jpeg=rasterize_svg(svg)
             png_name=f'poster_{key}.png'
             jpg_name=f'poster_{key}.jpg'
@@ -310,14 +339,23 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         (folder/'asset_selection.json').write_text(json.dumps(asset_report or {},ensure_ascii=False,indent=2),encoding='utf-8')
         briefing=dict(brief)
         briefing['_metadata']={
-            'generator':'PromoEditor SVG scene 2.0',
-            'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
+            'generator':'PromoEditor AI-first art direction 1.0'
+                if design_mode=='ai_first' else 'PromoEditor SVG scene 2.0',
+            'design_mode':design_mode,
+            'reference_optional':True,
+            'reference_supplied':bool(references),
+            'image_source':'OpenAI art plate + exact source SVG layers'
+                if design_mode=='ai_first' else
+                ('OpenAI API' if use_openai else 'Исходное фото / демо'),
             'ai_product_visualization':ai_product,
             'verified_specs':False,
-            'design_actions_sent_to_ai':bool(use_openai and brief.get('design_actions')),
+            'design_actions_sent_to_ai':bool(
+                (use_openai or design_mode=='ai_first')
+                and brief.get('design_actions')),
             'editable_source':'CorelDRAW-compatible SVG; each text/shape is a vector object',
             'bitmap_limit':'A photo or AI-generated image remains one individually replaceable bitmap, not editable vector parts.',
             'prompt_file':'promo_prompt.txt',
+            'design_plan_file':'ai_design_plan.json' if design_plan else None,
             'asset_selection_file':'asset_selection.json',
             'note':'Проверяйте технические данные, цены и права на иллюстрации перед публикацией.'
         }
@@ -343,6 +381,9 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'corel_4x3.svg','corel_9x16.svg',
             'promo_prompt.txt','brief.json','asset_selection.json','CORELDRAW_README.txt'
         ]
+        if design_plan is not None:
+            names.extend(['ai_design_plan.json',
+                          'ai_art_4x3.png','ai_art_9x16.png'])
         with zipfile.ZipFile(folder/'promo_kit.zip','w',
                             compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
             for filename in names:
@@ -381,15 +422,23 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             warnings.append('В макете используются первые 4 габарита; остальные сохранены в JSON-брифе.')
         if len(brief.get('benefits') or [])>5:
             warnings.append('В рекламной полосе показаны первые 5 преимуществ; остальные сохранены в JSON-брифе.')
-        if brief.get('design_actions') and not use_openai:
-            warnings.append('Дополнительные действия сохранены в промпте, но без OpenAI не применяются к AI-фону и произвольному изменению дизайна.')
+        if brief.get('design_actions') and not (
+                use_openai or design_mode=='ai_first'):
+            warnings.append(
+                'Дополнительные действия сохранены в промпте, '
+                'но без OpenAI не применяются к AI-дизайну.')
         return {
             'job_id':job_id,'images':paths,'jpeg':jpeg_paths,'corel':corel_paths,
             'prompt_file':f'/files/{job_id}/promo_prompt.txt',
             'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
             'asset_selection':f'/files/{job_id}/asset_selection.json',
             'selected_assets':(asset_report or {}).get('selected_assets',{}),
-            'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
+            'ai_used':use_openai or design_mode=='ai_first',
+            'design_mode':design_mode,
+            'reference_used':bool(references),
+            'ai_design_plan':f'/files/{job_id}/ai_design_plan.json'
+                 if design_plan is not None else None,
+            'visualization':ai_product,'warnings':warnings
         }
     except Exception:
         shutil.rmtree(folder,ignore_errors=True)
@@ -412,7 +461,10 @@ async def preview_promo_prompt(request:Request):
     try:prompt=build_promo_prompt(brief,report)
     except ValueError as exc:raise HTTPException(400,detail=str(exc))
     return {'prompt':prompt,'formats':['4x3','9x16'],'ai_required':False,
-            'notice':'Промпт сформирован из формы без платного вызова. При включённом OpenAI он передаётся для генерации сцены, а тексты и векторные элементы компонуются программно.'}
+            'notice':'Творческое задание собрано из формы бесплатно. '
+                     'В режиме AI-дизайнера OpenAI создаёт план обеих композиций '
+                     'и художественные слои. Эталон необязателен; технические '
+                     'данные и исходники сохраняются отдельно.'}
 
 
 @app.post('/api/generate')
@@ -429,8 +481,13 @@ async def generate(request:Request):
     prefs,cached=_asset_review(form)
     use_openai=str(form.get('use_openai','false')).lower()=='true'
     use_demo=str(form.get('use_demo','false')).lower()=='true'
-    if use_openai and not os.getenv('OPENAI_API_KEY'):
-        raise HTTPException(400,detail='Для AI-генерации укажите OPENAI_API_KEY на сервере.')
+    design_mode=str(form.get('design_mode','vector'))
+    if design_mode not in ('ai_first','vector'):
+        raise HTTPException(400,detail='Неизвестный режим дизайна.')
+    if (use_openai or design_mode=='ai_first') and not os.getenv('OPENAI_API_KEY'):
+        raise HTTPException(400,detail=(
+            'Для AI-дизайнера нужен OPENAI_API_KEY на VPS. '
+            'Либо явно выберите SVG-шаблон без API.'))
     supplied_prompt=form.get('prompt','')
     if not isinstance(supplied_prompt,str) or len(supplied_prompt)>8000:
         raise HTTPException(400,detail='Промпт не должен превышать 8000 символов.')
@@ -465,7 +522,8 @@ async def generate(request:Request):
         result=await asyncio.to_thread(
             _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
             references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
-            str(form.get('quality','medium')),design_prompt,report,background_raw)
+            str(form.get('quality','medium')),design_prompt,report,
+            background_raw,design_mode)
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:
