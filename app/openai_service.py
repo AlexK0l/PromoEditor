@@ -50,8 +50,10 @@ def _scene_for_category(brief):
                 'warm overcast daylight; a distant generic excavator may appear only '
                 'as background context, never as the advertised product')
     if any(word in category for word in ('зерн','сельхоз','агро','посевн','комбайн')):
-        return ('grain logistics operation, harvested fields and grain silos, soft '
-                'morning light, realistic commercial countryside atmosphere')
+        return ('premium photorealistic grain loading terminal with large silver cylindrical '
+                'silos, steel grain elevator towers and conveyors, a modest pile of harvested '
+                'grain at the far left edge, believable cloud-filtered morning light, '
+                'subtle reflections in concrete, neutral road surface, realistic atmosphere')
     return ('modern industrial logistics yard with concrete road, low warehouses, '
             'clear distant horizon and bright diffused commercial light')
 
@@ -80,9 +82,13 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
                 "No advertised product or foreground vehicle, no invented brand/product logo, no text, "
                 "letters, signs, people, technical diagrams, prices, markings or charts. "
                 f"Choose this truthful-looking but clearly illustrative industrial atmosphere: {_scene_for_category(brief)}. "
-                "Strong photographic depth, dynamic but clean B2B visual, high-key horizon, "
-                "neutral silvery slate and industrial red accents; leave visual space for the "
-                "ORIGINAL unchanged product photo which is composited separately as an editable object. "
+                "Professional commercial-vehicle advertising photography, realistic environmental "
+                "lighting, a clear low angle and matching perspective. The future hero trailer will "
+                "occupy the LEFT TWO THIRDS of the finished composition. Keep that area uncluttered "
+                "with open industrial concrete ground, real contact-shadow space and no foreground "
+                "objects. Place silos, buildings and conveyor structures toward the distant left "
+                "and right edges. Do not generate the trailer. The ORIGINAL product photo is "
+                "composited separately as a replaceable SVG bitmap. "
                 "Do NOT create a duplicate of the advertised vehicle or machinery. "
                 f"Product theme: {subject}. Brand brief (aesthetic preferences only): {notes}. {guidance} "
                 f"Composition: {'landscape' if fmt=='4x3' else 'portrait'} with safe central product area. "
