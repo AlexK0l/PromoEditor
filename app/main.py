@@ -322,8 +322,9 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'Сохраните импортированный файл как CDR в самой программе CorelDRAW.\n'
             'Фотографии и AI-изображения — отдельные растровые объекты. '
             'Их внутренние детали НЕ становятся независимыми векторными объектами.\n'
-            'Если выбраны исходные фотографии, их оригинальные байты находятся '
-            'в папке originals/ внутри ZIP. SVG содержит облегчённые копии для верстки.\n'
+            'Если выбраны исходные фотографии или JPG/PNG/WEBP чертёж, '
+            'их оригинальные байты находятся в папке originals/ внутри ZIP. '
+            'Рекламный SVG содержит только облегчённые копии.\n'
             'Для соответствия типографике установите или замените DejaVu Sans.\n'
             'JPEG/PNG получены из тех же SVG, поэтому компоновка совпадает.\n'
             'Проверьте тексты и цифры перед публикацией.\n'
@@ -349,7 +350,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                 if isinstance(row,dict)
             }
             for role,payload in (('primary_photo',hero_raw),
-                                 ('secondary_photo',detail_raw)):
+                                 ('secondary_photo',detail_raw),
+                                 ('drawing',drawing_raw)):
                 asset=originals.get(selected.get(role))
                 if not payload or not asset:continue
                 extension=Path(str(asset.get('name') or '')).suffix.lower()
