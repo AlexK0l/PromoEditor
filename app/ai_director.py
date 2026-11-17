@@ -156,7 +156,9 @@ def generate_plan(brief: dict, *, references: list[bytes] | None = None,
     photos can be included so the model learns the product's silhouette, but
     it is forbidden to replace or invent verified product details.
     """
-    format_model = model or os.environ.get("OPENAI_LAYOUT_MODEL", "gpt-5.6-terra")
+    format_model = model or os.environ.get(
+        "OPENAI_LAYOUT_MODEL",
+        os.environ.get("OPENAI_TEXT_MODEL", "gpt-5.6-terra"))
     inputs: list[dict] = [{
         "type": "input_text",
         "text": json.dumps({
@@ -213,6 +215,51 @@ def generate_plan(brief: dict, *, references: list[bytes] | None = None,
     except (TypeError, json.JSONDecodeError) as exc:
         raise ValueError("OpenAI вернул нечитабельный дизайн-план.") from exc
     return validate_plan(candidate, brief)
+
+
+
+
+def preflight_typography(brief: dict, plan: dict,
+                        *, drawing_present: bool = False) -> None:
+    """Check immutable copy BEFORE spending on two image requests.
+
+    The planned coordinates are rendered offline with a tiny blank bitmap.
+    Truncating numeric specs, dimensions, model names or contact numbers is
+    unacceptable; bad layouts fail loudly with a clear validation error.
+    """
+    import xml.etree.ElementTree as ET
+
+    placeholder=Image.new("RGB",(12,12),"#E7ECEF")
+    dummy_drawing=placeholder if drawing_present else None
+    for key in SIZES:
+        xml=render_ai_poster(
+            brief,key,plan,placeholder,drawing=dummy_drawing)
+        root=ET.fromstring(xml)
+        important=("ai-model-","ai-category-","ai-spec-name-",
+                   "ai-spec-value-","ai-dim-name-","ai-dim-value-",
+                   "ai-price-","ai-phone-")
+        nodes=[node for node in root.iter()
+               if node.tag.endswith("}text") and
+               node.get("id","").startswith(important)]
+        for node in nodes:
+            rendered=" ".join(node.itertext())
+            if "…" in rendered:
+                raise ValueError(
+                    f"AI-дизайн {key}: текст {node.get('id')} обрезан. "
+                    "Измените краткое название/текст или повторите генерацию "
+                    "дизайна. Художественные изображения ещё не создавались."
+                )
+        labels=" ".join(" ".join(node.itertext()) for node in nodes)
+        for item in (brief.get("model") or "",
+                     *[v[1] for v in _lines(brief,"specs",8)],
+                     *[v[1] for v in _lines(brief,"dimensions",4)],
+                     *[str(v) for v in (brief.get("phones") or [])[:2]]):
+            if item and str(item) not in labels:
+                raise ValueError(
+                    f"AI-дизайн {key}: значение «{str(item)[:48]}» "
+                    "не помещается в макет. Платные изображения ещё "
+                    "не генерировались."
+                )
 
 
 def generate_artwork(brief: dict, plan: dict, *,
