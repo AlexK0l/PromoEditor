@@ -89,7 +89,8 @@ def _studio_stage(scene, x, y, w, h, accent):
 def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
     category=str(brief.get("category") or "").casefold()
     grain=any(token in category for token in ("зерн","агро","сельхоз"))
-    photo_height=min(395,h*.72) if _lines(brief,"dimensions",4) else h
+    # The premium renderer gives the hero its own non-overlapping section.
+    photo_height=h
     # Without a verified real backdrop, use neutral editorial geometry.
     # This keeps the source product dominant and avoids fictional scenery.
     _studio_stage(scene,x,y,w,photo_height,accent)
@@ -107,12 +108,12 @@ def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
         if ai_product:
             # An AI product composite already includes its environment.
             # Cover the visible photo strip without deforming the trailer.
-            _photo(scene,image,x,y,w,min(395,h*.72),
+            _photo(scene,image,x,y,w,photo_height,
                    "ai-product-bitmap",cover=True)
         else:
             # Keep the original product a separate, editable bitmap.
             # Its bounding rectangle ends above the dimensions panel.
-            _photo(scene,image,x+7,y+2,w-18,min(395,h*.75),
+            _photo(scene,image,x+8,y+2,w-16,max(1,photo_height-6),
                    "original-product-photo",trim=True)
     scene.polygon("photos",[(x,y+photo_height-9),(x+w-98,y+photo_height-9),
                             (x+w-112,y+photo_height),(x,y+photo_height)],
@@ -215,10 +216,12 @@ def _drawing_dimensions_four(scene,brief,detail,drawing,x,y,w,h,accent):
              "pro-dimensions-title",26)
     top=y+42
     inner=max(35,h-49)
-    sizes_w=253 if facts else 0
+    sizes_w=254 if facts else 0
     metrics_x=x+w-sizes_w+5 if facts else x+w
     available=max(150,w-sizes_w-27)
-    detail_w=min(154,available*.23) if detail is not None else 0
+    # Keep the actual engineering projection large; the optional detail
+    # photo remains a separate original in the ZIP, not inside this narrow zone.
+    detail_w=0
     if detail_w:
         scene.rect("dimensions",x+11,top,detail_w,inner,
                    "#F2F4F6",rad=4,ident="pro6-detail-inset-frame")

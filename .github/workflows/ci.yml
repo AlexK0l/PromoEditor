@@ -84,13 +84,13 @@ jobs:
           done
           docker logs promo-ci
           exit 1
-      - name: Generate editable PRO v4 visual review samples
+      - name: Generate editable premium PRO visual review samples
         run: PYTHONPATH=. python tests/generate_pro_previews.py
-      - name: Publish PRO v4 preview PNG and SVG
+      - name: Publish premium PRO preview PNG and SVG
         uses: actions/upload-artifact@v4
         with:
-          name: pro-v4-visual-previews
-          path: /tmp/promo-pro-v4/
+          name: premium-pro-visual-previews
+          path: /tmp/promo-premium-pro/
           if-no-files-found: error
       - name: Container diagnostics
         if: always()
