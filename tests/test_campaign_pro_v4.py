@@ -170,3 +170,86 @@ def test_pro_v5_does_not_invent_photo_background_when_none_uploaded():
     assert named(root, "pro5-studio-background", "rect")
     assert not named(root, "pro-ai-background", "image")
     assert not named(root, "ai-product-bitmap", "image")
+
+
+
+def _two_projection_sheet():
+    """Synthetic 2-view engineering document; no proprietary sample needed."""
+    canvas=Image.new("RGB",(1200,900),"white")
+    pencil=ImageDraw.Draw(canvas)
+    pencil.rectangle((42,22,1140,340),outline="#252525",width=3)
+    for xx in range(65,1125,28):
+        pencil.line((xx,40,xx,338),fill="#313131",width=2)
+    for yy in (123,173,223,273):
+        pencil.line((42,yy,1140,yy),fill="#373737",width=2)
+    pencil.rectangle((490,550,715,845),outline="#333333",width=3)
+    for xx in range(510,700,24):
+        pencil.line((xx,560,xx,825),fill="#333333",width=2)
+    return canvas
+
+
+def test_two_projection_drawing_is_cropped_to_source_side_elevation():
+    """A tall side+rear sheet should not shrink to the size of a thumbnail."""
+    from app.campaign_pro_v4 import _side_elevation
+    original=_two_projection_sheet()
+    cropped,detected=_side_elevation(original)
+    assert detected is True
+    assert cropped.width/cropped.height > 2.9
+    assert cropped.height <= original.height*.38
+    assert original.size==(1200,900)  # source unchanged
+
+    brief=default_brief()
+    brief["style"]="reference_pro"
+    detail=Image.new("RGB",(530,410),"#efb324")
+    result=create_editable_svg(brief,"4x3",drawing=original,detail=detail)
+    root=ET.fromstring(result)
+    assert named(root,"pro6-projection-label","text")
+    technical=named(root,"original-drawing","image")
+    assert len(technical)==1
+    assert named(root,"detail-photo","image")
+    assert named(root,"pro6-technical-stage","rect")
+    for label,value in brief["dimensions"]:
+        assert value in words(root),(label,value)
+
+    # The embedded drawing must hold the actual wide PROFILE crop, not
+    # the full side+rear sheet squashed into a tiny aspect ratio.
+    import base64
+    href=technical[0].get("{http://www.w3.org/1999/xlink}href")
+    cropped_png=base64.b64decode(href.split(",",1)[1])
+    with Image.open(io.BytesIO(cropped_png)) as img:
+        assert img.width/img.height>2.9
+    assert float(technical[0].get("width"))>400
+    assert float(technical[0].get("height"))>=105
+    png,_=rasterize_svg(result)
+    assert Image.open(io.BytesIO(png)).size==(1440,1080)
+
+
+def test_drawing_without_second_projection_is_not_arbitrarily_cropped():
+    from app.campaign_pro_v4 import _side_elevation
+    tall=Image.new("RGB",(1000,800),"white")
+    pencil=ImageDraw.Draw(tall)
+    # Single-view geometry spanning most of both upper and lower rows.
+    for yy in range(10,780,44):
+        pencil.line((40,yy,960,yy),fill="#181818",width=3)
+    chosen,cropped=_side_elevation(tall)
+    assert cropped is False
+    assert chosen.size==tall.size
+    result=create_editable_svg(
+        {**default_brief(),"style":"reference_pro"},
+        "4x3",drawing=tall)
+    root=ET.fromstring(result)
+    assert len(named(root,"original-drawing","image"))==1
+    assert not named(root,"pro6-projection-label","text")
+
+
+def test_pro6_full_original_data_survives_when_drawing_is_present():
+    data={**default_brief(),"style":"reference_pro"}
+    original=_two_projection_sheet()
+    result=create_editable_svg(data,"4x3",drawing=original)
+    root=ET.fromstring(result)
+    all_words=words(root)
+    for label,value in data["specs"]+data["dimensions"]:
+        assert value in all_words, (label,value)
+    assert "БОКОВОЙ ВИД" in all_words
+    for text in root.findall(".//s:text",SVG):
+        assert "…" not in "".join(text.itertext()), text.get("id")
