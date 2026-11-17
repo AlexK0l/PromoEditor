@@ -11,7 +11,7 @@ import math
 from . import campaign_pro_v3 as v3
 from .campaign_pro_v4 import _hero_four, _specs_four, _dims_four, _benefits_four
 from .campaign_pro import _tint
-from .campaign_layout import _check, _rule, _lines
+from .campaign_layout import _check, _rule, _lines, _photo
 from .editable_export import Scene
 from .render import compute_roi
 
@@ -173,6 +173,17 @@ def create_pro_campaign_svg(brief,key,hero=None,detail=None,logo=None,
         photo_h=body_end-start
     _hero_four(scene,brief,hero,backdrop,ai_product,
                0,start,hero_w,photo_h,accent)
+    if detail is not None and drawing is not None:
+        # Keep the user's second product angle as a small, independently
+        # replaceable photograph; never squeeze the technical drawing for it.
+        inset_x=18
+        inset_y=start+photo_h-111
+        scene.rect("photos",inset_x,inset_y,160,103,"#FFFFFF",
+                   rad=6,ident="pro7-secondary-frame")
+        _photo(scene,detail,inset_x+5,inset_y+4,150,92,
+               "detail-photo",layer="photos",trim=True)
+        scene.rect("photos",inset_x+6,inset_y+98,147,4,
+                   accent,ident="pro7-secondary-underline")
     if specs:
         spec_h=min(470,body_end-start-4)
         _specs_four(scene,specs,952,171,488,spec_h,accent)
