@@ -107,6 +107,44 @@ def main():
         page.set_viewport_size({'width':390,'height':820})
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth+2')
         assert not errors,errors
+
+        # Second browser scenario: the first uploaded "photo" actually is a
+        # black-and-white side/rear engineering sheet. Without a paid AI key
+        # it must be placed in the drawing role automatically.
+        other=browser.new_page(viewport={'width':1380,'height':900})
+        other.goto(BASE,wait_until='domcontentloaded')
+        other.locator('#model').fill('ZubrTrail drawing selection')
+        sheet=Image.new('RGB',(1200,900),'white')
+        pen=ImageDraw.Draw(sheet)
+        pen.rectangle((42,22,1140,340),outline='#292929',width=3)
+        for x in range(65,1125,28):
+            pen.line((x,40,x,338),fill='#313131',width=2)
+        for y in (123,173,223,273):
+            pen.line((42,y,1140,y),fill='#373737',width=2)
+        pen.rectangle((490,550,715,845),outline='#333333',width=3)
+        for x in range(510,700,24):
+            pen.line((x,560,x,825),fill='#333333',width=2)
+        buf=io.BytesIO()
+        sheet.save(buf,format='JPEG',quality=92)
+        upload(other,'hero','technical-sheet.jpg',buf.getvalue(),'image/jpeg')
+        upload(other,'hero','product.png',png('yellow',(950,560),16),'image/png')
+        other.locator('#analyze-assets-btn').click()
+        other.wait_for_function(
+            'document.getElementById("assets-analysis-status").textContent.includes("Анализ выполнен")')
+        drawing_card=other.locator('[data-asset-id="photo_1"]')
+        assert 'Чертёж (распознан автоматически)' in drawing_card.inner_text()
+        drawing_slot=other.locator('#asset-picked .asset-pick').filter(has_text='Чертёж')
+        assert 'technical-sheet.jpg' in drawing_slot.inner_text()
+        assert drawing_card.locator('.asset-pref').input_value()=='auto'
+        # An override immediately removes OLD summary values from the screen
+        # until the server has recomputed the actual roles.
+        drawing_card.locator('.asset-pref').select_option('include')
+        assert 'Предыдущий выбор устарел' in other.locator('#asset-picked').inner_text()
+        other.locator('#asset-rebuild').click()
+        other.wait_for_function(
+            'document.getElementById("assets-analysis-status").textContent.includes("Анализ выполнен")')
+        assert 'Не выбран' in drawing_slot.inner_text()
+        other.close()
         browser.close()
     print('Browser multi-asset review: add, analyze, override, prompt, ZIP, remove, mobile — PASS')
 
