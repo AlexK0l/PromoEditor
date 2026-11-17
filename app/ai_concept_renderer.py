@@ -83,7 +83,7 @@ def _hero(scene, hero, detail, backdrop, rect, colors, ai_product):
         scene.rect("photos",dx-3,dy-3,iw+6,ih+6,"#FFFFFF",
                    rad=6,ident="ai-detail-frame")
         _photo(scene,detail,dx,dy,iw,ih,"detail-photo",layer="photos",trim=True)
-    scene.rect("decor",x,y+h-5,w,5,colors["accent"],ident="ai-hero-underline")
+    scene.rect("photos",x,y+h-5,w,5,colors["accent"],ident="ai-hero-underline")
 
 
 def _specs(scene, brief, rect, colors):
@@ -168,7 +168,7 @@ def _benefits(scene, brief, rect, colors):
     proof_h=min(h*.30,48) if proof else 0
     area_h=h-title_h-10-proof_h
     if claims:
-        columns=4 if w>=520 else 2
+        columns=4 if w>=900 else 2
         rows=(len(claims)+columns-1)//columns
         cell_w=(w-16)/columns
         cell_h=area_h/max(1,rows)
@@ -183,7 +183,7 @@ def _benefits(scene, brief, rect, colors):
                        f"ai-benefit-text-{i}",3)
     if proof:
         msg="  •  ".join(proof)
-        scene.text("claims",msg,x+14,y+h-proof_h-3,w-28,max(17,proof_h),
+        scene.text("benefits",msg,x+14,y+h-proof_h-3,w-28,max(17,proof_h),
                    17,10,accent,True,"ai-verified-proof",2)
 
 
