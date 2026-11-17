@@ -277,7 +277,7 @@ def test_invalid_ai_layout_stops_before_paid_image_requests(monkeypatch):
     result=client.post("/api/generate",data=payload)
     assert result.status_code==400,result.text
     assert "пересекаются" in result.json()["detail"]
-    assert len(stub.requests)==1
+    assert len(stub.requests)==2  # one limited retry with validation feedback
     assert not stub.calls  # no paid image API request
 
 
