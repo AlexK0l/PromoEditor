@@ -167,7 +167,7 @@ def create_pro_campaign_svg(brief,key,hero=None,detail=None,logo=None,
     # remain independent and readable. No scaling of vehicle geometry.
     start=148
     benefits_y=730 if benefits else None
-    finance_y=841 if has_trust else None
+    finance_y=846 if has_trust else None
     foot_y=951
     body_end=(benefits_y-8 if benefits else
               finance_y-8 if has_trust else foot_y-10)
