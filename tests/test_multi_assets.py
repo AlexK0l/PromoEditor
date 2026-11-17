@@ -134,6 +134,8 @@ def test_all_generated_formats_use_only_selected_sources_and_archive_report(monk
     saved=json.loads(archive.read('asset_selection.json'))
     assert saved['selected_assets']['primary_photo']=='photo_2'
     assert saved['selected_assets']['logo']=='logo_2'
+    # Export the original logo with EXACT bytes, just like product photos.
+    assert archive.read('originals/logo.png')==photo('green',(400,200),11)
     assert 'distant.png' in archive.read('promo_prompt.txt').decode('utf-8') or 'main.png' in archive.read('promo_prompt.txt').decode('utf-8')
 
 
@@ -437,3 +439,36 @@ def test_blank_white_and_colored_product_photos_not_recognized_as_drawings():
         preview=image.copy()
         preview.thumbnail((300,300))
         assert not _looks_like_engineering_drawing(preview,image.size)
+
+
+
+def test_preapproved_prompt_does_not_duplicate_the_asset_section(monkeypatch):
+    from app import main as main_module
+    monkeypatch.setattr(main_module,"_guard_rate",lambda request:None)
+    reviewed=analyze()
+    assert reviewed.status_code==200,reviewed.text
+    report=reviewed.json()
+    preview=client.post("/api/prompt",json={
+        **default_brief(),"asset_report":report
+    })
+    assert preview.status_code==200,preview.text
+    supplied=preview.json()["prompt"]
+    assert supplied.count("МАТЕРИАЛЫ ПРОЕКТА (имена файлов") == 1
+    form={
+        "payload":json.dumps(default_brief(),ensure_ascii=False),
+        "asset_preferences":"{}",
+        "asset_report":json.dumps(report,ensure_ascii=False),
+        "prompt":supplied,
+        "use_openai":"false","use_demo":"false"
+    }
+    generated=client.post("/api/generate",data=form,files=project_files())
+    assert generated.status_code==200,generated.text
+    bundle=client.get(generated.json()["zip"])
+    assert bundle.status_code==200
+    with zipfile.ZipFile(io.BytesIO(bundle.content)) as kit:
+        data=kit.read("promo_prompt.txt").decode("utf-8")
+        assert data.count("МАТЕРИАЛЫ ПРОЕКТА (имена файлов") == 1
+        assert kit.read("originals/logo.png") in (
+            photo("blue",(350,210),7),
+            photo("green",(400,200),11),
+        )
