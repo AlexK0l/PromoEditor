@@ -403,6 +403,104 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         raise
 
 
+def _concept_fingerprint(brief:dict,report:dict)->str:
+    """Tie AI-authored geometry to validated copy and the current source files."""
+    assets=[(item.get('id'),item.get('sha256')) for item in
+            report.get('project_assets',[]) if isinstance(item,dict)]
+    blob=json.dumps({'brief':brief,'assets':assets,
+                     'selected':report.get('selected_assets',{})},
+                    ensure_ascii=False,sort_keys=True,
+                    separators=(',',':')).encode('utf-8')
+    return hashlib.sha256(blob).hexdigest()
+
+
+@app.post('/api/concepts')
+async def create_ai_concepts(request:Request):
+    """AI plans three editable concepts; reference-example upload is OPTIONAL.
+
+    Each preview uses the existing original images, exact facts and generic
+    neutral/user-supplied backgrounds. Final photorealistic scene generation
+    is a separate, explicitly selected paid step.
+    """
+    _guard_rate(request)
+    if not os.getenv('OPENAI_API_KEY'):
+        raise HTTPException(400,detail='Для AI PRO настройте OPENAI_API_KEY. Шаблонный режим доступен без ключа.')
+    if int(request.headers.get('content-length') or 0)>MAX_ALL:
+        raise HTTPException(413,detail='Превышен общий лимит 68 МБ.')
+    form=await request.form()
+    raw=form.get('payload','{}')
+    if not isinstance(raw,str) or len(raw)>48000:
+        raise HTTPException(400,detail='Слишком большой бриф.')
+    try:
+        brief=_normalize(json.loads(raw))
+    except (json.JSONDecodeError,ValueError) as exc:
+        raise HTTPException(400,detail='Некорректный бриф.') from exc
+    if not brief.get('model'):
+        raise HTTPException(400,detail='Укажите модель товара.')
+    style=str(form.get('design_style','premium'))
+    goal=str(form.get('design_goal','sales'))
+    if style not in STYLES or goal not in GOALS:
+        raise HTTPException(400,detail='Недопустимый стиль или цель рекламы.')
+    groups=await _asset_groups(form)
+    prefs,cached=_asset_review(form)
+    try:
+        report,records=await asyncio.to_thread(
+            analyze_project,groups,prefs,cached_report=cached,use_ai=False)
+        hero_raw=chosen_bytes(report,records,'primary_photo')
+        reference_raw=chosen_bytes(report,records,'reference_example')
+        concepts=await asyncio.to_thread(
+            generate_concepts,brief,hero=hero_raw,reference=reference_raw,
+            style=style,goal=goal)
+        hero=load_image(hero_raw)
+        detail=load_image(chosen_bytes(report,records,'secondary_photo'))
+        logo=load_image(chosen_bytes(report,records,'logo'))
+        drawing_raw=chosen_bytes(report,records,'drawing')
+        drawing_id=report['selected_assets'].get('drawing')
+        if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
+            drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
+        drawing=load_image(drawing_raw)
+        backdrop=load_image(chosen_bytes(report,records,'background'))
+        _clean_jobs()
+        job_id=secrets.token_hex(16)
+        folder=STORAGE/job_id
+        folder.mkdir(mode=0o700)
+        try:
+            saved={'version':1,'brief_hash':_concept_fingerprint(brief,report),
+                   'style':style,'goal':goal,'reference_used':reference_raw is not None,
+                   'concepts':concepts}
+            (folder/'concepts.json').write_text(
+                json.dumps(saved,ensure_ascii=False,indent=2),encoding='utf-8')
+            cards=[]
+            for i,concept in enumerate(concepts):
+                previews={}
+                for fmt in ('4x3','9x16'):
+                    svg=render_ai_concept_svg(
+                        brief,fmt,concept,hero=hero,detail=detail,logo=logo,
+                        drawing=drawing,backdrop=backdrop)
+                    png,_=rasterize_svg(svg)
+                    name=f'concept_{i}_{fmt}.png'
+                    (folder/name).write_bytes(png)
+                    previews[fmt]=f'/files/{job_id}/{name}'
+                cards.append({'index':i,'name':concept['name'],
+                              'rationale':concept['rationale'],
+                              'previews':previews,'layout_spec':concept['layouts']})
+        except Exception:
+            shutil.rmtree(folder,ignore_errors=True)
+            raise
+        return {'concept_set_id':job_id,'concepts':cards,
+                'reference_used':reference_raw is not None,
+                'style':style,'goal':goal,
+                'message':'AI разработал три композиции. Выберите одну для финальной сборки.'}
+    except ValueError as exc:
+        raise HTTPException(400,detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            502,detail=f'Не удалось создать AI-концепции. Проверьте OpenAI API ({type(exc).__name__}).'
+        ) from exc
+
+
 @app.post('/api/prompt')
 async def preview_promo_prompt(request:Request):
     """Free, deterministic and inspectable intermediate step: form -> prompt."""
