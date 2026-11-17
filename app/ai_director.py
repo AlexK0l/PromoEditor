@@ -146,7 +146,7 @@ def _brief_for_ai(brief: dict) -> dict:
     """Only bounded task facts, no internal auth tokens or file paths."""
     keys = ("brand", "category", "model", "slogan", "specs", "dimensions",
             "benefits", "proof_points", "hero_claims", "design_notes",
-            "design_actions", "accent", "price", "currency", "phones")
+            "design_actions", "style", "accent", "price", "currency", "phones")
     return {k: brief.get(k) for k in keys}
 
 
@@ -205,6 +205,8 @@ def generate_plan(brief: dict, *, references: list[bytes] | None = None,
         "not generated into the background art. For absent sections, their "
         "rectangles may be arbitrary valid unused slots, but place active "
         "sections with generous readable spacing. "
+        "Interpret the selected UI style as a preference, not as a fixed "
+        "pixel geometry; the model is free to art-direct a better hierarchy. "
         "You may choose editorial, cinematic, brutalist or other coherent "
         "commercial visual styles; describe a photographic/illustrative ART "
         "PLATE in scene_prompt. No text, logos, vehicles, technical diagrams, "
