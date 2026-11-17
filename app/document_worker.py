@@ -7,7 +7,9 @@ NOT a full OS security sandbox (the child retains the service OS user).
 from __future__ import annotations
 
 import base64
+import io
 import json
+from contextlib import redirect_stdout
 import os
 import subprocess
 import sys
@@ -108,15 +110,17 @@ def _worker_main() -> int:
         raw = sys.stdin.buffer.read(_MAX_INPUT_BYTES + 1)
         if not raw or len(raw) > _MAX_INPUT_BYTES:
             raise ValueError("Превышен лимит исходного файла.")
-        from .documents import _extract_text_direct, _pdf_first_page_png_direct
-        if sys.argv[1] == "extract":
-            text, warnings = _extract_text_direct(sys.argv[2], raw)
-            result = {"ok": True, "text": text[:36000], "warnings": warnings[:30]}
-        else:
-            image = _pdf_first_page_png_direct(raw)
-            if len(image) > 20 * 1024 * 1024:
-                raise ValueError("Полученный чертёж слишком большой.")
-            result = {"ok": True, "image": base64.b64encode(image).decode("ascii")}
+        # Libraries may print notices to stdout; reserve stdout for one JSON reply.
+        with redirect_stdout(io.StringIO()):
+            from .documents import _extract_text_direct, _pdf_first_page_png_direct
+            if sys.argv[1] == "extract":
+                text, warnings = _extract_text_direct(sys.argv[2], raw)
+                result = {"ok": True, "text": text[:36000], "warnings": warnings[:30]}
+            else:
+                image = _pdf_first_page_png_direct(raw)
+                if len(image) > 20 * 1024 * 1024:
+                    raise ValueError("Полученный чертёж слишком большой.")
+                result = {"ok": True, "image": base64.b64encode(image).decode("ascii")}
         encoded = json.dumps(result, ensure_ascii=False).encode("utf-8")
         if len(encoded) > _MAX_OUTPUT_BYTES:
             raise ValueError("Результат обработки документа слишком большой.")
