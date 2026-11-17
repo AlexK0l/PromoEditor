@@ -285,6 +285,7 @@ def test_invalid_ai_layout_stops_before_paid_image_requests(monkeypatch):
     payload={
         "payload":json.dumps(default_brief(),ensure_ascii=False),
         "design_mode":"ai_first","use_openai":"false",
+        "use_demo":"true",  # explicitly selected sample product
     }
     result=client.post("/api/generate",data=payload)
     assert result.status_code==400,result.text
