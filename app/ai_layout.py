@@ -129,12 +129,96 @@ def validate_concept(concept: dict[str, Any]) -> dict[str, Any]:
     return concept
 
 
-def normalize_concepts(payload: dict[str, Any]) -> list[dict[str, Any]]:
+# Exact raster sizes of the two exports. AI box coordinates are 0..1000.
+_CANVAS = {"4x3": (1440, 1080), "9x16": (1080, 1920)}
+
+
+def _filled_pairs(brief: dict, key: str, limit: int) -> int:
+    """Match the actual SVG renderer's _lines() filtering and row limit."""
+    rows = brief.get(key) or []
+    if not isinstance(rows, list):
+        return 0
+    return sum(1 for row in rows[:limit]
+               if isinstance(row, (list, tuple)) and len(row) >= 2
+               and str(row[0]).strip() and str(row[1]).strip())
+
+
+def validate_renderability(concept: dict, brief: dict, fmt: str,
+                           *, has_drawing: bool = False) -> None:
+    """Check actual content capacity BEFORE drawing a paid AI layout preview.
+
+    The structural validator only knows rectangle geometry. The renderer also
+    needs enough physical pixels for facts, captions and ROI. Use the same
+    dimensions and row arithmetic as ai_concept_renderer, without any AI calls.
+    """
+    if fmt not in _CANVAS:
+        raise ValueError("Неизвестный формат AI-компоновки.")
+    layout = concept["layouts"][fmt]
+    width, height = _CANVAS[fmt]
+
+    def rect(zone):
+        box = layout[zone]
+        return box["w"] * width / 1000, box["h"] * height / 1000
+
+    specs = _filled_pairs(brief, "specs", 8)
+    if specs:
+        _, h = rect("specs")
+        title_h = min(40, h * .17)
+        row_h = (h - title_h - 12 - 3 * (specs - 1)) / specs
+        if row_h < 28:
+            raise ValueError(
+                f"AI выделил слишком мало места для {specs} строк ТТХ в {fmt}."
+            )
+
+    sizes = _filled_pairs(brief, "dimensions", 4)
+    if sizes or has_drawing:
+        _, h = rect("dimensions")
+        if h - min(39, h * .24) - 12 < 28:
+            raise ValueError(
+                f"AI выделил слишком мало места для чертежа и размеров в {fmt}."
+            )
+
+    claims = (brief.get("benefits") or []) or (brief.get("hero_claims") or [])
+    claims = [str(value).strip() for value in claims if str(value).strip()][:4]
+    proofs = [str(value).strip() for value in (brief.get("proof_points") or [])
+              if str(value).strip()][:3]
+    if claims:
+        w, h = rect("benefits")
+        title_h = min(37, h * .21)
+        proof_h = min(h * .30, 48) if proofs else 0
+        columns = 4 if w >= 900 else 2
+        rows = (len(claims) + columns - 1) // columns
+        cell_w = (w - 16) / columns
+        cell_h = (h - title_h - 10 - proof_h) / rows
+        if cell_w < 145 or cell_h < 34:
+            raise ValueError(
+                f"AI выделил слишком мало места для преимуществ в {fmt}."
+            )
+
+    if brief.get("show_roi"):
+        w, h = rect("roi")
+        title_h = min(32, h * .23)
+        columns = 2 if w < 520 else 4
+        rows = 4 // columns
+        cell_w = (w - 12) / columns
+        cell_h = (h - title_h - 10) / rows
+        if cell_w < 125 or cell_h < 46:
+            raise ValueError(
+                f"AI выделил слишком мало места для экономики в {fmt}."
+            )
+
+
+def normalize_concepts(payload: dict[str, Any], brief: dict | None = None) -> list[dict[str, Any]]:
     """This output contains DESIGN ONLY, never factual text or user file bytes."""
     items = payload.get("concepts") if isinstance(payload, dict) else None
     if not isinstance(items, list) or len(items) != 3:
         raise ValueError("OpenAI должен вернуть ровно три концепции.")
-    return [dict(validate_concept(item), id=f"concept_{i}") for i, item in enumerate(items)]
+    output = [dict(validate_concept(item), id=f"concept_{i}") for i, item in enumerate(items)]
+    if brief is not None:
+        for concept in output:
+            for fmt in FORMATS:
+                validate_renderability(concept, brief, fmt)
+    return output
 
 
 def generate_concepts(brief: dict, *, hero: bytes | None = None,
@@ -172,6 +256,13 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "design plane (integer x,y,w,h). Required zones: header, hero, specs, "
         "dimensions, benefits, roi, footer. No overlaps, no out-of-bounds zones. "
         "Hero w >=350 and h>=170. Header/footer h>=75. Each zone w>=100 h>=48. "
+        "CRITICAL: size zones for the actual copy. Each specifications row needs "
+        "at least 28 output pixels plus a 3px separator and a heading. "
+        "Benefits need room for up to four items plus proof claims. "
+        "Economy needs four legible metrics (one row in wide blocks or two "
+        "rows in narrower blocks); a tiny ROI panel is invalid. "
+        "For 4:3 the 1000-unit grid maps to 1440x1080 actual pixels; "
+        "for 9:16 it maps to 1080x1920. "
         "Allocate generous space for product silhouette and factual specifications; "
         "avoid tiny captions. Build distinct spatial compositions, not just colors. "
         "Choose palette hex colors. scene_prompt describes only photorealistic "
@@ -201,6 +292,6 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
     if not raw:
         raise ValueError("OpenAI не вернул план рекламных концепций.")
     try:
-        return normalize_concepts(json.loads(raw))
+        return normalize_concepts(json.loads(raw), brief=brief)
     except (json.JSONDecodeError, TypeError) as exc:
         raise ValueError("OpenAI вернул некорректный план.") from exc
