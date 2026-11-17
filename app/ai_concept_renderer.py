@@ -6,7 +6,7 @@ No generated poster raster is used as a false 'editable' SVG.
 """
 from __future__ import annotations
 
-from .ai_layout import validate_concept, ZONES
+from .ai_layout import validate_concept, validate_renderability, ZONES
 from .editable_export import Scene
 from .campaign_layout import _lines, _photo
 from .campaign_pro_v4 import _tight_product_photo, _side_elevation
@@ -263,12 +263,13 @@ def render_ai_concept_svg(brief, key, concept, *,
     validate_concept({k:v for k,v in concept.items() if k!="id"})
     if key not in ("4x3", "9x16"):
         raise ValueError("Неизвестный формат.")
+    validate_renderability(concept, brief, key, has_drawing=drawing is not None)
     scene=Scene(key,brief.get("accent"),"industrial")
     palette=concept["palette"]
     colors={
         "background":palette["background"],
         "foreground":palette["foreground"],
-        "accent":brief.get("accent") if brief.get("accent") else palette["accent"],
+        "accent":palette["accent"],
     }
     scene.rect("background",0,0,scene.w,scene.h,colors["background"],
                ident="ai-art-directed-paper")
