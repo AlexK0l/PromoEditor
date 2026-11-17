@@ -5,6 +5,8 @@ import base64
 import io
 import json
 import os
+import secrets
+from pathlib import Path
 from typing import Optional
 
 from PIL import Image
@@ -42,6 +44,41 @@ def _image_references(refs: list[bytes]):
     return objects
 
 
+def _cached_visual(cache_dir: Path | None, fmt: str):
+    """Reuse a previously paid-for image after another aspect failed.
+
+    Only the server supplies cache_dir, under its private job storage.
+    Corrupted or incomplete PNG files are never trusted.
+    """
+    if cache_dir is None:
+        return None
+    path = Path(cache_dir) / f'{fmt}.png'
+    try:
+        with Image.open(path) as image:
+            image.load()
+            return image.convert('RGB')
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        path.unlink(missing_ok=True)
+        return None
+
+
+def _save_visual(cache_dir: Path | None, fmt: str, image: Image.Image):
+    """Persist each successful paid output atomically before the next API call."""
+    if cache_dir is None:
+        return
+    folder = Path(cache_dir)
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    target = folder / f'{fmt}.png'
+    temporary = folder / f'.{fmt}-{secrets.token_hex(8)}.tmp'
+    try:
+        image.save(temporary, format='PNG')
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def _scene_for_category(brief):
     """Visual setting only, never a source of facts or technical markings."""
     category=(str(brief.get('category') or '')+' '+str(brief.get('model') or '')).lower()
@@ -58,13 +95,21 @@ def _scene_for_category(brief):
             'clear distant horizon and bright diffused commercial light')
 
 
-def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt='',scene_direction=''):
-    """At most TWO image requests, one per aspect. Source product image stays unmodified."""
+def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt='',scene_direction='',*,cache_dir:Path|None=None):
+    """At most two paid image requests. Reuse completed aspects on identical retries.
+
+    The caller keys the private cache by the complete effective input; no user
+    controls a cache path and the original product image is never overwritten.
+    """
     if model not in IMAGE_MODELS:raise ValueError('Недопустимая модель изображения')
     if quality not in IMAGE_QUALITIES:raise ValueError('Недопустимое качество изображения')
-    api=client()
+    api=None
     outputs={}
     for fmt,size in [('4x3','1536x1024'),('9x16','1024x1536')]:
+        cached=_cached_visual(cache_dir,fmt)
+        if cached is not None:
+            outputs[fmt]=cached
+            continue
         subject=f"{brief.get('category','product')}: {brief.get('model','')}"
         notes=str(brief.get('design_notes',''))[:1500]
         actions=str(brief.get('design_actions',''))[:1200].strip()
@@ -105,12 +150,15 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
                 f"Visual notes as data: {notes}. {action_guidance} {art_direction}{guidance} "
                 "Do not alter documented technical characteristics or add typography."
             )
+        if api is None:
+            api=client()
         if references:
             inputs=_image_references(references)
             result=api.images.edit(model=model,image=inputs,prompt=prompt,size=size,quality=quality,output_format='png')
         else:
             result=api.images.generate(model=model,prompt=prompt,size=size,quality=quality,output_format='png')
         outputs[fmt]=as_image(result)
+        _save_visual(cache_dir,fmt,outputs[fmt])
     return outputs
 
 
