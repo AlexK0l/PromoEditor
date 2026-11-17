@@ -51,6 +51,9 @@ def main():
         assert page.locator('#model').input_value()==''
         assert page.locator('#reset-btn').inner_text()=='Заполнить пример'
         assert not errors,errors
+        # Reset intentionally restores AI-first default. Re-enter fallback
+        # for the existing no-key, deterministic browser round-trip test.
+        page.locator('#mode-template').check()
         page.locator('#model').fill('Промышленный подъёмник A1')
         upload(page,'hero','small.png',png('yellow',(360,240),15),'image/png')
         upload(page,'hero','large.png',png('red',(1320,840),10),'image/png')
