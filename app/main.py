@@ -51,7 +51,7 @@ RATE=defaultdict(list)
 LOCK=threading.Lock()
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
 FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
-       'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','edit.png'}
+       'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','layout_spec.json','edit.png'}
 FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16')})
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
@@ -272,7 +272,8 @@ def _demo_hero():
 
 def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                    use_demo,use_openai,model,quality,design_prompt,asset_report=None,
-                   background_raw=None):
+                   background_raw=None,concept=None,concept_set_id=None,
+                   reference_example_raw=None):
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
@@ -289,7 +290,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         if use_openai:
             visuals=generate_visuals(brief,hero_present=(hero is not None),
                                      references=references,model=model,
-                                     quality=quality,design_prompt=design_prompt)
+                                     quality=quality,design_prompt=design_prompt,
+                                     scene_direction=concept['scene_prompt'] if concept else '')
             ai_product=hero is None
         paths={};jpeg_paths={};corel_paths={}
         for key in ('4x3','9x16'):
@@ -299,8 +301,13 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             # the customer's own licensed industrial photo is used as the
             # separate scene layer beneath the unchanged product bitmap.
             scene=None if ai_product else (visual if visual is not None else user_backdrop)
-            svg=create_editable_svg(brief,key,hero=photo,detail=detail,logo=logo,
-                                    drawing=drawing,backdrop=scene,ai_product=ai_product)
+            if concept is None:
+                svg=create_editable_svg(brief,key,hero=photo,detail=detail,logo=logo,
+                                        drawing=drawing,backdrop=scene,ai_product=ai_product)
+            else:
+                svg=render_ai_concept_svg(brief,key,concept,hero=photo,detail=detail,
+                                          logo=logo,drawing=drawing,backdrop=scene,
+                                          ai_product=ai_product)
             # The SVG is the master. PNG and JPEG are rendered from the SAME
             # vector scene, so opening the SVG in CorelDRAW has matching layout.
             png,jpeg=rasterize_svg(svg)
@@ -314,10 +321,17 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             jpeg_paths[key]=f'/files/{job_id}/{jpg_name}'
             corel_paths[key]=f'/files/{job_id}/{svg_name}'
         (folder/'promo_prompt.txt').write_text(design_prompt,encoding='utf-8')
+        (folder/'layout_spec.json').write_text(
+            json.dumps({'generation_mode':'ai_pro' if concept else 'template',
+                        'concept_set_id':concept_set_id,
+                        'selected_concept':concept},ensure_ascii=False,indent=2),
+            encoding='utf-8')
         (folder/'asset_selection.json').write_text(json.dumps(asset_report or {},ensure_ascii=False,indent=2),encoding='utf-8')
         briefing=dict(brief)
         briefing['_metadata']={
-            'generator':'PromoEditor SVG scene 2.0',
+            'generator':'AI-directed editable SVG' if concept else 'PromoEditor SVG template',
+            'generation_mode':'ai_pro' if concept else 'template',
+            'concept_set_id':concept_set_id,
             'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
             'ai_product_visualization':ai_product,
             'verified_specs':False,
@@ -348,7 +362,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'poster_4x3.png','poster_9x16.png',
             'poster_4x3.jpg','poster_9x16.jpg',
             'corel_4x3.svg','corel_9x16.svg',
-            'promo_prompt.txt','brief.json','asset_selection.json','CORELDRAW_README.txt'
+            'promo_prompt.txt','brief.json','asset_selection.json',
+            'layout_spec.json','CORELDRAW_README.txt'
         ]
         with zipfile.ZipFile(folder/'promo_kit.zip','w',
                             compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
@@ -367,7 +382,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                                  ('secondary_photo',detail_raw),
                                  ('drawing',drawing_raw),
                                  ('logo',logo_raw),
-                                 ('background',background_raw)):
+                                 ('background',background_raw),
+                                 ('reference_example',reference_example_raw)):
                 asset=originals.get(selected.get(role))
                 if not payload or not asset:continue
                 extension=Path(str(asset.get('name') or '')).suffix.lower()
@@ -395,6 +411,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'prompt_file':f'/files/{job_id}/promo_prompt.txt',
             'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
             'asset_selection':f'/files/{job_id}/asset_selection.json',
+            'layout_spec':f'/files/{job_id}/layout_spec.json',
+            'generation_mode':'ai_pro' if concept else 'template',
             'selected_assets':(asset_report or {}).get('selected_assets',{}),
             'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
         }
