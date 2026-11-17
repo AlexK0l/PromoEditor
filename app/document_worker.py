@@ -101,7 +101,7 @@ def _apply_limits():
 
 
 def _worker_main() -> int:
-    if len(sys.argv) != 4 or sys.argv[1] not in ("extract", "pdf_preview"):
+    if len(sys.argv) != 3 or sys.argv[1] not in ("extract", "pdf_preview"):
         return 2
     try:
         _apply_limits()
