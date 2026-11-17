@@ -472,3 +472,45 @@ def test_preapproved_prompt_does_not_duplicate_the_asset_section(monkeypatch):
             photo("blue",(350,210),7),
             photo("green",(400,200),11),
         )
+
+
+
+def test_supplied_photo_background_is_selected_and_preserved(monkeypatch):
+    """Real supplied scenery is a distinct source, never a replacement trailer."""
+    from app import main as main_module
+    monkeypatch.setattr(main_module,"_guard_rate",lambda request:None)
+    trailer=photo("yellow",(1150,700),19)
+    scene=photo("#8e9ba6",(1300,820),11)
+    uploaded=[
+        ("photos",("product.png",trailer,"image/png")),
+        ("background",("grain-terminal.png",scene,"image/png")),
+    ]
+    reviewed=analyze(files=uploaded)
+    assert reviewed.status_code==200,reviewed.text
+    report=reviewed.json()
+    assert report["selected_assets"]["primary_photo"]=="photo_1"
+    assert report["selected_assets"]["background"]=="background_1"
+    row=next(r for r in report["project_assets"] if r["id"]=="background_1")
+    assert row["assignment"]=="background"
+    result=generate(files=uploaded,report=report)
+    assert result.status_code==200,result.text
+    data=result.json()
+    svg=client.get(data["corel"]["4x3"]).content
+    root=ET.fromstring(svg)
+    images=root.findall(".//s:image",NS)
+    ids=[el.get("id","") for el in images]
+    assert any("pro-ai-background" in name for name in ids)
+    assert any("original-product-photo" in name for name in ids)
+    with zipfile.ZipFile(io.BytesIO(client.get(data["zip"]).content)) as kit:
+        assert kit.read("originals/background.png")==scene
+        assert kit.read("originals/primary_photo.png")==trailer
+        prompt=kit.read("promo_prompt.txt").decode("utf-8")
+        assert "Фон-сцена" in prompt or "Фотофон / промышленная сцена" in prompt
+
+
+def test_background_upload_is_visible_in_main_upload_area():
+    page=client.get("/").text
+    assert page.count('id="background"') == 1
+    assert page.index('id="background"') < page.index('id="advanced-settings"')
+    assets=client.get("/static/assets.js").text
+    assert "add('background','background')" in assets
