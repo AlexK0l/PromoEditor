@@ -80,10 +80,40 @@ def _studio_stage(scene, x, y, w, h, accent):
         (x, y+h*.71), (x+w, y+h*.55),
         (x+w, y+h), (x, y+h)
     ], "#DDE4EA", ident="pro5-stage-floor")
-    _rule(scene, "photos", x+12, y+h*.72, x+w-14,
-          y+h*.58, "#FFFFFF", 2.5, "pro5-stage-perspective")
+    # A faint seam keeps the neutral floor from reading as a fake road stripe.
+    _rule(scene, "photos", x+12, y+h*.80, x+w-14,
+          y+h*.75, "#E0E6EA", 1.0, "pro5-stage-perspective")
     scene.rect("photos", x, y, 8, h, accent,
                ident="pro5-hero-edge")
+
+
+def _tight_product_photo(image):
+    """Crop only transparent padding for the poster's product bitmap.
+
+    The selected uploaded file remains unmodified and is kept in the ZIP.
+    Trailer renders can have 10-20% alpha margins, which previously caused
+    SVG meet-fit to scale *empty pixels* rather than the vehicle silhouette.
+    Never crop opaque photography or stretch the product's proportions.
+    """
+    if image is None or not isinstance(image, Image.Image):
+        return image
+    if image.mode not in ('RGBA', 'LA'):
+        return image
+    alpha=image.getchannel('A')
+    if alpha.getextrema()[0] >= 248:
+        return image
+    bbox=alpha.point(lambda value:255 if value>=8 else 0).getbbox()
+    if bbox is None:
+        return image
+    x0,y0,x1,y1=bbox
+    if x1-x0<image.width*.22 or y1-y0<image.height*.22:
+        return image
+    margin=max(8,int(min(image.size)*.018))
+    crop=(max(0,x0-margin),max(0,y0-margin),
+          min(image.width,x1+margin),min(image.height,y1+margin))
+    if crop==(0,0,*image.size):
+        return image
+    return image.crop(crop)
 
 
 def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
@@ -98,10 +128,10 @@ def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
         _photo(scene,backdrop,x,y,w,photo_height,"pro-ai-background",cover=True)
         scene.rect("photos",x,y,w,photo_height,"#FFFFFF",opacity=".065",
                    ident="pro4-photo-veil")
-    for j,(radius,opacity) in enumerate(((.43,.055),(.36,.07),(.29,.09))):
+    for j,(radius,opacity) in enumerate(((.39,.045),(.33,.065),(.26,.085))):
         scene.el("photos","ellipse",f"pro4-ground-shadow-{j}",{
-            "cx":x+w*.53,"cy":y+photo_height*.87,
-            "rx":w*radius,"ry":photo_height*.077,"fill":"#1D242D",
+            "cx":x+w*.51,"cy":y+photo_height*.945,
+            "rx":w*radius,"ry":photo_height*.048,"fill":"#1D242D",
             "opacity":opacity})
     image=backdrop if ai_product else hero
     if image is not None:
@@ -113,8 +143,9 @@ def _hero_four(scene,brief,hero,backdrop,ai_product,x,y,w,h,accent):
         else:
             # Keep the original product a separate, editable bitmap.
             # Its bounding rectangle ends above the dimensions panel.
-            _photo(scene,image,x+8,y+2,w-16,max(1,photo_height-6),
-                   "original-product-photo",trim=True)
+            product=_tight_product_photo(image)
+            _photo(scene,product,x+9,y+2,w-18,max(1,photo_height-7),
+                   "original-product-photo",trim=False)
     scene.polygon("photos",[(x,y+photo_height-9),(x+w-98,y+photo_height-9),
                             (x+w-112,y+photo_height),(x,y+photo_height)],
                   accent,ident="pro4-scene-bottom-slash")
@@ -237,9 +268,10 @@ def _drawing_dimensions_four(scene,brief,detail,drawing,x,y,w,h,accent):
     if cropped:
         # Visible labeling prevents the crop being mistaken for the complete
         # engineering source. The source sheet remains in the ZIP package.
+        # Put the view label ABOVE the technical bitmap, never over linework.
         v3._type(scene,"dimensions","БОКОВОЙ ВИД",
-                 view_x+7,top+3,min(152,view_w*.30),21,
-                 15,10,accent,True,"pro6-projection-label",1)
+                 x+545,y+9,min(175,view_w*.34),27,
+                 17,11,accent,True,"pro6-projection-label",1)
     if facts:
         right_gap=6
         column_x=metrics_x+right_gap

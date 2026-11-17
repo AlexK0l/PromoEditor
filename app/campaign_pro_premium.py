@@ -30,7 +30,9 @@ def _trust_and_finance(scene,brief,proof,x,y,w,h,accent):
         slug_w=min(245,claims_width*.45)
         heading=("ПОДТВЕРЖДЕНО" if brief.get("proof_points")
                  else "КЛЮЧЕВЫЕ ТЕЗИСЫ")
-        v3._slug(scene,"benefits",heading,x+6,y+5,slug_w,h-10,
+        # Short ribbon leaves useful white space around the verified claims,
+        # instead of a giant, almost empty red rectangle.
+        v3._slug(scene,"benefits",heading,x+6,y+7,slug_w,39,
                  accent,"pro4-trust-title",23)
         px0=x+slug_w+28
         claim_w=claims_width-slug_w-39
@@ -160,15 +162,18 @@ def create_pro_campaign_svg(brief,key,hero=None,detail=None,logo=None,
     has_dim=bool(dims or drawing is not None)
     has_trust=bool(proof or (brief.get("show_roi") and compute_roi(brief)))
     v3._header(scene,brief,logo,accent,False)
-    start=171
-    benefits_y=712 if benefits else None
-    finance_y=835 if has_trust else None
+    # The slogan overlaps the scene intentionally: 23px extra vertical
+    # breathing room in the hero while the engineering and benefit bands
+    # remain independent and readable. No scaling of vehicle geometry.
+    start=148
+    benefits_y=730 if benefits else None
+    finance_y=846 if has_trust else None
     foot_y=951
     body_end=(benefits_y-8 if benefits else
               finance_y-8 if has_trust else foot_y-10)
     hero_w=944 if specs else scene.w
     if has_dim:
-        dim_h=211 if benefits else 229
+        dim_h=202 if benefits else 229
         dim_y=body_end-dim_h
         photo_h=dim_y-start
     else:
@@ -181,7 +186,7 @@ def create_pro_campaign_svg(brief,key,hero=None,detail=None,logo=None,
         # Keep the user's second product angle as a small, independently
         # replaceable photograph; never squeeze the technical drawing for it.
         inset_x=18
-        inset_y=start+photo_h-111
+        inset_y=start+photo_h-115
         scene.rect("photos",inset_x,inset_y,160,103,"#FFFFFF",
                    rad=6,ident="pro7-secondary-frame")
         _photo(scene,detail,inset_x+5,inset_y+4,150,92,

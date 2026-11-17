@@ -227,9 +227,11 @@ def test_pro_v3_landscape_anchors_match_reference_structure():
     sections=(
         # expected reference bounding zones normalized to 1440x1080
         ("pro-header", "rect", (0,0,1440,168), .95),
-        ("pro5-studio-background","rect",(0,171,944,322),.95),
-        ("pro3-dim-stage","rect",(0,493,944,211),.95),
-        ("pro3-benefits-stage","rect",(0,712,1440,115),.95),
+        # PRO now overlaps the slogan on the hero, giving the *vehicle*
+        # a taller picture region without reducing the drawing below 200px.
+        ("pro5-studio-background","rect",(0,148,944,372),.95),
+        ("pro3-dim-stage","rect",(0,520,944,202),.95),
+        ("pro3-benefits-stage","rect",(0,730,1440,103),.95),
         ("pro-cta","rect",(0,951,1440,129),.95),
     )
     overlap_scores=[]
