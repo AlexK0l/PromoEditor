@@ -328,3 +328,112 @@ def test_main_upload_exposes_drawing_before_advanced_settings():
     assert "Использовать как чертёж" in page
     scripts=client.get("/static/assets.js").text
     assert "option('drawing','Использовать как чертёж')" in scripts
+
+
+
+def engineering_jpeg():
+    """Synthetic two-projection drawing matching a monochrome technical sheet."""
+    sheet=Image.new("RGB",(1200,900),"white")
+    pen=ImageDraw.Draw(sheet)
+    pen.rectangle((42,22,1140,340),outline="#292929",width=3)
+    for x in range(65,1125,28):
+        pen.line((x,40,x,338),fill="#313131",width=2)
+    for y in (123,173,223,273):
+        pen.line((42,y,1140,y),fill="#373737",width=2)
+    pen.rectangle((490,550,715,845),outline="#333333",width=3)
+    for x in range(510,700,24):
+        pen.line((x,560,x,825),fill="#333333",width=2)
+    buf=io.BytesIO()
+    sheet.save(buf,format="JPEG",quality=92)
+    return buf.getvalue()
+
+
+def test_local_auto_detects_technical_sheet_uploaded_as_first_photo(monkeypatch):
+    """The real user flow: drawing is the first photo, not the drawing input."""
+    from app import main as main_module
+    monkeypatch.setattr(main_module, "_guard_rate", lambda _request: None)
+    raw=engineering_jpeg()
+    files=[
+        ("photos",("engineering-sheet.jpg",raw,"image/jpeg")),
+        ("photos",("yellow-trailer.png",photo("yellow",(1200,700),12),"image/png")),
+        ("photos",("rear-view.png",photo("orange",(930,570),17),"image/png")),
+        ("logos",("logo.png",photo("blue",(270,190),19),"image/png")),
+    ]
+    checked=analyze(files=files)
+    assert checked.status_code==200,checked.text
+    report=checked.json()
+    selected=report["selected_assets"]
+    assert selected["drawing"]=="photo_1"
+    assert selected["primary_photo"] in ("photo_2","photo_3")
+    assert selected["secondary_photo"] in ("photo_2","photo_3")
+    assert selected["primary_photo"]!=selected["secondary_photo"]
+    row=next(x for x in report["project_assets"] if x["id"]=="photo_1")
+    assert row["kind"]=="drawing" and row["auto_drawing"] is True
+    assert row["preference"]=="auto"
+    assert row["assignment"]=="drawing" and row["selected"] is True
+    assert not any(x["id"]=="photo_1" for x in report["rejected_assets"])
+    assert any("распознан как чертёж" in w for w in report["warnings"])
+
+    made=generate(files=files,report=report)
+    assert made.status_code==200,made.text
+    response=made.json()
+    assert response["selected_assets"]["drawing"]=="photo_1"
+    svg=client.get(response["corel"]["4x3"]).content
+    assert b"original-drawing" in svg
+    with zipfile.ZipFile(io.BytesIO(client.get(response["zip"]).content)) as kit:
+        assert kit.read("originals/drawing.jpg")==raw
+        bundled=json.loads(kit.read("asset_selection.json"))
+        assert bundled["selected_assets"]["drawing"]=="photo_1"
+
+
+def test_drawing_auto_detection_respects_manual_photo_and_drawing_overrides(monkeypatch):
+    from app import main as main_module
+    # The test exercises role selection, not the shared API request quota.
+    monkeypatch.setattr(main_module, "_guard_rate", lambda _request: None)
+    technical=engineering_jpeg()
+    yellow=photo("yellow",(850,500),13)
+    files=[
+        ("photos",("engineering.jpg",technical,"image/jpeg")),
+        ("photos",("product.png",yellow,"image/png")),
+    ]
+    automatic=analyze(files=files)
+    assert automatic.status_code==200
+    assert automatic.json()["selected_assets"]["drawing"]=="photo_1"
+
+    # Explicitly forcing a line-art picture to be used AS A PHOTO overrides
+    # the automatic suggestion (and never invents a drawing).
+    as_photo=analyze(files=files,prefs={"photo_1":"include"})
+    assert as_photo.status_code==200,as_photo.text
+    pick=as_photo.json()["selected_assets"]
+    assert pick["drawing"] is None
+    assert pick["primary_photo"]=="photo_1"
+
+    excluded=analyze(files=files,prefs={"photo_1":"exclude"})
+    assert excluded.status_code==200
+    assert excluded.json()["selected_assets"]["drawing"] is None
+
+    manual=analyze(files=files,prefs={"photo_1":"drawing"})
+    assert manual.status_code==200
+    assert manual.json()["selected_assets"]["drawing"]=="photo_1"
+    assert manual.json()["project_assets"][0]["manual_drawing"] is True
+    assert not manual.json()["project_assets"][0].get("auto_drawing")
+
+    # A direct drawing input is always preferred; automatic photo promotion
+    # must not compete with it.
+    dedicated=analyze(files=files+[
+        ("drawings",("official.png",photo("white",(500,360)), "image/png"))
+    ])
+    assert dedicated.status_code==200,dedicated.text
+    assert dedicated.json()["selected_assets"]["drawing"]=="drawing_1"
+
+
+def test_blank_white_and_colored_product_photos_not_recognized_as_drawings():
+    from app.asset_selection import _looks_like_engineering_drawing
+    for image in (
+        Image.new("RGB",(1100,850),"white"),
+        Image.new("RGB",(1100,850),"#E9B523"),
+        Image.new("RGBA",(1100,850),(255,255,255,0)),
+    ):
+        preview=image.copy()
+        preview.thumbnail((300,300))
+        assert not _looks_like_engineering_drawing(preview,image.size)
