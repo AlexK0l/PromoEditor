@@ -321,11 +321,11 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             jpeg_paths[key]=f'/files/{job_id}/{jpg_name}'
             corel_paths[key]=f'/files/{job_id}/{svg_name}'
         (folder/'promo_prompt.txt').write_text(design_prompt,encoding='utf-8')
-        (folder/'layout_spec.json').write_text(
-            json.dumps({'generation_mode':'ai_pro' if concept else 'template',
-                        'concept_set_id':concept_set_id,
-                        'selected_concept':concept},ensure_ascii=False,indent=2),
-            encoding='utf-8')
+        if concept is not None:
+            (folder/'layout_spec.json').write_text(
+                json.dumps({'generation_mode':'ai_pro','concept_set_id':concept_set_id,
+                            'selected_concept':concept},ensure_ascii=False,indent=2),
+                encoding='utf-8')
         (folder/'asset_selection.json').write_text(json.dumps(asset_report or {},ensure_ascii=False,indent=2),encoding='utf-8')
         briefing=dict(brief)
         briefing['_metadata']={
@@ -363,8 +363,11 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'poster_4x3.jpg','poster_9x16.jpg',
             'corel_4x3.svg','corel_9x16.svg',
             'promo_prompt.txt','brief.json','asset_selection.json',
-            'layout_spec.json','CORELDRAW_README.txt'
+            'CORELDRAW_README.txt'
         ]
+        if concept is not None:
+            names.append('layout_spec.json')
+
         with zipfile.ZipFile(folder/'promo_kit.zip','w',
                             compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
             for filename in names:
