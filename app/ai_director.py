@@ -227,9 +227,10 @@ def generate_artwork(brief: dict, plan: dict, *,
     if model not in IMAGE_MODELS or quality not in IMAGE_QUALITIES:
         raise ValueError("Недопустимая модель OpenAI или качество.")
     api = client()
-    materials = ([scene_raw] if scene_raw else []) + (
-        [hero_raw] if hero_raw else []
-    ) + list((references or [])[:2])
+    # Product is shown to the TEXT design planner for scale and composition.
+    # Never feed it to the image ART edit: even with a strict prompt, an
+    # image model can accidentally draw a duplicate or altered trailer.
+    materials = ([scene_raw] if scene_raw else []) + list((references or [])[:2])
     out = {}
     for key in SIZES:
         layout = plan["layouts"][key]
