@@ -10,6 +10,12 @@
   let hasDemo = false;
   let isDemoLoading = false;
   let promptDirty = true;
+  let designModeChanged = false;
+  const designMode = () => document.querySelector('input[name="design-mode"]:checked')?.value || 'vector';
+  const setDesignMode = value => {
+    const field=document.querySelector('input[name="design-mode"][value="'+value+'"]');
+    if(field)field.checked=true;
+  };
 
   // Optional new fields should not disable the entire UI if an older HTML
   // document briefly remains in the browser cache after deployment.
@@ -100,12 +106,27 @@
     });
   }
   function updateAi(){
-    $('ai-description').textContent=apiReady?'Два платных запроса за комплект':'На сервере не настроен API-ключ';
-    $('use-openai').disabled=!apiReady;
-    $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
+    const mode=designMode();
+    const aiMode=mode==='ai_first';
+    $('legacy-openai-wrap').hidden=aiMode;
+    if(aiMode)$('use-openai').checked=false;
+    $('ai-description').textContent=apiReady
+      ?'Два платных запроса для фона шаблона'
+      :'На сервере не настроен OPENAI_API_KEY';
+    $('use-openai').disabled=!apiReady||aiMode;
+    $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady||aiMode);
+    $('design-mode-hint').textContent=aiMode
+      ? (apiReady
+        ?'AI создаст новый дизайн самостоятельно: эталон необязателен. 1 запрос на план + 2 изображения; точные данные будут в редактируемом SVG.'
+        :'AI-дизайнер требует OPENAI_API_KEY на VPS. Для работы без ключа выберите SVG-шаблон.')
+      :'SVG-шаблон собирается программно. По желанию можно отдельно включить OpenAI-фон.';
     if(!isBusy){
-      if(checked('use-openai'))setStatus('OpenAI включён','Два платных запроса для 4:3 и 9:16.');
-      else setStatus('Без расходов на API','Обычная сборка изображений.');
+      if(aiMode)setStatus(apiReady?'AI-дизайнер выбран':'OpenAI не подключён',
+        apiReady?'План композиции + два художественных изображения.'
+                :'Добавьте API-ключ либо выберите SVG-шаблон.');
+      else if(checked('use-openai'))setStatus('AI-фон включён',
+        'Два платных изображения для шаблонной вёрстки.');
+      else setStatus('Без расходов на API','Программная сборка SVG.');
     }
   }
   function validateFiles(){
@@ -164,18 +185,25 @@
     if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
       showError('Сначала нажмите «Проанализировать материалы», проверьте выбор и при необходимости измените приоритеты.');return;
     }
-    if(checked('use-openai')&&!apiReady){showError('OpenAI не подключён на сервере. Используйте обычную сборку или настройте ключ в VPS.');return;}
-    if(!checked('use-openai')&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
+    if(designMode()==='ai_first'&&!apiReady){
+      showError('AI-дизайнер требует OPENAI_API_KEY на VPS. Выберите SVG-шаблон для работы без API.');return;
+    }
+    if(checked('use-openai')&&!apiReady){showError('OpenAI не подключён на сервере. Используйте SVG-шаблон без AI-фона или настройте ключ в VPS.');return;}
+    if(designMode()==='vector'&&!checked('use-openai')&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
       showError('Сначала добавьте фото товара или нажмите «Заполнить пример» для пробного комплекта.');return;
     }
     invalidateResult();busy(true);
-    setStatus('Создаём промо','Генерируем два SVG-исходника, PNG и JPEG.','working');
+    setStatus('Создаём промо',
+      designMode()==='ai_first'
+        ?'OpenAI продумывает обе композиции и создаёт художественные слои; проверенные данные будут добавлены отдельно.'
+        :'Создаём SVG-исходники, PNG и JPEG.','working');
     try {
       const prompt=(promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim();
       const form=new FormData();form.append('payload',JSON.stringify(formBrief()));
       form.append('prompt',prompt);
       if(window.PromoAssets)window.PromoAssets.append(form);
       else fileIds.forEach(id=>appendFiles(form,id));
+      form.append('design_mode',designMode());
       form.append('use_openai',String(checked('use-openai')));
       form.append('use_demo',String(checked('use-demo')));
       form.append('model',get('image-model'));
@@ -193,7 +221,10 @@
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
-      setStatus('Готово','PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
+      setStatus('Готово',
+        latest.design_mode==='ai_first'
+          ?'AI-композиции, художественные слои, редактируемые SVG и ZIP готовы.'
+          :'PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
@@ -237,6 +268,7 @@
     for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','proof-points','dimensions','price','phones','promo-prompt'])set(id,'');
     markPromptStale();
     set('currency','Br');set('style','industrial');set('accent','#e31b26');
+    setDesignMode(apiReady?'ai_first':'vector');designModeChanged=false;
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
     for(const id of fileIds)$(id).value='';
     window.PromoAssets?.reset();
@@ -292,6 +324,7 @@
     try {
       const response=await fetch('/api/config');if(!response.ok)throw new Error('API недоступен');
       const config=await response.json();apiReady=Boolean(config.openai_ready);
+      if(!designModeChanged)setDesignMode(config.default_design_mode || (apiReady?'ai_first':'vector'));
       window.PromoAssets?.setAiReady(apiReady);
       $('logout-form').hidden=!config.auth_enabled;
       $('logout-csrf').value=config.logout_csrf_token||'';
@@ -329,6 +362,15 @@
     set('accent',accents[button.dataset.style]);$('color-label').textContent=get('accent').toUpperCase();
     refreshStyle();markPromptStale();invalidateResult();
   }));
+  document.querySelectorAll('input[name="design-mode"]').forEach(field=>{
+    field.addEventListener('change',()=>{
+      designModeChanged=true;
+      if(designMode()==='ai_first'&&!apiReady)
+        showError('Для AI-дизайнера настройте OPENAI_API_KEY на VPS или используйте SVG-шаблон.');
+      else clearError();
+      markPromptStale();updateAi();invalidateResult();
+    });
+  });
   $('use-openai').addEventListener('change',()=>{if(checked('use-openai')&&!apiReady){$('use-openai').checked=false;showError('OpenAI пока не подключён. Добавьте API-ключ на сервере.');}updateAi();invalidateResult();});
   $('show-roi').addEventListener('change',updateRoi);
   $('hero-drop').addEventListener('dragover',event=>{event.preventDefault();$('hero-drop').classList.add('is-dragging');});
