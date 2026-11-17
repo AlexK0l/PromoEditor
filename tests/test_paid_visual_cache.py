@@ -72,3 +72,33 @@ def test_corrupt_cached_file_is_regenerated(monkeypatch, tmp_path):
     assert images.calls == ['1536x1024', '1024x1536']
     with Image.open(root / '4x3.png') as image:
         image.verify()
+
+
+def test_automatic_cache_key_includes_request_inputs_and_has_ttl(monkeypatch, tmp_path):
+    monkeypatch.setenv('PROMO_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('PROMO_JOB_TTL_SECONDS', '3600')
+
+    brief = default_brief()
+    first = openai_service._default_visual_cache(
+        brief, True, [], 'gpt-image-2.5-flare', 'medium', 'design', '')
+    same = openai_service._default_visual_cache(
+        dict(brief), True, [], 'gpt-image-2.5-flare', 'medium', 'design', '')
+    assert first == same
+    assert first.parent == tmp_path / '.paid_visual_cache'
+    assert first != openai_service._default_visual_cache(
+        dict(brief, price='1'), True, [], 'gpt-image-2.5-flare', 'medium', 'design', '')
+    assert first != openai_service._default_visual_cache(
+        brief, True, [], 'gpt-image-2.5-flare', 'medium', 'changed', '')
+    assert first != openai_service._default_visual_cache(
+        brief, True, [b'reference'], 'gpt-image-2.5-flare', 'medium', 'design', '')
+
+    import os
+    import time
+    first.mkdir(parents=True)
+    (first / '4x3.png').write_bytes(b'old cached bytes')
+    old = time.time() - 4000
+    os.utime(first, (old, old))
+    newer = openai_service._default_visual_cache(
+        brief, True, [], 'gpt-image-2.5-flare', 'high', 'design', '')
+    assert newer != first
+    assert not first.exists()
