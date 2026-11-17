@@ -134,7 +134,7 @@ def test_pdf_drawing_upload():
     assert response.status_code==200,response.text
 
 
-def test_fake_openai_generates_two_visuals(monkeypatch):
+def test_fake_openai_generates_two_visuals(monkeypatch, tmp_path):
     import base64
     from app import openai_service
     data=io.BytesIO();Image.new('RGB',(128,64),'blue').save(data,'PNG')
@@ -147,7 +147,7 @@ def test_fake_openai_generates_two_visuals(monkeypatch):
         def edit(self,**kw):self.calls.append(('edit',kw));return Generated()
     api=type('Mock',(),{'images':Images()})()
     monkeypatch.setattr(openai_service,'client',lambda:api)
-    result=openai_service.generate_visuals(default_brief(),hero_present=True,references=[],model='gpt-image-2.5-flare',quality='medium')
+    result=openai_service.generate_visuals(default_brief(),hero_present=True,references=[],model='gpt-image-2.5-flare',quality='medium',cache_dir=tmp_path/'visual-cache')
     assert set(result)=={'4x3','9x16'}
     assert len(api.images.calls)==2
     assert api.images.calls[0][1]['size']=='1536x1024'
