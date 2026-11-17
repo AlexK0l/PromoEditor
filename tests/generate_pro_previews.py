@@ -1,4 +1,4 @@
-"""Generate review-only PRO v4 PNGs with explicitly synthetic photo placeholders.
+"""Generate review-only premium PRO PNGs with explicitly synthetic photo placeholders.
 
 No OpenAI calls and no customer assets. Outputs are for visual regression
 inspection, NOT for publishing a product claim.
@@ -28,7 +28,7 @@ def placeholder():
 
 
 def main():
-    output = Path("/tmp/promo-pro-v4")
+    output = Path("/tmp/promo-premium-pro")
     output.mkdir(parents=True, exist_ok=True)
     data = default_brief()
     data["style"] = "reference_pro"
@@ -39,8 +39,8 @@ def main():
     for key in ("4x3", "9x16"):
         svg = create_editable_svg(data, key, hero=image)
         png, _ = rasterize_svg(svg)
-        (output / f"pro_v4_{key}.png").write_bytes(png)
-        (output / f"pro_v4_{key}.svg").write_bytes(svg)
+        (output / f"premium_pro_{key}.png").write_bytes(png)
+        (output / f"premium_pro_{key}.svg").write_bytes(svg)
     # A second, entirely synthetic two-projection engineering sheet provides
     # a visible regression reference for the compact 4:3 technical drawing.
     engineering = Image.new("RGB", (1200,900),"white")
@@ -56,8 +56,8 @@ def main():
     technical_svg = create_editable_svg(
         data,"4x3",hero=image,drawing=engineering)
     technical_png, _ = rasterize_svg(technical_svg)
-    (output / "pro_v6_technical_4x3.png").write_bytes(technical_png)
-    (output / "pro_v6_technical_4x3.svg").write_bytes(technical_svg)
+    (output / "premium_pro_technical_4x3.png").write_bytes(technical_png)
+    (output / "premium_pro_technical_4x3.svg").write_bytes(technical_svg)
     # Public source-only modules for deeper offline visual QA against the
     # user-provided reference and product images. Never package .env or jobs.
     root = Path(__file__).resolve().parents[1]
