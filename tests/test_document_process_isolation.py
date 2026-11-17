@@ -89,5 +89,5 @@ def test_crashed_worker_and_invalid_configuration_fail_closed(monkeypatch):
         document_worker.run_document_worker("extract", "bad.xlsx", b"payload")
 
     monkeypatch.delenv("PROMO_DOCUMENT_MEMORY_MB", raising=False)
-    with pytest.raises(ValueError, match="Превышен"):
+    with pytest.raises(ValueError, match="превышает 20 МБ"):
         document_worker.run_document_worker("extract", "huge.xlsx", b"x" * (20*1024*1024+1))
