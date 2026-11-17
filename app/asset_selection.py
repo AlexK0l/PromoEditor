@@ -6,7 +6,7 @@ from PIL import Image,ImageFilter,ImageStat
 from .image_analysis import analysis_preview, ANALYSIS_RESIZE_THRESHOLD
 from .documents import extract_text,heuristics
 
-GROUPS={'photos':'photo','logos':'logo','documents':'document','references':'reference','drawings':'drawing'}
+GROUPS={'photos':'photo','logos':'logo','documents':'document','references':'reference','drawings':'drawing','backgrounds':'background'}
 PREFERENCES={'auto','include','exclude','drawing'}
 MAX_ITEMS=16
 
@@ -156,7 +156,7 @@ def _ai_scoring(records,result):
         if not isinstance(row,dict):continue
         obj=ids.get(row.get('id'))
         score=row.get('score')
-        if obj and obj['kind'] in ('photo','logo','reference','drawing') and isinstance(score,(float,int)) and not isinstance(score,bool) and 0<=score<=100:
+        if obj and obj['kind'] in ('photo','logo','reference','drawing','background') and isinstance(score,(float,int)) and not isinstance(score,bool) and 0<=score<=100:
             obj['score']=round(score)
             obj['ai_score']=obj['score']
             obj['ai_reason']=_clamp(row.get('reason'),220)
@@ -204,7 +204,7 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
             r['kind']='drawing'
             r['manual_drawing']=True
         r.update(index=i,preference=preference,score=50,quality='',selected=False,assignment='',reason='')
-        if r['kind'] in ('photo','logo','reference') or (r['kind']=='drawing' and Path(r['name']).suffix.lower() in ('.png','.jpg','.jpeg','.webp')):
+        if r['kind'] in ('photo','logo','reference','background') or (r['kind']=='drawing' and Path(r['name']).suffix.lower() in ('.png','.jpg','.jpeg','.webp')):
             try:
                 score,quality,w,h,alpha,dhash,tone,preview_size,resized,drawing_like=_tech_score(
                     r['raw'],r['kind'])
@@ -247,7 +247,7 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
         elif r['kind']=='document':r['quality']='Документ: извлечение фактов требует проверки'
         else:r['quality']='Чертёж'
         if r['preference'] in ('include','drawing'):r.pop('duplicate_of',None)
-    for kind,max_allowed in (('photo',2),('logo',1),('reference',2),('drawing',1)):
+    for kind,max_allowed in (('photo',2),('logo',1),('reference',2),('drawing',1),('background',1)):
         if sum(x['kind']==kind and x['preference'] in ('include','drawing') for x in records)>max_allowed:
             raise ValueError(f'Для роли {kind} можно обязательно включить максимум {max_allowed} файл(а).')
     suggestions=[];doc_text=[];seen_facts=set();docs=[]
@@ -281,7 +281,7 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
     ai_document=None;score_data=None;method='local';actual_ai=False
     if use_ai:
         from .openai_service import assess_asset_images,analyze_documents
-        candidates=[x for x in records if x['kind'] in ('photo','logo','reference')
+        candidates=[x for x in records if x['kind'] in ('photo','logo','reference','background')
                     or (x['kind']=='drawing' and Path(x['name']).suffix.lower() in ('.png','.jpg','.jpeg','.webp'))]
         candidates=[x for x in candidates if x['preference']!='exclude']
         if candidates:
@@ -320,12 +320,14 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
         elif r.get('duplicate_of'):r['score']=min(r['score'],20)
     photos=_choose(records,'photo',2);logos=_choose(records,'logo',1)
     references=_choose(records,'reference',2);drawings=_choose(records,'drawing',1)
+    backgrounds=_choose(records,'background',1)
     selected={
         'primary_photo':photos[0]['id'] if photos else None,
         'secondary_photo':photos[1]['id'] if len(photos)>1 else None,
         'logo':logos[0]['id'] if logos else None,
         'references':[x['id'] for x in references],
         'drawing':drawings[0]['id'] if drawings else None,
+        'background':backgrounds[0]['id'] if backgrounds else None,
         'documents':[x['id'] for x in records if x['kind']=='document' and x['selected']]
     }
     for r in records:
@@ -334,7 +336,7 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
         elif r['kind']=='document':
             if not r['reason']:r['reason']='Не удалось извлечь данные.'
         else:
-            roles=('primary_photo','secondary_photo','logo','drawing')
+            roles=('primary_photo','secondary_photo','logo','drawing','background')
             matches=[slot for slot in roles if selected[slot]==r['id']]
             if r['id'] in selected['references']:matches.append('reference')
             if matches:
