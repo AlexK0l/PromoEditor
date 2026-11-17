@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw
 
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
 from .openai_service import analyze_documents, generate_visuals
-from .ai_director import generate_plan, generate_artwork, render_ai_poster
+from .ai_director import generate_plan, generate_artwork, render_ai_poster, preflight_typography
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .image_analysis import validate_image_dimensions
@@ -292,6 +292,9 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             plan_brief={**brief,'_has_drawing':drawing is not None}
             design_plan=generate_plan(plan_brief,references=references,
                                       hero_raw=hero_raw)
+            # Validate exact user copy BEFORE calling the paid image API.
+            preflight_typography(brief,design_plan,
+                                 drawing_present=drawing is not None)
             artwork=generate_artwork(
                 brief,design_plan,references=references,hero_raw=hero_raw,
                 scene_raw=background_raw,model=model,quality=quality,
