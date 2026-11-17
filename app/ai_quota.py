@@ -21,11 +21,11 @@ _ENV = {
 }
 
 
-class QuotaExceeded(ValueError):
+class QuotaExceeded(Exception):
     """Reject paid requests before dispatch; routed as a validation error."""
 
 
-class QuotaStoreUnavailable(ValueError):
+class QuotaStoreUnavailable(Exception):
     """Fail closed if durable usage cannot be recorded."""
 
 
