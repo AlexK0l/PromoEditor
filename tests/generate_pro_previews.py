@@ -41,6 +41,23 @@ def main():
         png, _ = rasterize_svg(svg)
         (output / f"pro_v4_{key}.png").write_bytes(png)
         (output / f"pro_v4_{key}.svg").write_bytes(svg)
+    # A second, entirely synthetic two-projection engineering sheet provides
+    # a visible regression reference for the compact 4:3 technical drawing.
+    engineering = Image.new("RGB", (1200,900),"white")
+    draft=ImageDraw.Draw(engineering)
+    draft.rectangle((42,22,1140,340),outline="#292929",width=3)
+    for xx in range(65,1125,28):
+        draft.line((xx,40,xx,338),fill="#313131",width=2)
+    for yy in (123,173,223,273):
+        draft.line((42,yy,1140,yy),fill="#373737",width=2)
+    draft.rectangle((490,550,715,845),outline="#333333",width=3)
+    for xx in range(510,700,24):
+        draft.line((xx,560,xx,825),fill="#333333",width=2)
+    technical_svg = create_editable_svg(
+        data,"4x3",hero=image,drawing=engineering)
+    technical_png, _ = rasterize_svg(technical_svg)
+    (output / "pro_v6_technical_4x3.png").write_bytes(technical_png)
+    (output / "pro_v6_technical_4x3.svg").write_bytes(technical_svg)
     # Public source-only modules for deeper offline visual QA against the
     # user-provided reference and product images. Never package .env or jobs.
     root = Path(__file__).resolve().parents[1]
