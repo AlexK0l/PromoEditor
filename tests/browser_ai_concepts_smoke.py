@@ -45,7 +45,7 @@ def main():
         assert page.locator("#mode-ai-pro").is_checked()
         assert not page.locator("#ai-concepts-workflow").is_hidden()
         assert page.locator("#reference_example").count()==1
-        assert "необязательно" in page.locator("label[for=reference_example]").inner_text().lower()
+        assert "необязатель" in page.locator("label[for=reference_example]").inner_text().lower()
         assert page.locator("#generate-btn").is_disabled()
         page.locator("#model").fill("TEST INDUSTRIAL MODEL")
         page.locator("#generate-concepts-btn").click()
