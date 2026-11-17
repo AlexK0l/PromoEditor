@@ -253,3 +253,27 @@ def test_pro6_full_original_data_survives_when_drawing_is_present():
     assert "БОКОВОЙ ВИД" in all_words
     for text in root.findall(".//s:text",SVG):
         assert "…" not in "".join(text.itertext()), text.get("id")
+
+
+
+def test_dimension_labels_do_not_overlap_values():
+    from app.editable_export import _font
+    data={**default_brief(),"style":"reference_pro"}
+    root=ET.fromstring(create_editable_svg(
+        data,"4x3",drawing=_two_projection_sheet()))
+    names=named(root,"pro-dimension-name-","text")
+    values=named(root,"pro-dimension-value-","text")
+    assert len(names)==len(values)==3
+    for label,value in zip(names,values):
+        rendered_label="".join(label.itertext())
+        rendered_value="".join(value.itertext())
+        label_font=_font(round(float(label.get("font-size"))),True)
+        value_font=_font(round(float(value.get("font-size"))),True)
+        # Check true glyph advance in the renderer's own DejaVu typeface.
+        label_right=float(label.get("x"))+label_font.getlength(rendered_label)
+        value_start=float(value.get("x"))
+        value_right=value_start+value_font.getlength(rendered_value)
+        assert label_right+3 < value_start,(
+            rendered_label,label_right,rendered_value,value_start)
+        assert value_right < 934, (rendered_value,value_right)
+        assert "…" not in rendered_label+rendered_value
