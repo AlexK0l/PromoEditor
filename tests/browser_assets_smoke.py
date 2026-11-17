@@ -24,6 +24,18 @@ def main():
         page.goto(BASE,wait_until='domcontentloaded')
         assert page.locator('.media-column label[for="drawing"]').count()==1
         assert page.locator('#advanced-settings label[for="drawing"]').count()==0
+        # AI-first is visible, references are optional and moved out of the
+        # advanced panel. Without a server key the actual selected mode is
+        # vector, and the user may never mistake it for paid AI generation.
+        assert page.locator('.media-column label[for="references"]').count()==1
+        assert page.locator('#advanced-settings label[for="references"]').count()==0
+        page.wait_for_function(
+            'document.getElementById("api-state").textContent==="Без OpenAI"')
+        assert page.locator('input[name="design-mode"][value="vector"]').is_checked()
+        page.locator('input[name="design-mode"][value="ai_first"]').check()
+        assert 'OPENAI_API_KEY' in page.locator('#error-box').inner_text()
+        page.locator('input[name="design-mode"][value="vector"]').check()
+        assert page.locator('#legacy-openai-wrap').is_visible()
         # Regression: after the PRO style rollout, filling a demo must remain
         # clickable and must NOT silently change the chosen layout to industrial.
         page.locator('[data-style="reference_pro"]').click()
