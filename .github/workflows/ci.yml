@@ -92,6 +92,14 @@ jobs:
           name: premium-pro-visual-previews
           path: /tmp/promo-premium-pro/
           if-no-files-found: error
+      - name: Generate AI-first offline visual QA
+        run: PYTHONPATH=. python tests/generate_ai_first_previews.py
+      - name: Publish AI-first SVG and PNG layout previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-first-layout-previews
+          path: /tmp/promo-ai-first-previews/
+          if-no-files-found: error
       - name: Container diagnostics
         if: always()
         run: docker logs promo-ci || true
