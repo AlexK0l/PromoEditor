@@ -386,7 +386,10 @@ def test_local_auto_detects_technical_sheet_uploaded_as_first_photo(monkeypatch)
         assert bundled["selected_assets"]["drawing"]=="photo_1"
 
 
-def test_drawing_auto_detection_respects_manual_photo_and_drawing_overrides():
+def test_drawing_auto_detection_respects_manual_photo_and_drawing_overrides(monkeypatch):
+    from app import main as main_module
+    # The test exercises role selection, not the shared API request quota.
+    monkeypatch.setattr(main_module, "_guard_rate", lambda _request: None)
     technical=engineering_jpeg()
     yellow=photo("yellow",(850,500),13)
     files=[
