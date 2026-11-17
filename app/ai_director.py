@@ -254,7 +254,7 @@ def preflight_typography(brief: dict, plan: dict,
         xml=render_ai_poster(
             brief,key,plan,placeholder,drawing=dummy_drawing)
         root=ET.fromstring(xml)
-        important=("ai-model-","ai-category-","ai-spec-name-",
+        important=("ai-model-","ai-category-","ai-slogan-","ai-spec-name-",
                    "ai-spec-value-","ai-dim-name-","ai-dim-value-",
                    "ai-proof-statement-","ai-price-","ai-phone-")
         nodes=[node for node in root.iter()
@@ -270,6 +270,7 @@ def preflight_typography(brief: dict, plan: dict,
                 )
         labels=" ".join(" ".join(node.itertext()) for node in nodes)
         for item in (brief.get("model") or "",
+                     brief.get("slogan") or "",
                      *[v[1] for v in _lines(brief,"specs",8)],
                      *[v[1] for v in _lines(brief,"dimensions",4)],
                      *[str(v) for v in (
