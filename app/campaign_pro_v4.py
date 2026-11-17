@@ -154,22 +154,140 @@ def _source_schematic(photo):
     return target
 
 
+def _side_elevation(drawing):
+    """Choose the side view from a two-projection engineering sheet.
+
+    The raw technical drawing is never changed. Only when measured line
+    coverage strongly indicates a wide side elevation above a narrow rear
+    view do we crop a copy for the compact advert. Other diagrams are kept
+    intact rather than blindly cutting their technical annotations.
+    """
+    if drawing is None or not isinstance(drawing, Image.Image):
+        return drawing, False
+    w,h = drawing.size
+    if w < 400 or h < 400 or not 1.12 <= w/h <= 1.90:
+        return drawing, False
+    thumb = ImageOps.grayscale(drawing)
+    thumb.thumbnail((440, 440), Image.Resampling.BILINEAR)
+    tw,th = thumb.size
+    pixels=thumb.load()
+    def coverage(start,stop):
+        ys=range(max(0,int(th*start)),min(th,int(th*stop)),3)
+        if not ys:return 0.0
+        active=0
+        for col in range(3,tw-3):
+            dark=0
+            for row in ys:
+                if pixels[col,row] < 175:
+                    dark += 1
+                    if dark >= 2:
+                        active+=1
+                        break
+        return active/max(1,tw-6)
+    upper=coverage(.12,.32)
+    lower=coverage(.60,.88)
+    if not (upper >= .27 and upper >= max(.01,lower)*1.85 and lower < .45):
+        return drawing, False
+
+    # Extract only the genuine source upper projection, including the
+    # trailer's wheels. This is an advertising crop, NOT a new drawing.
+    x0=int(w*.025)
+    x1=int(w*.975)
+    y1=int(h*.36)
+    profile=drawing.crop((x0,0,x1,y1)).convert("L")
+    # Slightly strengthen the original black technical strokes so that
+    # their 1-pixel source lines survive a much smaller print-sized inset.
+    profile=ImageOps.autocontrast(profile)
+    profile=profile.filter(ImageFilter.MinFilter(3))
+    return profile.convert("RGB"), True
+
+
+def _drawing_dimensions_four(scene,brief,detail,drawing,x,y,w,h,accent):
+    """Readable side-profile drawing and numeric sizes, not the full A4 sheet.
+
+    The source JPEG is preserved in the ZIP. This block contains only a
+    cropped PRESENTATION copy and separate SVG text for real size values.
+    """
+    facts=_lines(brief,"dimensions",4)
+    scene.rect("dimensions",x,y,w,h,"#FFFFFF",ident="pro3-dim-stage")
+    v3._slug(scene,"dimensions","ГАБАРИТЫ И ЧЕРТЁЖ",
+             x+10,y+3,min(530,w*.62),37,accent,
+             "pro-dimensions-title",26)
+    top=y+42
+    inner=max(35,h-49)
+    sizes_w=253 if facts else 0
+    metrics_x=x+w-sizes_w+5 if facts else x+w
+    available=max(150,w-sizes_w-27)
+    detail_w=min(154,available*.23) if detail is not None else 0
+    if detail_w:
+        scene.rect("dimensions",x+11,top,detail_w,inner,
+                   "#F2F4F6",rad=4,ident="pro6-detail-inset-frame")
+        _photo(scene,detail,x+14,top+3,detail_w-6,inner-6,
+               "detail-photo",layer="dimensions",trim=True)
+    view_x=x+13+detail_w+(7 if detail_w else 0)
+    view_w=available-detail_w-(7 if detail_w else 0)
+    scene.rect("dimensions",view_x,top,view_w,inner,
+               "#FCFCFC",rad=3,ident="pro6-technical-stage")
+    projection,cropped=_side_elevation(drawing)
+    _photo(scene,projection,view_x+3,top+2,view_w-6,inner-4,
+           "original-drawing",layer="dimensions")
+    if cropped:
+        # Visible labeling prevents the crop being mistaken for the complete
+        # engineering source. The source sheet remains in the ZIP package.
+        v3._type(scene,"dimensions","БОКОВОЙ ВИД",
+                 view_x+7,top+3,min(152,view_w*.30),21,
+                 15,10,accent,True,"pro6-projection-label",1)
+    if facts:
+        right_gap=6
+        column_x=metrics_x+right_gap
+        column_w=x+w-column_x-6
+        gap=4
+        rh=(inner-gap*(len(facts)-1))/len(facts)
+        for i,(label,value) in enumerate(facts):
+            cy=top+i*(rh+gap)
+            scene.rect("dimensions",column_x,cy,column_w,rh,
+                       "#F3F5F7",rad=3,
+                       ident=f"pro-dimension-cell-{i}")
+            scene.rect("dimensions",column_x,cy,3,rh,accent,
+                       ident=f"pro6-size-mark-{i}")
+            # Titles and numbers occupy distinct measured areas; the
+            # previous 19px label could collide with an adjacent 30px value.
+            divider_x=column_x+column_w*.45
+            _rule(scene,"dimensions",divider_x,cy+7,
+                  divider_x,cy+rh-7,"#E4CCD0",1,
+                  f"pro6-dimension-separator-{i}")
+            v3._type(scene,"dimensions",str(label).upper(),
+                     column_x+9,cy+5,divider_x-column_x-17,rh-9,
+                     16,11,INK,True,f"pro-dimension-name-{i}",1)
+            v3._type(scene,"dimensions",str(value),
+                     divider_x+8,cy+3,
+                     column_x+column_w-divider_x-14,rh-6,
+                     29,12,accent,True,f"pro-dimension-value-{i}",1)
+            _rule(scene,"dimensions",column_x+8,cy+rh-3,
+                  column_x+column_w-10,cy+rh-3,
+                  "#E2C1C5",1,f"pro-dimension-measure-{i}")
+    scene.rect("dimensions",x,y+h-5,w-13,4,accent,
+               ident="pro4-dimension-bottom-guide")
+
+
 def _dims_four(scene,brief,detail,drawing,hero,x,y,w,h,accent):
-    """Reference-like dimensions with a real detail or a labeled photo trace."""
+    """Render supplied technical drawings prominently, never invent geometry."""
     if not _lines(brief,"dimensions",4) and drawing is None:
         return
+    if drawing is not None:
+        return _drawing_dimensions_four(
+            scene,brief,detail,drawing,x,y,w,h,accent)
     sketch=None
-    if detail is None and drawing is None:
+    if detail is None:
         sketch=_source_schematic(hero)
     shown_detail=detail if detail is not None else sketch
-    v3._dims(scene,brief,shown_detail,drawing,x,y,w,h,accent,False)
+    v3._dims(scene,brief,shown_detail,None,x,y,w,h,accent,False)
     if sketch is not None:
         v3._type(scene,"dimensions","КОНТУР ПО ФОТО",
                  x+18,y+h-31,278,22,15,10,
                  accent,True,"pro4-photo-contour-note",1)
     scene.rect("dimensions",x,y+h-5,w-13,4,accent,
                ident="pro4-dimension-bottom-guide")
-
 
 def _benefits_four(scene,benefits,x,y,w,h,accent):
     if not benefits:

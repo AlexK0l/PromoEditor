@@ -300,6 +300,8 @@ def test_photo_can_be_assigned_drawing_without_reupload(monkeypatch):
     ids=[el.attrib["id"] for el in root.findall(".//s:image",NS)]
     assert any("original-drawing" in name for name in ids)
     assert any("original-product-photo" in name for name in ids)
+    with zipfile.ZipFile(io.BytesIO(client.get(result["zip"]).content)) as kit:
+        assert kit.read("originals/drawing.jpg") == buffer.getvalue()
 
 
 def test_manual_drawing_role_rejects_invalid_kind_and_two_forced_drawings():
