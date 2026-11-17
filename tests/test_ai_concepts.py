@@ -297,6 +297,8 @@ def test_ai_accent_palette_is_visible_in_svg_even_with_brief_accent():
     assert brief["accent"] != item["palette"]["accent"]
     svg = render_ai_concept_svg(brief,"4x3",item)
     root = ET.fromstring(svg)
-    underline = root.find(".//*[@id='ai-hero-underline']")
+    # Scene.id() appends a numeric suffix to every editable SVG object.
+    underline = next((node for node in root.iter()
+                      if node.get("id","").startswith("ai-hero-underline-")),None)
     assert underline is not None
     assert underline.get("fill") == "#126BA8"
