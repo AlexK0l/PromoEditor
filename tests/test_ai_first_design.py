@@ -22,21 +22,23 @@ def blueprint():
         "ink":"#141923","surface":"#FFFFFF","support":"#E9EFF4",
         "layouts":{
             "4x3":{
-                "header":[0,0,1000,150],
-                "hero":[0,150,645,410],
-                "specs":[650,150,350,410],
-                "drawing":[0,560,1000,170],
-                "benefits":[0,730,1000,85],
-                "finance":[0,815,1000,80],
-                "footer":[0,895,1000,105],
+                "header":[0,0,1000,145],
+                "hero":[0,145,645,380],
+                "specs":[650,145,350,380],
+                "drawing":[0,525,1000,155],
+                "benefits":[0,680,1000,75],
+                "proof":[0,755,1000,55],
+                "finance":[0,810,1000,70],
+                "footer":[0,880,1000,120],
             },
             "9x16":{
-                "header":[0,0,1000,125],
-                "hero":[0,125,1000,270],
-                "specs":[0,395,1000,185],
-                "drawing":[0,580,1000,135],
-                "benefits":[0,715,1000,100],
-                "finance":[0,815,1000,90],
+                "header":[0,0,1000,120],
+                "hero":[0,120,1000,230],
+                "specs":[0,350,1000,185],
+                "drawing":[0,535,1000,125],
+                "benefits":[0,660,1000,95],
+                "proof":[0,755,1000,70],
+                "finance":[0,825,1000,80],
                 "footer":[0,905,1000,95],
             },
         }
@@ -80,7 +82,7 @@ def test_reference_is_optional_in_schema_planner_and_image_calls(monkeypatch):
     monkeypatch.setattr(ai_director,"client",lambda:stub)
     brief=default_brief()
     plan=ai_director.generate_plan(brief,references=[])
-    assert plan["layouts"]["4x3"]["hero"]==[0,150,645,410]
+    assert plan["layouts"]["4x3"]["hero"]==[0,145,645,380]
     assert len(stub.requests)==1
     content=stub.requests[0]["input"][0]["content"]
     assert sum(x["type"]=="input_image" for x in content)==0
@@ -237,8 +239,8 @@ def test_ai_plan_moves_real_svg_regions_not_only_background_pixels():
     hero=Image.new("RGB",(640,360),"yellow")
     first=blueprint()
     second=copy.deepcopy(first)
-    second["layouts"]["4x3"]["hero"]=[0,150,615,410]
-    second["layouts"]["4x3"]["specs"]=[620,150,380,410]
+    second["layouts"]["4x3"]["hero"]=[0,145,615,380]
+    second["layouts"]["4x3"]["specs"]=[620,145,380,380]
     assert ai_director.validate_plan(second,brief)
     originals=ET.fromstring(ai_director.render_ai_poster(
         brief,"4x3",first,art,hero=hero))
