@@ -21,11 +21,11 @@ _ENV = {
 }
 
 
-class QuotaExceeded(Exception):
-    """A user-visible HTTP 429; the paid request MUST NOT be sent."""
+class QuotaExceeded(ValueError):
+    """Reject paid requests before dispatch; routed as a validation error."""
 
 
-class QuotaStoreUnavailable(Exception):
+class QuotaStoreUnavailable(ValueError):
     """Fail closed if durable usage cannot be recorded."""
 
 
