@@ -57,10 +57,11 @@
             <label for="documents" class="mini-upload"><span class="mini-icon" aria-hidden="true">▤</span><span><strong>Документы</strong><small id="file-documents">Можно загрузить несколько · PDF, Excel, Word</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Документы с характеристиками"></label>
             <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотипы</strong><small id="file-logo">Можно загрузить несколько</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Логотипы и бренд-материалы, можно выбрать несколько"></label>
             <label class="mini-upload" for="drawing"><span class="mini-icon" aria-hidden="true">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">JPG, PNG или PDF · сразу в основной форме</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf" aria-label="Загрузить технический чертёж"></label>
+            <label class="mini-upload" for="background"><span class="mini-icon" aria-hidden="true">▧</span><span><strong>Фотофон / промышленная сцена</strong><small id="file-background">Необязательно · JPG, PNG или WEBP · без платного AI</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="background" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Загрузить собственное фото промышленной площадки для фона постера"></label>
           </div>
-          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button></div>
+          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="background" hidden>Убрать фон-сцену</button></div>
           <button type="button" id="inspect-btn" class="quick-extract" hidden>Извлечь характеристики из документов <span aria-hidden="true">→</span></button>
-          <p class="asset-intro">Добавьте фотографии, чертёж, документы и логотип. Если чертёж уже попал в фотографии, назначьте ему роль «Использовать как чертёж» в списке ниже. <strong>Не все загруженные файлы попадут в промо.</strong></p>
+          <p class="asset-intro">Добавьте фотографии, чертёж, документы и логотип. Для реалистичного промышленного окружения загрузите отдельное фото фона или включите OpenAI. Если чертёж попал в фотографии, назначьте ему роль «Использовать как чертёж» в списке ниже. <strong>Не все загруженные файлы попадут в промо.</strong></p>
           <div id="asset-files-list" class="asset-files-list" role="list" aria-label="Загруженные материалы и приоритеты"></div>
           <p id="file-feedback" class="file-feedback" role="status" aria-live="polite">Файлы не загружены.</p>
         </div>
@@ -308,7 +309,7 @@
 
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
-  <script src="/static/assets.js?v=20261117-auto-drawing-1" defer></script>
+  <script src="/static/assets.js?v=20261117-premium-scene-2" defer></script>
   <script src="/static/app.js?v=20261116-demo-button-fix" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
