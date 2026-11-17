@@ -1,15 +1,17 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const fileIds = ['hero','documents','logo','detail','drawing','references','background'];
-  const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','proof-points','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo'];
-  const placeholders = {documents:'Несколько документов · PDF / Word / Excel',logo:'Несколько логотипов',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Несколько референсов; система отберёт до 2',background:'Фото сцены (необязательно)'};
+  const fileIds = ['hero','documents','logo','detail','drawing','references','background','reference_example'];
+  const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','proof-points','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo','design-style','design-goal'];
+  const placeholders = {documents:'Несколько документов · PDF / Word / Excel',logo:'Несколько логотипов',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Несколько референсов; система отберёт до 2',background:'Фото сцены (необязательно)',reference_example:'Необязательный рекламный пример'};
   let latest = null;
   let apiReady = false;
   let isBusy = false;
   let hasDemo = false;
   let isDemoLoading = false;
   let promptDirty = true;
+  let aiConceptSet = null;
+  let selectedAiConcept = null;
 
   // Optional new fields should not disable the entire UI if an older HTML
   // document briefly remains in the browser cache after deployment.
@@ -119,6 +121,7 @@
   function busy(on){
     isBusy=on;
     $('generate-btn').disabled=on;
+    $('generate-concepts-btn').disabled=on || !apiReady;
     $('build-prompt-btn').disabled=on;
     $('analyze-assets-btn').disabled=on;
     $('asset-rebuild').disabled=on;
@@ -127,7 +130,7 @@
     $('loading').hidden=!on;
     const button=$('generate-btn');
     if(on)button.textContent='Создаём изображения…';
-    else button.textContent='Создать PNG · JPEG · SVG →';
+    else refreshGenerationMode();
   }
   function appendFiles(form,id){for(const file of $(id).files)form.append(id,file,file.name);}
   function download(path){
