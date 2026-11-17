@@ -285,6 +285,8 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         artwork={}
         visuals={}
         ai_product=False
+        if design_mode=='ai_first' and hero is None and use_demo:
+            hero=_demo_hero()
         if design_mode=='ai_first':
             # AI plans ALL section geometry, then paints two art-direction
             # plates. Verified facts and real source files stay editable SVG
@@ -527,6 +529,12 @@ async def generate(request:Request):
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     hero_raw=chosen_bytes(report,records,'primary_photo')
+    if design_mode=='ai_first' and not hero_raw and not use_demo:
+        raise HTTPException(400,detail=(
+            'Для AI-дизайнера загрузите реальную фотографию товара. '
+            'Его конструкция не генерируется по воображению модели. '
+            'Для тестирования можно выбрать «Заполнить пример» '
+            'или переключиться на SVG-шаблон.'))
     detail_raw=chosen_bytes(report,records,'secondary_photo')
     logo_raw=chosen_bytes(report,records,'logo')
     drawing_raw=chosen_bytes(report,records,'drawing')
