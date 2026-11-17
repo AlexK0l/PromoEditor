@@ -148,7 +148,7 @@ chmod 600 /etc/promoeditor/promoeditor.env
 systemctl restart promoeditor
 ```
 
-Set `OPENAI_API_KEY` locally when ready. You can leave it blank for a free, deterministic preview. Paid image generation is not run by installer or tests. Before using paid features, set usage alerts/budget controls in your OpenAI Platform account and make an explicit low-cost smoke test. This app currently does **not** enforce a hard monetary cap, and rate limits are process-local.
+Set `OPENAI_API_KEY` locally when ready. You can leave it blank for a free, deterministic preview. Paid image generation is not run by installer or tests. Before using paid features, set usage alerts/budget controls in your OpenAI Platform account and make an explicit low-cost smoke test. The application now applies **persistent daily call quotas** for OpenAI Images and Responses (see [quota setup](../../docs/OPENAI_QUOTAS.md)), but these are **not monetary limits**. The separate general per-IP request throttle remains process-local.
 
 ## 4. Add a SECOND HTTPS hostname to the EXISTING Caddy
 
@@ -165,7 +165,8 @@ Already installed? Use `switch_to_password_login.sh` described above, NOT the in
 
 ```bash
 systemctl is-active regionalresearch caddy promoeditor
-curl -fsS http://127.0.0.1:18080/api/config
+curl --silent --output /dev/null --write-out 'anonymous API: %{http_code}\n' http://127.0.0.1:18080/api/config
+curl --fail --silent --show-error http://127.0.0.1:18080/login >/dev/null
 # Anonymous public website should redirect HTTP 303 to /login after certificate issuance.
 curl -sSI https://promoeditor.YOUR-DASHED-VPS-IP.sslip.io/ | head -n 10
 # Check that the original RegionalResearch remains accessible.
@@ -179,6 +180,7 @@ In a browser, open `https://promoeditor.<DASHED_VPS_IP>.sslip.io/`, enter only t
 
 ```bash
 # Only PromoEditor restarts; refuses to overwrite uncommitted source edits.
+# Prepare a root-only backup/rollback plan beforehand: see docs/TIME4VPS_RELEASE_2026-11-17.md.
 bash /opt/promoeditor/deploy/time4vps/update.sh
 # App diagnostics
 journalctl -u promoeditor -n 80 --no-pager
@@ -198,3 +200,8 @@ The historical Ubuntu VPS had just **1.9 GiB total RAM, with zero swap**. Runnin
 ### Rollback
 
 If PromoEditor is broken, stop **only** its service with `systemctl stop promoeditor`; RegionalResearch remains running. For a Caddy problem, retrieve the timestamped backup from `/root/promoeditor-backups` and restore **only** `/etc/caddy/Caddyfile`, validate and reload Caddy. The configuration script already tries to roll back on syntax/reload errors. Avoid `docker compose up` or any Docker command from the alternative `deploy/README_VPS.md` on this shared VPS.
+
+
+### Проверенный релиз от 17.11.2026
+
+Для PR #37–#43 создан [список шагов Time4VPS, проверки, ограничений и ручного отката](../../docs/TIME4VPS_RELEASE_2026-11-17.md). **Не запускайте** `update.sh` до чтения этого списка и резервного копирования прежнего состояния: сам скрипт не выполняет автоматический откат после ошибки.
