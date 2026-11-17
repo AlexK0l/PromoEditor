@@ -105,7 +105,7 @@ def pdf_first_page_png(raw: bytes) -> bytes:
 def _pdf_first_page_png_direct(raw:bytes)->bytes:
     """Convert only the first page of a user-supplied PDF drawing to pixels."""
     try:
-        import fitz  # PyMuPDF, sandbox-free direct rasterization: no shell execution
+        import pymupdf as fitz  # Direct PDF rasterizer in resource-limited worker
         with fitz.open(stream=raw,filetype='pdf') as document:
             if document.needs_pass:raise ValueError('PDF-чертёж защищён паролем')
             if not document.page_count:raise ValueError('PDF-чертёж не содержит страниц')
