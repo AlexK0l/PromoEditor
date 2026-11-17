@@ -35,7 +35,7 @@ def test_paid_routes_preserve_quota_status(monkeypatch, route, error, status):
     monkeypatch.setenv("PROMO_AUTH_ENABLED", "0")
     monkeypatch.setattr(main, "_guard_rate", lambda request: None)
     failure = _blocked(error)
-    empty_report = {"project_assets": [], "selected_assets": {}}
+    empty_report = {"project_assets": [], "selected_assets": {"drawing": None}}
     fake_analyze = lambda *args, **kwargs: (empty_report, {})
     monkeypatch.setattr(main, "chosen_bytes", lambda *args, **kwargs: None)
     if route != "analyze-assets":
