@@ -39,7 +39,7 @@ def test_pdf_drawing_is_rasterized_in_bounded_subprocess():
     text, warnings = extract_text("drawing.pdf", content)
     assert "PDF technical drawing" in text
     image = pdf_first_page_png(content)
-    assert image.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+    assert image.startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_child_environment_excludes_credentials(monkeypatch):
