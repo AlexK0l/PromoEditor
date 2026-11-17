@@ -92,6 +92,14 @@ jobs:
           name: premium-pro-visual-previews
           path: /tmp/promo-premium-pro/
           if-no-files-found: error
+      - name: Generate AI-first editable layout visual samples
+        run: PYTHONPATH=. python tests/generate_ai_concept_previews.py
+      - name: Publish AI-first concept preview PNG and SVG
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-first-editable-previews
+          path: /tmp/promo-ai-concepts/
+          if-no-files-found: error
       - name: Container diagnostics
         if: always()
         run: docker logs promo-ci || true
