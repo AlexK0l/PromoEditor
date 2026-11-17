@@ -247,3 +247,5 @@ button:disabled{cursor:not-allowed;opacity:.48}
   .ai-concept-grid{grid-template-columns:1fr}
   .ai-concepts-workflow .prompt-head{flex-direction:column;align-items:stretch}
 }
+
+.ai-creative-settings[hidden],.ai-concepts-workflow[hidden],.ai-concept-grid[hidden]{display:none!important}
