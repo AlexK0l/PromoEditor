@@ -152,7 +152,8 @@ def _brief_for_ai(brief: dict) -> dict:
 
 def generate_plan(brief: dict, *, references: list[bytes] | None = None,
                   hero_raw: bytes | None = None,
-                  model: str | None = None) -> dict:
+                  model: str | None = None,
+                  feedback: str = "") -> dict:
     """One text/vision planning call; OPTIONAL reference photos.
 
     Passing zero visual references is supported and expected. Existing source
@@ -169,6 +170,7 @@ def generate_plan(brief: dict, *, references: list[bytes] | None = None,
             "formats": ["4x3", "9x16"],
             "has_reference": bool(references),
             "active_regions": sorted(_active(brief)),
+            "previous_validation_error": str(feedback)[:300],
         }, ensure_ascii=False),
     }]
     if hero_raw:
@@ -252,7 +254,7 @@ def preflight_typography(brief: dict, plan: dict,
         root=ET.fromstring(xml)
         important=("ai-model-","ai-category-","ai-spec-name-",
                    "ai-spec-value-","ai-dim-name-","ai-dim-value-",
-                   "ai-price-","ai-phone-")
+                   "ai-proof-statement-","ai-price-","ai-phone-")
         nodes=[node for node in root.iter()
                if node.tag.endswith("}text") and
                node.get("id","").startswith(important)]
@@ -268,6 +270,8 @@ def preflight_typography(brief: dict, plan: dict,
         for item in (brief.get("model") or "",
                      *[v[1] for v in _lines(brief,"specs",8)],
                      *[v[1] for v in _lines(brief,"dimensions",4)],
+                     *[str(v) for v in (
+                         brief.get("proof_points") or brief.get("hero_claims") or [])[:4]],
                      *[str(v) for v in (brief.get("phones") or [])[:2]]):
             if item and str(item) not in labels:
                 raise ValueError(
