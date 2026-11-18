@@ -306,7 +306,7 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "items; no microscopic captions, ellipses or missing selling points. "
         "Reserve hero space for user sales claims when benefits are also present. "
         "Each specifications row needs at least 28 output pixels plus a "
-        "3px separator and a heading. 
+        "3px separator and a heading. "
         "Benefits need room for up to four items plus proof claims. "
         "Economy needs four legible metrics (one row in wide blocks or two "
         "rows in narrower blocks); a tiny ROI panel is invalid. "
