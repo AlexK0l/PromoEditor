@@ -7,6 +7,8 @@ separately by tests/test_ai_concepts.py.
 from __future__ import annotations
 import json
 import os
+import io
+from PIL import Image
 from playwright.sync_api import sync_playwright
 
 BASE=os.getenv("PROMO_BROWSER_BASE","http://127.0.0.1:18200")
@@ -43,6 +45,16 @@ def main():
                     "style":"premium","goal":"sales",
                 },ensure_ascii=False))
         page.route("**/api/concepts",three_previews)
+        poster_requests=[]
+        def poster_reply(route):
+            poster_requests.append(route.request.post_data or "")
+            route.fulfill(status=200,content_type="application/json",
+                body=json.dumps({
+                    "images":{"4x3":"/static/demo_4x3.svg",
+                              "9x16":"/static/demo_9x16.svg"},
+                    "zip":"/files/"+"a"*32+"/ai_posters.zip",
+                    "raster_only":True,"reference_used":False}))
+        page.route("**/api/ai-posters",poster_reply)
         page.goto(BASE,wait_until="domcontentloaded")
         assert page.locator("#mode-ai-pro").is_checked()
         assert not page.locator("#ai-concepts-workflow").is_hidden()
@@ -50,6 +62,21 @@ def main():
         assert "необязатель" in page.locator("label[for=reference_example]").inner_text().lower()
         assert page.locator("#generate-btn").is_disabled()
         page.locator("#model").fill("TEST INDUSTRIAL MODEL")
+        assert "без эталона" in page.locator("#openai-posters-title").inner_text().lower()
+        page.locator("#generate-ai-posters-btn").click()
+        assert len(poster_requests)==0  # No photo, no paid call
+        photo=io.BytesIO()
+        Image.new("RGB",(320,180),"red").save(photo,"PNG")
+        page.locator("#hero").set_input_files({
+            "name":"vehicle.png","mimeType":"image/png","buffer":photo.getvalue()})
+        page.evaluate("window.PromoAssets.isReady=()=>true")
+        page.locator("#generate-ai-posters-btn").click()
+        page.wait_for_function(
+            "document.querySelector('#openai-poster-results').hidden===false")
+        assert len(poster_requests)==1
+        assert "не требовался" in page.locator("#openai-posters-status").inner_text().lower()
+        assert page.locator("#openai-poster-results img").count()==2
+        assert page.locator("#openai-posters-download").get_attribute("href").endswith("ai_posters.zip")
         page.locator("#generate-concepts-btn").click()
         page.wait_for_function("document.querySelectorAll('.ai-concept-card').length===3")
         assert len(requests)==1
