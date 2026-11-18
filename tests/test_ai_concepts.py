@@ -440,7 +440,7 @@ def test_paid_model_roi_footer_overlap_is_repaired_without_another_api_call(monk
     from app.ai_concept_renderer import render_ai_concept_svg
     for item in repaired:
         for fmt in ("4x3","9x16"):
-            assert "<svg" in render_ai_concept_svg(default_brief(),fmt,item)
+            assert ET.fromstring(render_ai_concept_svg(default_brief(),fmt,item)).tag.endswith("svg")
 
 
 def test_paid_ai_response_with_severe_overlap_recovers_distinct_safe_compositions():
@@ -459,7 +459,7 @@ def test_paid_ai_response_with_severe_overlap_recovers_distinct_safe_composition
         assert "адаптировано" in item["rationale"]
         for fmt in ("4x3","9x16"):
             ai_layout.validate_concept({k:v for k,v in item.items() if k!="id"})
-            assert "<svg" in render_ai_concept_svg(default_brief(),fmt,item)
+            assert ET.fromstring(render_ai_concept_svg(default_brief(),fmt,item)).tag.endswith("svg")
 
 
 def test_paid_layout_recovery_preserves_valid_and_rejects_untrusted_palette():
