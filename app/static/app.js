@@ -465,7 +465,7 @@
     $('mode-ai-pro').checked=false;
     $('mode-template').checked=!apiReady;
     markPromptStale();
-    set('currency','Br');set('style','industrial');set('accent','#e31b26');
+    set('currency','₽');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
     for(const id of fileIds)$(id).value='';
     window.PromoAssets?.reset();
