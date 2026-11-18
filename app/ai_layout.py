@@ -7,6 +7,7 @@ A style-reference image is optional and cannot supply product claims.
 from __future__ import annotations
 
 import base64
+import copy
 import io
 import json
 import os
@@ -253,6 +254,193 @@ def normalize_concepts(payload: dict[str, Any], brief: dict | None = None) -> li
     return output
 
 
+# Legible, disjoint emergency grids for a completed paid layout response.
+# These are used only when the AI-authored geometry cannot be repaired safely.
+# Three distinct arrangements preserve some layout variety without inventing
+# facts, altering photos, or making another paid OpenAI request.
+_SAFE_LANDSCAPE = (
+    {
+        "header": (0, 0, 1000, 105),
+        "hero": (0, 115, 560, 435),
+        "specs": (570, 115, 430, 435),
+        "dimensions": (0, 560, 560, 170),
+        "benefits": (570, 560, 430, 170),
+        "roi": (0, 740, 1000, 135),
+        "footer": (0, 885, 1000, 115),
+    },
+    {
+        "header": (0, 0, 1000, 105),
+        "hero": (440, 115, 560, 435),
+        "specs": (0, 115, 430, 435),
+        "dimensions": (440, 560, 560, 170),
+        "benefits": (0, 560, 430, 170),
+        "roi": (0, 740, 1000, 135),
+        "footer": (0, 885, 1000, 115),
+    },
+    {
+        "header": (0, 0, 1000, 105),
+        "hero": (0, 115, 1000, 300),
+        "specs": (0, 425, 510, 305),
+        "dimensions": (520, 425, 480, 142),
+        "benefits": (520, 578, 480, 152),
+        "roi": (0, 740, 1000, 135),
+        "footer": (0, 885, 1000, 115),
+    },
+)
+_SAFE_PORTRAIT = (
+    {
+        "header": (0, 0, 1000, 90),
+        "hero": (0, 100, 1000, 250),
+        "specs": (0, 360, 1000, 230),
+        "dimensions": (0, 600, 1000, 140),
+        "benefits": (0, 750, 550, 120),
+        "roi": (560, 750, 440, 120),
+        "footer": (0, 880, 1000, 120),
+    },
+    {
+        "header": (0, 0, 1000, 90),
+        "hero": (0, 340, 1000, 250),
+        "specs": (0, 100, 1000, 230),
+        "dimensions": (0, 600, 1000, 140),
+        "benefits": (0, 750, 550, 120),
+        "roi": (560, 750, 440, 120),
+        "footer": (0, 880, 1000, 120),
+    },
+    {
+        "header": (0, 0, 1000, 90),
+        "hero": (0, 100, 1000, 300),
+        "specs": (0, 410, 1000, 190),
+        "dimensions": (0, 610, 1000, 140),
+        "benefits": (0, 760, 550, 110),
+        "roi": (560, 760, 440, 110),
+        "footer": (0, 880, 1000, 120),
+    },
+)
+
+
+def _safe_layout(fmt: str, index: int) -> dict[str, dict[str, int]]:
+    grid = (_SAFE_LANDSCAPE if fmt == "4x3" else _SAFE_PORTRAIT)[index]
+    return {
+        name: dict(zip(("x", "y", "w", "h"), rect))
+        for name, rect in grid.items()
+    }
+
+
+def _single_layout_valid(
+    concept: dict[str, Any], fmt: str, brief: dict, index: int,
+    layout: dict[str, Any],
+) -> None:
+    """Run the same strict geometry and content checks as actual SVG export."""
+    other = next(value for value in FORMATS if value != fmt)
+    candidate = {
+        **concept,
+        "layouts": {fmt: layout, other: _safe_layout(other, index)},
+    }
+    checked = validate_concept(candidate)
+    validate_renderability(checked, brief, fmt)
+
+
+def _repair_roi_footer(
+    concept: dict[str, Any], fmt: str, brief: dict, index: int,
+) -> dict[str, Any] | None:
+    """Prefer preserving AI geometry while resolving a bottom-band collision.
+
+    Shrink the ROI only if its four metrics remain readable. Otherwise try
+    moving it up, then moving the footer down; each candidate goes through the
+    strict validator and content preflight. Never overlap or crop factual copy.
+    """
+    layout = concept["layouts"][fmt]
+    if not isinstance(layout, dict):
+        return None
+    roi, footer = layout.get("roi"), layout.get("footer")
+    if not isinstance(roi, dict) or not isinstance(footer, dict):
+        return None
+    if any(set(box) != {"x", "y", "w", "h"} or
+           any(type(box[key]) is not int for key in ("x", "y", "w", "h"))
+           for box in (roi, footer)):
+        return None
+    smaller = min(roi["w"] * roi["h"], footer["w"] * footer["h"])
+    if smaller <= 0 or _intersection(roi, footer) <= smaller * .025:
+        return None
+
+    candidates = []
+    allowed_height = footer["y"] - roi["y"] - 8
+    if allowed_height >= 48:
+        candidates.append(("roi", {**roi, "h": min(roi["h"], allowed_height)}))
+    above_footer = footer["y"] - roi["h"] - 8
+    if above_footer >= 0:
+        candidates.append(("roi", {**roi, "y": above_footer}))
+    below_roi = roi["y"] + roi["h"] + 8
+    if below_roi + footer["h"] <= 1000:
+        candidates.append(("footer", {**footer, "y": below_roi}))
+
+    for zone, replacement in candidates:
+        trial = copy.deepcopy(layout)
+        trial[zone] = replacement
+        try:
+            _single_layout_valid(concept, fmt, brief, index, trial)
+        except (ValueError, KeyError, TypeError):
+            continue
+        return trial
+    return None
+
+
+def normalize_paid_ai_concepts(payload: dict[str, Any], brief: dict) -> list[dict[str, Any]]:
+    """Recover AI-authored geometry locally instead of wasting a paid response.
+
+    The ordinary normalize_concepts() remains STRICT for externally supplied
+    or stored layouts. We only repair layout zones coming straight from the
+    single trusted OpenAI Responses SDK call. Palette and field types must
+    still validate; approved text and photos are never AI-authored.
+    """
+    items = payload.get("concepts") if isinstance(payload, dict) else None
+    if not isinstance(items, list) or len(items) != 3:
+        raise ValueError("OpenAI должен вернуть ровно три концепции.")
+
+    result = []
+    for index, raw in enumerate(items):
+        if not isinstance(raw, dict) or set(raw) != {
+            "name", "rationale", "scene_prompt", "palette", "layouts"
+        }:
+            raise ValueError("Некорректная структура AI-концепта.")
+        layouts = raw["layouts"]
+        if not isinstance(layouts, dict) or set(layouts) != set(FORMATS):
+            raise ValueError("Нужны компоновки 4:3 и 9:16.")
+        fallback = {fmt: _safe_layout(fmt, index) for fmt in FORMATS}
+        # Independently validate metadata even if AI placements are malformed.
+        metadata = validate_concept({**raw, "layouts": fallback})
+        candidate = copy.deepcopy(raw)
+        for key in ("name", "rationale", "scene_prompt"):
+            candidate[key] = metadata[key]
+
+        adjusted = False
+        for fmt in FORMATS:
+            original = candidate["layouts"][fmt]
+            try:
+                _single_layout_valid(candidate, fmt, brief, index, original)
+                continue
+            except (ValueError, KeyError, TypeError):
+                pass
+            replacement = _repair_roi_footer(candidate, fmt, brief, index)
+            if replacement is None:
+                # A safe, editable layout is better than discarding a paid
+                # response and asking OpenAI to repeat it.
+                replacement = _safe_layout(fmt, index)
+            candidate["layouts"][fmt] = replacement
+            adjusted = True
+
+        if adjusted:
+            candidate["rationale"] = _bounded_design_text(
+                "Размещение блоков адаптировано для читаемости. " +
+                candidate["rationale"], "rationale", 260
+            )
+        validated = validate_concept(candidate)
+        for fmt in FORMATS:
+            validate_renderability(validated, brief, fmt)
+        result.append(dict(validated, id=f"concept_{index}"))
+    return result
+
+
 def _copy_density(brief: dict) -> dict[str, Any]:
     """Give the art director text LENGTHS, not customers' phone numbers or claims.
 
@@ -335,6 +523,8 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "not merely colors or concept names. "
         "For EACH format, supply disjoint rectangles on a normalized 1000×1000 "
         "design plane (integer x,y,w,h). Required zones: header, hero, specs, "
+        "Important: ROI and footer MUST NOT overlap; leave a visible gap between "
+        "them in both formats. All seven zones must be disjoint. "
         "dimensions, benefits, roi, footer. No overlaps, no out-of-bounds zones. "
         "Hero w >=350 and h>=170. Header/footer h>=75. Each zone w>=100 h>=48. "
         "CRITICAL: the copy_density field contains CHARACTER COUNTS per "
@@ -377,6 +567,6 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
     if not raw:
         raise ValueError("OpenAI не вернул план рекламных концепций.")
     try:
-        return normalize_concepts(json.loads(raw), brief=brief)
+        return normalize_paid_ai_concepts(json.loads(raw), brief=brief)
     except (json.JSONDecodeError, TypeError) as exc:
         raise ValueError("OpenAI вернул некорректный план.") from exc
