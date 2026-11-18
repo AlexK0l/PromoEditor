@@ -26,6 +26,8 @@ def main():
         page.wait_for_function("document.getElementById('mode-template').checked")
         assert page.locator('#mode-template').is_checked()
         assert page.locator('#reference_example').count()==1
+        assert page.locator('#file-reference_example').is_hidden()
+        page.locator('#optional-materials > summary').click()
         assert page.locator('#file-reference_example').is_visible()
         # CI deliberately has no API key: the explicit low-cost fallback
         # must still support the complete existing browser workflow.
@@ -35,11 +37,13 @@ def main():
         assert page.locator('#advanced-settings label[for="drawing"]').count()==0
         # Regression: after the PRO style rollout, filling a demo must remain
         # clickable and must NOT silently change the chosen layout to industrial.
+        page.locator('#design-options > summary').click()
         page.locator('[data-style="reference_pro"]').click()
         assert page.locator('#style').input_value()=='reference_pro'
         page.locator('#advanced-settings summary').click()
         assert page.locator('#advanced-settings').evaluate('(el)=>el.open')
         page.locator('#proof-points').fill('Старый факт из другого проекта')
+        page.locator('#topbar-menu > summary').click()
         page.locator('#reset-btn').click()
         page.wait_for_function(
             "document.getElementById('reset-btn').textContent==='Очистить форму'")
@@ -64,9 +68,11 @@ def main():
         assert page.locator('#logo').evaluate('(e)=>e.files.length')==2
         upload(page,'documents','facts.csv','Нагрузка;44 т\nОбъём;55 м³'.encode('utf-8'),'text/csv')
         upload(page,'references','reference.png',png('cyan',(480,315),12),'image/png')
+        page.locator('#asset-files-details > summary').click()
         assert page.locator('[data-asset-id]').count()==6
         assert page.locator('#asset-files-list img.asset-thumb').count()==5
         assert page.locator('#assets-use-ai').is_disabled()  # CI uses no paid key
+        page.locator('#asset-review-details > summary').click()
         page.locator('#analyze-assets-btn').click()
         page.wait_for_function('!document.getElementById("asset-selection").hidden')
         assert 'Технический отбор' in page.locator('#asset-analysis-method').inner_text()
@@ -81,6 +87,7 @@ def main():
         assert 'small.png' in page.locator('#asset-picked').inner_text()
         assert 'large.png' in page.locator('#asset-unused').inner_text()
         # Prompt now includes chosen and excluded filenames without inventing specs.
+        page.locator('#expert-prompt > summary').click()
         page.locator('#build-prompt-btn').click()
         page.wait_for_function('document.getElementById("promo-prompt").value.includes("small.png")')
         prompt=page.locator('#promo-prompt').input_value()
@@ -139,6 +146,8 @@ def main():
         sheet.save(buf,format='JPEG',quality=92)
         upload(other,'hero','technical-sheet.jpg',buf.getvalue(),'image/jpeg')
         upload(other,'hero','product.png',png('yellow',(950,560),16),'image/png')
+        other.locator('#asset-files-details > summary').click()
+        other.locator('#asset-review-details > summary').click()
         other.locator('#analyze-assets-btn').click()
         other.wait_for_function(
             'document.getElementById("assets-analysis-status").textContent.includes("Анализ выполнен")')
@@ -156,6 +165,21 @@ def main():
             'document.getElementById("assets-analysis-status").textContent.includes("Анализ выполнен")')
         assert 'Не выбран' in drawing_slot.inner_text()
         other.close()
+
+        # The normal route must NOT require the old manual Analyze button:
+        # one click on Create performs a free asset review and renders both SVGs.
+        quick=browser.new_page(viewport={'width':1024,'height':780})
+        quick.goto(BASE,wait_until='domcontentloaded')
+        quick.locator('#model').fill('Простой тестовый товар')
+        upload(quick,'hero','product.png',png('orange',(800,500),17),'image/png')
+        assert 'Анализ выполнен' not in quick.locator('#assets-analysis-status').inner_text()
+        quick.locator('#generate-btn').click()
+        quick.wait_for_function('!document.getElementById("download-panel").hidden',timeout=60000)
+        assert 'Анализ выполнен' in quick.locator('#assets-analysis-status').inner_text()
+        assert quick.locator('#individual-downloads').evaluate('(el)=>!el.open')
+        assert quick.locator('#download-all').is_enabled()
+        assert not errors,errors
+        quick.close()
         browser.close()
     print('Browser multi-asset review: add, analyze, override, prompt, ZIP, remove, mobile — PASS')
 
