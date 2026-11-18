@@ -530,8 +530,17 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             z.writestr('REVIEW_BEFORE_PUBLICATION.txt',
                        AI_POSTER_WARNING+'\nРедактируемые SVG создаются '
                        'отдельно в режиме векторных концепций.\n')
-            z.writestr('originals/product_source',
-                       product_raw,compress_type=zipfile.ZIP_STORED)
+            for name,raw in (('product_photo',product_raw),
+                             ('customer_logo',logo_raw),
+                             ('drawing_preview',drawing_raw),
+                             ('style_reference',reference_raw)):
+                if not raw:
+                    continue
+                with Image.open(io.BytesIO(raw)) as original:
+                    suffix={ 'JPEG':'.jpg','PNG':'.png','WEBP':'.webp' }.get(
+                        original.format,'.bin')
+                z.writestr(f'originals/{name}{suffix}',
+                           raw,compress_type=zipfile.ZIP_STORED)
         return {'job_id':job_id,'images':images,'jpeg':jpegs,
                 'zip':f'/files/{job_id}/ai_posters.zip',
                 'generation_mode':'openai_full_poster',
