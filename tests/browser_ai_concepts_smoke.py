@@ -56,6 +56,13 @@ def main():
                     "raster_only":True,"reference_used":False}))
         page.route("**/api/ai-posters",poster_reply)
         page.goto(BASE,wait_until="domcontentloaded")
+        # AI credentials make the exact editable hybrid workflow primary.
+        assert page.locator("#mode-hybrid").is_checked()
+        assert page.locator("#use-openai").is_checked()
+        assert page.locator("#use-openai").is_disabled()
+        assert page.locator("#openai-posters-workflow").is_hidden()
+        # The previous AI-concept and raster-experiment workflow is still available.
+        page.locator("#mode-ai-pro").check()
         assert page.locator("#mode-ai-pro").is_checked()
         assert not page.locator("#ai-concepts-workflow").is_hidden()
         assert page.locator("#reference_example").count()==1

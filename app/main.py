@@ -22,8 +22,10 @@ from starlette.datastructures import UploadFile
 from PIL import Image, ImageDraw
 
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
-from .openai_service import analyze_documents, generate_visuals
-from .ai_poster_service import generate_full_posters, WARNING as AI_POSTER_WARNING
+from .openai_service import (analyze_documents, generate_visuals,
+                             _default_visual_cache, _finish_visual_cache)
+from .ai_poster_service import (generate_full_posters, WARNING as AI_POSTER_WARNING,
+                                VERSION as AI_POSTER_VERSION)
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -31,6 +33,7 @@ from .image_analysis import validate_image_dimensions
 from .editable_export import build_promo_prompt, create_editable_svg, rasterize_svg
 from .ai_layout import generate_concepts, STYLES, GOALS
 from .ai_concept_renderer import render_ai_concept_svg
+from .approved_presets import approved_zubrtrail_500
 from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
@@ -100,7 +103,7 @@ def config():
             'logout_csrf_token':issue_form_token('logout') if auth_enabled() else None,
             'image_models':['gpt-image-2.5-flare','gpt-image-2.5-sunburst'],
             'max_file_mb':20,'max_files':MAX_FILES,'multi_assets':True,'asset_analysis':True,'formats':[{'id':'4x3','size':[1440,1080]},{'id':'9x16','size':[1080,1920]}],
-            'preview':True,'generation_modes':['ai_pro','template'],'ai_concepts':3,'reference_required':False,
+            'preview':True,'generation_modes':['hybrid','ai_pro','template'],'ai_concepts':3,'reference_required':False,
             'export_formats':['png','jpeg','svg'],'editable_format':'svg'}
 
 
@@ -110,6 +113,13 @@ def demo():
             'reference_4x3':'/static/demo_4x3.svg',
             'reference_9x16':'/static/demo_9x16.svg',
             'sample_hero':'/static/demo_4x3.svg'}
+
+
+@app.get('/api/presets/zubrtrail-500')
+def approved_zubrtrail_preset():
+    return {'brief':approved_zubrtrail_500(),
+            'source':'Утверждённый рекламный эталон ZubrTrail 500 от 18.11.2026',
+            'notice':'Загрузите оригинальные фотографии, логотип и чертёж самостоятельно.'}
 
 
 def _clean_jobs():
@@ -285,7 +295,7 @@ def _demo_hero():
 def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                    use_demo,use_openai,model,quality,design_prompt,asset_report=None,
                    background_raw=None,concept=None,concept_set_id=None,
-                   reference_example_raw=None):
+                   reference_example_raw=None,generation_mode='template'):
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
@@ -299,11 +309,17 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             hero=_demo_hero()
         visuals={}
         ai_product=False
+        paid_cache=None
+        scene_direction=concept['scene_prompt'] if concept else ''
         if use_openai:
-            visuals=generate_visuals(brief,hero_present=(hero is not None),
-                                     references=references,model=model,
-                                     quality=quality,design_prompt=design_prompt,
-                                     scene_direction=concept['scene_prompt'] if concept else '')
+            paid_cache=_default_visual_cache(
+                brief,hero is not None,references,model,quality,
+                design_prompt,scene_direction)
+            visuals=generate_visuals(
+                brief,hero_present=(hero is not None),references=references,
+                model=model,quality=quality,design_prompt=design_prompt,
+                scene_direction=scene_direction,cache_dir=paid_cache,
+                consume_cache=False)
             ai_product=hero is None
         paths={};jpeg_paths={};corel_paths={}
         for key in ('4x3','9x16'):
@@ -342,7 +358,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         briefing=dict(brief)
         briefing['_metadata']={
             'generator':'AI-directed editable SVG' if concept else 'PromoEditor SVG template',
-            'generation_mode':'ai_pro' if concept else 'template',
+            'generation_mode':'ai_pro' if concept else generation_mode,
             'concept_set_id':concept_set_id,
             'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
             'ai_product_visualization':ai_product,
@@ -406,6 +422,12 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                     archive.writestr(
                         f'originals/{role}{extension}',payload,
                         compress_type=zipfile.ZIP_STORED)
+        # Consume paid copies only after both SVGs and the ZIP exist.
+        if paid_cache is not None:
+            try:
+                _finish_visual_cache(paid_cache)
+            except OSError:
+                pass
         warnings=['Проверьте технические данные, цены и права на изображения перед публикацией.']
         if not brief.get('specs'):
             warnings.append('Подтверждённые ТТХ не заполнены: таблица характеристик не показана. Проверьте предложения из документов и перенесите нужные в форму.')
@@ -427,7 +449,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
             'asset_selection':f'/files/{job_id}/asset_selection.json',
             'layout_spec':f'/files/{job_id}/layout_spec.json',
-            'generation_mode':'ai_pro' if concept else 'template',
+            'generation_mode':'ai_pro' if concept else generation_mode,
             'selected_assets':(asset_report or {}).get('selected_assets',{}),
             'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
         }
@@ -500,9 +522,15 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        reference_raw, model, quality):
     """Store model-authored artwork separate from the validated SVG output."""
     # These calls spend from the persistent daily Images API budget.
+    poster_sources=[product_raw]+[raw for raw in
+                                  (logo_raw,drawing_raw,reference_raw) if raw]
+    paid_cache=_default_visual_cache(
+        brief,True,poster_sources,model,quality,
+        AI_POSTER_VERSION,"complete-poster")
     posters = generate_full_posters(
         brief, product_raw, logo=logo_raw, drawing=drawing_raw,
-        reference=reference_raw, model=model, quality=quality)
+        reference=reference_raw, model=model, quality=quality,
+        cache_dir=paid_cache, consume_cache=False)
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
@@ -541,8 +569,12 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                         original.format,'.bin')
                 z.writestr(f'originals/{name}{suffix}',
                            raw,compress_type=zipfile.ZIP_STORED)
+        try:
+            _finish_visual_cache(paid_cache)
+        except OSError:
+            pass
         return {'job_id':job_id,'images':images,'jpeg':jpegs,
-                'zip':f'/files/{job_id}/ai_posters.zip',
+                 'zip':f'/files/{job_id}/ai_posters.zip',
                 'generation_mode':'openai_full_poster',
                 'ai_used':True,'raster_only':True,
                 'reference_used':reference_raw is not None,
@@ -725,8 +757,15 @@ async def generate(request:Request):
     references=chosen_bytes(report,records,'references')
     reference_example_raw=chosen_bytes(report,records,'reference_example')
     mode=str(form.get('generation_mode','template'))
-    if mode not in ('ai_pro','template'):
+    if mode not in ('ai_pro','template','hybrid'):
         raise HTTPException(400,detail='Неподдерживаемый режим создания.')
+    if mode=='hybrid':
+        if not hero_raw:
+            raise HTTPException(400,detail='Для гибридного режима выберите оригинальное фото товара.')
+        if not use_openai:
+            raise HTTPException(400,detail='Гибридный режим требует AI-фон. Для бесплатной сборки выберите шаблон.')
+        if not os.getenv('OPENAI_API_KEY'):
+            raise HTTPException(400,detail='Для гибридного режима необходим OPENAI_API_KEY.')
     concept=None
     concept_set_id=None
     if mode=='ai_pro':
@@ -761,7 +800,7 @@ async def generate(request:Request):
             _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
             image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
             str(form.get('quality','medium')),design_prompt,report,background_raw,
-            concept,concept_set_id,reference_example_raw)
+            concept,concept_set_id,reference_example_raw,mode)
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:

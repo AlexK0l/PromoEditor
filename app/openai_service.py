@@ -194,7 +194,7 @@ def _scene_for_category(brief):
             'clear distant horizon and bright diffused commercial light')
 
 
-def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt='',scene_direction='',*,cache_dir:Path|None=None):
+def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt='',scene_direction='',*,cache_dir:Path|None=None,consume_cache:bool=True):
     """Persist each paid aspect; resume after partial failure without duplicate cost.
 
     After both formats succeed the cache is consumed, so the next explicit
@@ -262,7 +262,10 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
                 result=api.images.generate(model=model,prompt=prompt,size=size,quality=quality,output_format='png')
             outputs[fmt]=as_image(result)
             _save_visual(cache_dir,fmt,outputs[fmt])
-        _finish_visual_cache(cache_dir)
+        # Keep successfully paid images until PNG/SVG/ZIP are durably assembled.
+        # Direct callers retain legacy consume-on-success behaviour.
+        if consume_cache:
+            _finish_visual_cache(cache_dir)
         return outputs
 
 

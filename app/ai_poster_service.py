@@ -147,7 +147,7 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
                           drawing: bytes | None = None,
                           reference: bytes | None = None,
                           model="gpt-image-2.5-flare", quality="medium",
-                          cache_dir=None):
+                          cache_dir=None, consume_cache=True):
     """At most two chargeable image edits, one per aspect.
 
     Cache a successfully paid response if the next aspect fails; no automatic
@@ -192,5 +192,7 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
                 _save_visual(cache_dir, fmt, image)
             output[fmt] = ImageOps.fit(
                 image, target, method=Image.Resampling.LANCZOS)
-        _finish_visual_cache(cache_dir)
+        # Do not consume chargeable image outputs before downstream ZIP export.
+        if consume_cache:
+            _finish_visual_cache(cache_dir)
     return output
