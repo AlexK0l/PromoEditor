@@ -412,3 +412,76 @@ def test_blank_ai_metadata_uses_safe_nonfactual_fallback(field):
     assert isinstance(result[field],str) and result[field].strip()
     assert len(result[field])<={"name":75,"rationale":260,"scene_prompt":600}[field]
     assert "  \n\t "==concept[field]  # Do not mutate the model response.
+
+
+def test_paid_model_roi_footer_overlap_is_repaired_without_another_api_call(monkeypatch):
+    """Reproduce a real 4:3 ROI/footer collision reported after a paid call."""
+    raw=_concepts()
+    raw[0]["layouts"]["4x3"]["roi"]["h"]=130  # y=755..885, footer starts at 870
+    assert raw[0]["layouts"]["4x3"]["roi"]["y"]==755
+    with pytest.raises(ValueError, match="roi и footer перекрываются в 4x3"):
+        ai_layout.normalize_concepts({"concepts":raw},brief=default_brief())
+
+    calls=[]
+    class Responses:
+        def create(self,**kwargs):
+            calls.append(kwargs)
+            return type("Reply",(),{"output_text":json.dumps({"concepts":raw})})()
+    monkeypatch.setattr("app.openai_service.client",
+                        lambda:type("API",(),{"responses":Responses()})())
+    repaired=ai_layout.generate_concepts(default_brief())
+    assert len(calls)==1
+    assert len(repaired)==3
+    assert repaired[0]["layouts"]["4x3"]["roi"]["y"]==755
+    assert repaired[0]["layouts"]["4x3"]["roi"]["h"]<130
+    assert repaired[0]["layouts"]["9x16"]==raw[0]["layouts"]["9x16"]
+    assert "адаптировано" in repaired[0]["rationale"]
+    assert raw[0]["layouts"]["4x3"]["roi"]["h"]==130  # source unchanged
+    from app.ai_concept_renderer import render_ai_concept_svg
+    for item in repaired:
+        for fmt in ("4x3","9x16"):
+            assert "<svg" in render_ai_concept_svg(default_brief(),fmt,item)
+
+
+def test_paid_ai_response_with_severe_overlap_recovers_distinct_safe_compositions():
+    """An AI layout can be badly broken without consuming another call."""
+    from app.ai_concept_renderer import render_ai_concept_svg
+    raw=_concepts()
+    for item in raw:
+        item["layouts"]["4x3"]["specs"]=_box(200,200,380,430)
+        item["layouts"]["9x16"]["footer"]=_box(0,850,1000,140)
+    fixed=ai_layout.normalize_paid_ai_concepts({"concepts":raw},default_brief())
+    assert len(fixed)==3
+    assert len({tuple(sorted((z,b["x"],b["y"])
+                 for z,b in item["layouts"]["4x3"].items()))
+                for item in fixed})==3
+    for item in fixed:
+        assert "адаптировано" in item["rationale"]
+        for fmt in ("4x3","9x16"):
+            ai_layout.validate_concept({k:v for k,v in item.items() if k!="id"})
+            assert "<svg" in render_ai_concept_svg(default_brief(),fmt,item)
+
+
+def test_paid_layout_recovery_preserves_valid_and_rejects_untrusted_palette():
+    raw=_concepts()
+    exact=ai_layout.normalize_paid_ai_concepts({"concepts":raw},default_brief())
+    assert all(item["layouts"]==raw[i]["layouts"] for i,item in enumerate(exact))
+    assert all("адаптировано" not in item["rationale"] for item in exact)
+    bad=_concepts()
+    bad[0]["palette"]["accent"]="url(javascript:alert(1))"
+    with pytest.raises(ValueError,match="цвет"):
+        ai_layout.normalize_paid_ai_concepts({"concepts":bad},default_brief())
+
+
+def test_paid_ai_layout_preflight_failure_uses_readable_no_cost_fallback():
+    """Eight spec rows must not be compressed to unreadable output."""
+    raw=_concepts()
+    raw[2]["layouts"]["4x3"]["specs"]["h"]=180
+    brief=default_brief()
+    corrected=ai_layout.normalize_paid_ai_concepts({"concepts":raw},brief)
+    assert corrected[2]["layouts"]["4x3"]["specs"]["h"]>=300
+    for concept in corrected:
+        ai_layout.validate_renderability(concept,brief,"4x3")
+        ai_layout.validate_renderability(concept,brief,"9x16")
+    assert raw[2]["layouts"]["4x3"]["specs"]["h"]==180
+
