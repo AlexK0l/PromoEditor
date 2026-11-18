@@ -94,7 +94,16 @@ def _bounded_design_text(value: Any, key: str, maximum: int) -> str:
         raise ValueError(f"Неверное поле концепта: {key}.")
     clean = " ".join(value.split())
     if not clean:
-        raise ValueError(f"Неверное поле концепта: {key}.")
+        # Empty AI-authored metadata does not invalidate a completed paid
+        # layout. These are generic design labels, NEVER product facts.
+        clean = {
+            "name": "Рекламная композиция",
+            "rationale": "План макета с фотографией товара, характеристиками и контактами.",
+            "scene_prompt": (
+                "Neutral photorealistic industrial background only. "
+                "No product, vehicles, people, logos, text or diagrams."
+            ),
+        }[key]
     if len(clean) <= maximum:
         return clean
     snippet = clean[:maximum - 1]
@@ -316,7 +325,8 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "for 4:3 and 9:16. Return only JSON matching the strict schema. "
         "Keep each name under 75 characters, each rationale under 260 characters "
         "(one concise sentence about visual hierarchy), and each scene_prompt "
-        "under 600 characters. Avoid paragraphs in rationale. "
+        "under 600 characters. All three descriptive fields must be nonempty. "
+        "Avoid paragraphs in rationale. "
         "Make them genuinely different spatial directions: A — expressive, "
         "product-first sales poster with a dominant hero; B — precise "
         "engineering/data-led editorial layout with a large technical panel; "

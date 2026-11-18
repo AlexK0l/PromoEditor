@@ -355,6 +355,7 @@ def test_verbose_ai_descriptions_are_safely_compacted_without_extra_paid_calls(m
     concepts[0]["rationale"]="Сильная рекламная композиция. " * 25
     concepts[1]["name"]="Инженерная композиция и подробные преимущества " * 4
     concepts[2]["scene_prompt"]="Background only, empty industrial terminal, no text. " * 35
+    concepts[2]["rationale"]="   \n  "
     captured=[]
     class Responses:
         def create(self, **kwargs):
@@ -373,6 +374,7 @@ def test_verbose_ai_descriptions_are_safely_compacted_without_extra_paid_calls(m
     assert results[0]["rationale"].endswith("…")
     assert results[1]["name"].endswith("…")
     assert results[2]["scene_prompt"].endswith("…")
+    assert results[2]["rationale"]=="План макета с фотографией товара, характеристиками и контактами."
     assert results[0]["layouts"]==concepts[0]["layouts"]
     assert results[0]["palette"]==concepts[0]["palette"]
     # The original JSON-like data is not rewritten or used as factual copy.
@@ -383,7 +385,6 @@ def test_verbose_ai_descriptions_are_safely_compacted_without_extra_paid_calls(m
 
 @pytest.mark.parametrize("field,value", [
     ("name", None),
-    ("rationale", "\n \t "),
     ("rationale", ["not", "a", "string"]),
     ("scene_prompt", 42),
 ])
@@ -400,3 +401,14 @@ def test_ai_concept_explanation_260_characters_is_not_ellipsized():
     normalized=ai_layout.validate_concept(concept)
     assert normalized["rationale"]=="Я" * 260
 
+
+
+
+@pytest.mark.parametrize("field", ["name", "rationale", "scene_prompt"])
+def test_blank_ai_metadata_uses_safe_nonfactual_fallback(field):
+    concept=_concepts()[0]
+    concept[field]="  \n\t "
+    result=ai_layout.validate_concept(concept)
+    assert isinstance(result[field],str) and result[field].strip()
+    assert len(result[field])<={"name":75,"rationale":260,"scene_prompt":600}[field]
+    assert "  \n\t "==concept[field]  # Do not mutate the model response.
