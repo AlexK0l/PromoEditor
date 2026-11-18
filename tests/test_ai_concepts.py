@@ -666,3 +666,25 @@ def test_engineering_specs_use_contrasting_dark_table_with_readable_copy(fmt):
             assert _contrast_ratio(node.get("fill"),cells[idx])>=4.5,(
                 fmt,idx,prefix,node.get("fill"),cells[idx])
 
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_all_original_vehicle_pixels_fit_above_the_user_claim_ribbon(fmt):
+    """Previously the large burgundy bar obscured the wheels of the trailer."""
+    from app.ai_concept_renderer import render_ai_concept_svg
+    brief=default_brief()
+    source=Image.new("RGBA",(900,500),(0,0,0,0))
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[0]
+    root=ET.fromstring(render_ai_concept_svg(
+        brief,fmt,item,hero=source))
+    photo=[node for node in root.findall(".//s:image",SVG)
+           if node.get("id","").startswith("original-product-photo-")]
+    ribbon=[node for node in root.findall(".//s:rect",SVG)
+            if node.get("id","").startswith("ai-hero-claims-panel-")]
+    assert len(photo)==len(ribbon)==1
+    assert (float(photo[0].get("y"))+float(photo[0].get("height"))
+            < float(ribbon[0].get("y"))-3)
+    names=[node for node in root.findall(".//s:text",SVG)
+           if node.get("id","").startswith("ai-hero-claim-")
+           and "heading" not in node.get("id","")]
+    assert len(names)==4
+
