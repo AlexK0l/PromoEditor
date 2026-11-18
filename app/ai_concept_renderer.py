@@ -204,47 +204,73 @@ def _hero_claims(scene, brief, rect, colors, system='sales'):
                    claim_ink,True,f"ai-hero-claim-{i}",3)
 
 
-def _specs(scene, brief, rect, colors):
+
+def _section_banner(scene, section, text, rect, colors, system, font):
+    """Three different section treatments, never white text on pale colors."""
+    x,y,w,band=rect
+    a,ink=colors["accent"],colors["foreground"]
+    fill="#1D3449" if system=="engineering" else (
+        "#FDFCFA" if system=="editorial" else a)
+    foreground=("#FFFFFF" if system=="engineering" else ink if
+                system=="editorial" else _contrast_text(a))
+    scene.rect(section,x,y,w,band,fill,ident=f"ai-{section}-ribbon")
+    if system=="engineering":
+        scene.rect(section,x,y,w,3,a,ident=f"ai-blueprint-{section}-rail")
+    if system=="editorial":
+        scene.rect(section,x,y+band-3,w,3,a,
+                   ident=f"ai-editorial-{section}-underline")
+    _heading(scene,section,text,x+12,y+3,w-24,band-4,foreground,font)
+
+
+def _specs(scene, brief, rect, colors, system="sales"):
     rows=_lines(brief,"specs",8)
     if not rows:return
     x,y,w,h=rect
+    a,ink=colors["accent"],colors["foreground"]
     _panel(scene,"specs",x,y,w,h,"specs")
-    accent, ink=colors["accent"],colors["foreground"]
-    title_h=min(40,h*.17)
-    scene.rect("specs",x,y,w,title_h,accent,ident="ai-specs-ribbon")
-    _heading(scene,"specs","ХАРАКТЕРИСТИКИ",x+12,y+4,w-24,title_h-5,
-             "#FFFFFF",max(17,min(25,w*.045)))
+    band=min(40,h*.17)
+    _section_banner(scene,"specs","ХАРАКТЕРИСТИКИ",
+                    (x,y,w,band),colors,system,max(17,min(25,w*.045)))
     gap=3
-    row_h=(h-title_h-12-gap*(len(rows)-1))/len(rows)
-    if row_h < 28:raise ValueError("AI выделил слишком мало места для характеристик.")
+    row_h=(h-band-12-gap*(len(rows)-1))/len(rows)
+    if row_h<28:raise ValueError("AI выделил слишком мало места для характеристик.")
     for i,(name,value) in enumerate(rows):
-        sy=y+title_h+7+i*(row_h+gap)
-        scene.rect("specs",x+5,sy,w-10,row_h,
-                   "#F3F5F7" if i%2==0 else "#FFFFFF",
-                   rad=3,ident=f"ai-spec-row-{i}")
-        scene.rect("specs",x+5,sy,5,row_h,accent,ident=f"ai-spec-edge-{i}")
+        sy=y+band+7+i*(row_h+gap)
+        shade=("#FFFFFF" if system=="editorial" else
+               "#EEF2F5" if system=="engineering" and i%2==0 else
+               "#F3F5F7" if i%2==0 else "#FFFFFF")
+        scene.rect("specs",x+5,sy,w-10,row_h,shade,rad=3,
+                   ident=f"ai-spec-row-{i}")
+        if system=="editorial":
+            scene.rect("specs",x+12,sy+row_h-2,max(2,w-24),1,
+                       "#D8DAD7",ident=f"ai-editorial-spec-rule-{i}")
+        else:
+            scene.rect("specs",x+5,sy,5,row_h,a,ident=f"ai-spec-edge-{i}")
         label_w=w*.58
         scene.text("specs",name,x+15,sy+2,label_w-21,row_h-4,
                    max(14,min(21,row_h*.44)),11,ink,True,
                    f"ai-spec-name-{i}",2)
+        value_ink=(a if system!="editorial"
+                   and _contrast_ratio(a,shade)>=4.5 else ink)
         scene.text("specs",value,x+label_w,sy+2,w-label_w-13,row_h-4,
-                   max(16,min(26,row_h*.52)),11,accent,True,
+                   max(16,min(26,row_h*.52)),11,value_ink,True,
                    f"ai-spec-value-{i}",2)
+    panel_detail(scene,"specs",rect,system,a)
 
 
-def _dimensions(scene, brief, drawing, rect, colors):
+def _dimensions(scene, brief, drawing, rect, colors, system="sales"):
     sizes=_lines(brief,"dimensions",4)
     if not sizes and drawing is None:return
     x,y,w,h=rect
+    a,ink=colors["accent"],colors["foreground"]
     _panel(scene,"dimensions",x,y,w,h,"dimensions")
-    accent, ink=colors["accent"],colors["foreground"]
-    title_h=min(39,h*.24)
-    scene.rect("dimensions",x,y,w,title_h,accent,ident="ai-dims-title-bar")
-    _heading(scene,"dimensions","ГАБАРИТЫ И ЧЕРТЁЖ",x+12,y+3,w-24,
-             title_h-4,"#FFFFFF",max(17,min(26,title_h*.66)))
-    inside_y=y+title_h+5
-    inside_h=h-title_h-12
-    if inside_h < 28:raise ValueError("AI выделил мало места для инженерной схемы.")
+    band=min(39,h*.24)
+    _section_banner(scene,"dimensions","ГАБАРИТЫ И ЧЕРТЁЖ",
+                    (x,y,w,band),colors,system,
+                    max(17,min(26,band*.66)))
+    inside_y=y+band+5
+    inside_h=h-band-12
+    if inside_h<28:raise ValueError("AI выделил мало места для инженерной схемы.")
     fact_w=min(w*.36,max(160,w*.30)) if sizes else 0
     drawing_w=w-fact_w-12
     if drawing is not None:
@@ -257,92 +283,114 @@ def _dimensions(scene, brief, drawing, rect, colors):
     if sizes:
         cell_h=inside_h/len(sizes)
         for i,(name,value) in enumerate(sizes):
-            sx=x+w-fact_w+3; sy=inside_y+i*cell_h
+            sx=x+w-fact_w+3;sy=inside_y+i*cell_h
             scene.rect("dimensions",sx,sy,fact_w-8,max(4,cell_h-3),
                        "#F3F5F8",ident=f"ai-dim-cell-{i}")
             scene.text("dimensions",name.upper(),sx+8,sy+1,fact_w*.48-10,
                        cell_h-4,max(12,min(17,cell_h*.37)),10,ink,True,
                        f"ai-dim-name-{i}",2)
+            value_ink=a if system!="editorial" and (
+                _contrast_ratio(a,"#F3F5F8")>=4.5) else ink
             scene.text("dimensions",value,sx+fact_w*.49,sy+1,
                        fact_w*.48-5,cell_h-4,max(15,min(24,cell_h*.47)),
-                       11,accent,True,f"ai-dim-value-{i}",2)
+                       11,value_ink,True,f"ai-dim-value-{i}",2)
+    panel_detail(scene,"dimensions",rect,system,a)
 
 
-def _benefits(scene, brief, rect, colors):
+def _benefits(scene, brief, rect, colors, system="sales"):
     claims=[str(t).strip() for t in
             ((brief.get("benefits") or []) or (brief.get("hero_claims") or []))
             if str(t).strip()][:4]
-    proof=[str(t).strip() for t in (brief.get("proof_points") or [])
-           if str(t).strip()][:3]
-    if not claims and not proof:return
+    proofs=[str(t).strip() for t in (brief.get("proof_points") or [])
+            if str(t).strip()][:3]
+    if not claims and not proofs:return
     x,y,w,h=rect
-    accent,ink=colors["accent"],colors["foreground"]
+    a,ink=colors["accent"],colors["foreground"]
     _panel(scene,"benefits",x,y,w,h,"benefits")
-    title_h=min(37,h*.21)
-    scene.rect("benefits",x,y,w,title_h,accent,ident="ai-benefits-title-bar")
-    _heading(scene,"benefits","ПРЕИМУЩЕСТВА",x+11,y+2,w-20,title_h-4,
-             "#FFFFFF",max(17,min(26,title_h*.65)))
-    area_y=y+title_h+5
-    proof_h=min(h*.30,48) if proof else 0
-    area_h=h-title_h-10-proof_h
+    band=min(37,h*.21)
+    _section_banner(scene,"benefits","ПРЕИМУЩЕСТВА",
+                    (x,y,w,band),colors,system,
+                    max(17,min(26,band*.65)))
+    area_y=y+band+5
+    proof_h=min(h*.30,48) if proofs else 0
+    area_h=h-band-10-proof_h
     if claims:
         columns=4 if w>=900 else 2
         rows=(len(claims)+columns-1)//columns
-        cell_w=(w-16)/columns
-        cell_h=area_h/max(1,rows)
+        cw=(w-16)/columns
+        ch=area_h/max(1,rows)
         for i,claim in enumerate(claims):
-            cx=x+8+(i%columns)*cell_w
-            cy=area_y+(i//columns)*cell_h
-            scene.el("benefits","circle",f"ai-benefit-icon-{i}",{
-                "cx":cx+16,"cy":cy+min(22,cell_h*.40),"r":10,
-                "fill":"none","stroke":accent,"stroke-width":3})
-            scene.text("benefits",claim,cx+34,cy+2,cell_w-39,max(15,cell_h-5),
-                       max(16,min(22,cell_h*.32)),11,ink,True,
+            cx=x+8+(i%columns)*cw
+            cy=area_y+(i//columns)*ch
+            if system=="engineering":
+                scene.el("benefits","rect",f"ai-benefit-icon-{i}",{
+                    "x":cx+7,"y":cy+min(14,ch*.36),
+                    "width":17,"height":17,"fill":"none",
+                    "stroke":a,"stroke-width":2.5})
+            else:
+                scene.el("benefits","circle",f"ai-benefit-icon-{i}",{
+                    "cx":cx+16,"cy":cy+min(22,ch*.40),
+                    "r":4 if system=="editorial" else 10,
+                    "fill":a if system=="editorial" else "none",
+                    "stroke":a,
+                    "stroke-width":2 if system=="editorial" else 3})
+            scene.text("benefits",claim,cx+34,cy+2,cw-39,max(15,ch-5),
+                       max(16,min(22,ch*.32)),11,ink,True,
                        f"ai-benefit-text-{i}",3)
-    if proof:
-        msg="  •  ".join(proof)
-        scene.text("benefits",msg,x+14,y+h-proof_h-3,w-28,max(17,proof_h),
-                   17,10,accent,True,"ai-verified-proof",2)
+    if proofs:
+        message="  •  ".join(proofs)
+        value_ink=a if _contrast_ratio(a,"#FFFFFF")>=4.5 else ink
+        scene.text("benefits",message,x+14,y+h-proof_h-3,w-28,max(17,proof_h),
+                   17,10,value_ink,True,"ai-verified-proof",2)
+    panel_detail(scene,"benefits",rect,system,a)
 
 
-def _economy(scene, brief, rect, colors):
+def _economy(scene, brief, rect, colors, system="sales"):
     if not brief.get("show_roi"):return
     data=compute_roi(brief)
     if not data:return
     x,y,w,h=rect
-    _panel(scene,"roi",x,y,w,h,"roi","#FFF3F4")
-    accent,ink=colors["accent"],colors["foreground"]
-    title_h=min(32,h*.23)
-    _heading(scene,"roi","ЭКОНОМИКА",x+12,y+4,w-24,title_h,accent,22)
+    a,ink=colors["accent"],colors["foreground"]
+    background=("#1A3248" if system=="engineering" else
+                "#F8F7F3" if system=="editorial" else "#FFF3F4")
+    text_ink="#FFFFFF" if system=="engineering" else ink
+    value_ink=("#FFFFFF" if system=="engineering" else
+               a if system!="editorial" and
+               _contrast_ratio(a,background)>=4.5 else ink)
+    _panel(scene,"roi",x,y,w,h,"roi",background)
+    if system=="engineering":
+        scene.rect("roi",x,y,5,h,a,ident="ai-engineering-roi-spine")
+    band=min(32,h*.23)
+    _heading(scene,"roi","ЭКОНОМИКА",x+12,y+4,w-24,band,
+             text_ink if system=="engineering" else value_ink,22)
     unit=str(brief.get("currency") or "Br")[:9]
     pairs=[("ЗА РЕЙС, "+unit,data["per_trip"]),
            ("РЕЙСОВ В ГОД",data["trips"]),
            ("ЗА ГОД, "+unit,data["annual"]),
            ("БАЛАНС, "+unit,data["net"])]
-    # Geometry is authored by AI, but the factual layout adapts to the
-    # available width. Four tiny columns previously truncated portrait labels.
     columns=2 if w<520 else 4
     rows=4//columns
     cw=(w-12)/columns
-    cell_h=(h-title_h-10)/rows
+    ch=(h-band-10)/rows
     for i,(name,value) in enumerate(pairs):
-        column=i%columns
-        row=i//columns
-        bx=x+6+column*cw
-        by=y+title_h+5+row*cell_h
-        if column:
-            scene.rect("roi",bx,by+3,1.5,cell_h-6,
-                       "#E8B1B8",ident=f"ai-roi-divider-{i}")
-        if row and column==0:
-            scene.rect("roi",x+11,by-1,w-22,1.5,
-                       "#E8B1B8",ident="ai-roi-horizontal-rule")
-        scene.text("roi",name,bx+7,by+2,cw-14,cell_h*.34,
-                   max(12,min(18,cw*.093)),10,ink,True,
+        col,row=i%columns,i//columns
+        bx=x+6+col*cw
+        by=y+band+5+row*ch
+        separator="#597084" if system=="engineering" else "#DAD8D4"
+        if col:
+            scene.rect("roi",bx,by+3,1.5,ch-6,separator,
+                       ident=f"ai-roi-divider-{i}")
+        if row and col==0:
+            scene.rect("roi",x+11,by-1,w-22,1.5,separator,
+                       ident="ai-roi-horizontal-rule")
+        scene.text("roi",name,bx+7,by+2,cw-14,ch*.34,
+                   max(12,min(18,cw*.093)),10,text_ink,True,
                    f"ai-roi-name-{i}",2)
         scene.text("roi",f"{value:,.0f}".replace(","," "),
-                   bx+7,by+cell_h*.38,cw-14,cell_h*.55,
-                   max(20,min(42,cw*.185)),14,accent,True,
+                   bx+7,by+ch*.38,cw-14,ch*.55,
+                   max(20,min(42,cw*.185)),14,value_ink,True,
                    f"ai-roi-value-{i}",1)
+    panel_detail(scene,"roi",rect,system,a)
 
 
 def _footer(scene, brief, rect, colors):
