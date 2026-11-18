@@ -87,7 +87,7 @@
         <div class="brief-column">
           <label class="field" for="model"><span>Название продукта <span class="required">*</span></span><input id="model" maxlength="80" autocomplete="off" placeholder="Например, ZubrTrail 500"></label>
           <label class="field" for="slogan"><span>Главное преимущество <span class="field-hint">для рекламного заголовка</span></span><textarea id="slogan" rows="2" maxlength="250" placeholder="Например: Перевозит на 2,5 т больше за каждый рейс"></textarea></label>
-          <div class="brief-hint">Технические характеристики, цену и телефоны можно заполнить ниже в разделе «Данные для рекламы». Если используете эталон ZubrTrail 500, они уже заполнены.</div>
+          <div class="brief-hint" id="brief-data-hint">Характеристики, цена и телефоны — в разделе «Данные для рекламы». По эталону ZubrTrail 500 они заполняются автоматически.</div>
           <details class="quiet-details" id="creative-notes">
             <summary>Бренд и дополнительные пожелания <span aria-hidden="true">⌄</span></summary>
             <div class="quiet-details-body">
@@ -105,7 +105,7 @@
       <div class="composer-bottom">
         <fieldset class="mode-choice" id="generation-mode">
           <legend>ШАГ 2 ИЗ 3 · Как оформить макет</legend>
-          <label class="mode-main"><input type="radio" name="generation_mode" id="mode-hybrid" value="hybrid" checked><span><strong>С AI-фоном</strong><small>Красивое окружение, точные оригиналы и редактируемый SVG. Два платных запроса.</small></span></label>
+          <label class="mode-main"><input type="radio" name="generation_mode" id="mode-hybrid" value="hybrid" checked><span><strong>С AI-фоном</strong><small id="hybrid-mode-hint">Красивое окружение, точные оригиналы и редактируемый SVG. Два платных запроса.</small></span></label>
           <label class="mode-main"><input type="radio" name="generation_mode" id="mode-template" value="template"><span><strong>Без AI · бесплатно</strong><small>Рекламный макет из ваших файлов без расходов на OpenAI.</small></span></label>
           <details class="quiet-details expert-mode" id="expert-modes">
             <summary>Экспериментальные режимы для специалистов <span aria-hidden="true">⌄</span></summary>
