@@ -22,8 +22,10 @@ from starlette.datastructures import UploadFile
 from PIL import Image, ImageDraw
 
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
-from .openai_service import analyze_documents, generate_visuals
-from .ai_poster_service import generate_full_posters, WARNING as AI_POSTER_WARNING
+from .openai_service import (analyze_documents, generate_visuals,
+                             _default_visual_cache, _finish_visual_cache)
+from .ai_poster_service import (generate_full_posters, WARNING as AI_POSTER_WARNING,
+                                VERSION as AI_POSTER_VERSION)
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -299,11 +301,17 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             hero=_demo_hero()
         visuals={}
         ai_product=False
+        paid_cache=None
+        scene_direction=concept['scene_prompt'] if concept else ''
         if use_openai:
-            visuals=generate_visuals(brief,hero_present=(hero is not None),
-                                     references=references,model=model,
-                                     quality=quality,design_prompt=design_prompt,
-                                     scene_direction=concept['scene_prompt'] if concept else '')
+            paid_cache=_default_visual_cache(
+                brief,hero is not None,references,model,quality,
+                design_prompt,scene_direction)
+            visuals=generate_visuals(
+                brief,hero_present=(hero is not None),references=references,
+                model=model,quality=quality,design_prompt=design_prompt,
+                scene_direction=scene_direction,cache_dir=paid_cache,
+                consume_cache=False)
             ai_product=hero is None
         paths={};jpeg_paths={};corel_paths={}
         for key in ('4x3','9x16'):
@@ -406,6 +414,12 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                     archive.writestr(
                         f'originals/{role}{extension}',payload,
                         compress_type=zipfile.ZIP_STORED)
+        # Consume paid copies only after both SVGs and the ZIP exist.
+        if paid_cache is not None:
+            try:
+                _finish_visual_cache(paid_cache)
+            except OSError:
+                pass
         warnings=['Проверьте технические данные, цены и права на изображения перед публикацией.']
         if not brief.get('specs'):
             warnings.append('Подтверждённые ТТХ не заполнены: таблица характеристик не показана. Проверьте предложения из документов и перенесите нужные в форму.')
@@ -500,9 +514,15 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        reference_raw, model, quality):
     """Store model-authored artwork separate from the validated SVG output."""
     # These calls spend from the persistent daily Images API budget.
+    poster_sources=[product_raw]+[raw for raw in
+                                  (logo_raw,drawing_raw,reference_raw) if raw]
+    paid_cache=_default_visual_cache(
+        brief,True,poster_sources,model,quality,
+        AI_POSTER_VERSION,"complete-poster")
     posters = generate_full_posters(
         brief, product_raw, logo=logo_raw, drawing=drawing_raw,
-        reference=reference_raw, model=model, quality=quality)
+        reference=reference_raw, model=model, quality=quality,
+        cache_dir=paid_cache, consume_cache=False)
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
@@ -541,8 +561,12 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                         original.format,'.bin')
                 z.writestr(f'originals/{name}{suffix}',
                            raw,compress_type=zipfile.ZIP_STORED)
+        try:
+            _finish_visual_cache(paid_cache)
+        except OSError:
+            pass
         return {'job_id':job_id,'images':images,'jpeg':jpegs,
-                'zip':f'/files/{job_id}/ai_posters.zip',
+                 'zip':f'/files/{job_id}/ai_posters.zip',
                 'generation_mode':'openai_full_poster',
                 'ai_used':True,'raster_only':True,
                 'reference_used':reference_raw is not None,
@@ -725,8 +749,15 @@ async def generate(request:Request):
     references=chosen_bytes(report,records,'references')
     reference_example_raw=chosen_bytes(report,records,'reference_example')
     mode=str(form.get('generation_mode','template'))
-    if mode not in ('ai_pro','template'):
+    if mode not in ('ai_pro','template','hybrid'):
         raise HTTPException(400,detail='Неподдерживаемый режим создания.')
+    if mode=='hybrid':
+        if not hero_raw:
+            raise HTTPException(400,detail='Для гибридного режима выберите оригинальное фото товара.')
+        if not use_openai:
+            raise HTTPException(400,detail='Гибридный режим требует AI-фон. Для бесплатной сборки выберите шаблон.')
+        if not os.getenv('OPENAI_API_KEY'):
+            raise HTTPException(400,detail='Для гибридного режима необходим OPENAI_API_KEY.')
     concept=None
     concept_set_id=None
     if mode=='ai_pro':
