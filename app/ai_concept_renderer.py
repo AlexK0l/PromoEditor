@@ -30,6 +30,22 @@ def _heading(scene, layer, text, x, y, w, h, color, large=24):
                    12, color, True, f"ai-{layer}-heading", 2)
 
 
+def _dark_accent(hex_color):
+    """Use a darker version of the concept's own accent, never fixed red."""
+    return "#" + "".join(
+        f"{round(int(hex_color[i:i+2],16)*.35):02X}" for i in (1,3,5))
+
+
+def _contrast_text(hex_color):
+    """Keep AI-authored pale accents readable behind price text."""
+    rgb=[int(hex_color[i:i+2],16)/255 for i in (1,3,5)]
+    linear=[c/12.92 if c<=.04045 else ((c+.055)/1.055)**2.4
+            for c in rgb]
+    light=sum(c*weight for c,weight in zip(
+        linear,(.2126,.7152,.0722)))
+    return "#172235" if light>.183 else "#FFFFFF"
+
+
 def _header(scene, brief, logo, rect, colors):
     x,y,w,h=rect
     accent, ink=colors["accent"], colors["foreground"]
@@ -84,6 +100,58 @@ def _hero(scene, hero, detail, backdrop, rect, colors, ai_product):
                    rad=6,ident="ai-detail-frame")
         _photo(scene,detail,dx,dy,iw,ih,"detail-photo",layer="photos",trim=True)
     scene.rect("photos",x,y+h-5,w,5,colors["accent"],ident="ai-hero-underline")
+
+
+def _hero_claims(scene, brief, rect, colors):
+    """Preserve user-written sales claims in addition to benefit cards.
+
+    Avoid repeating claims when only hero_claims are supplied: the benefits
+    block already uses them as its fallback. Never invent marketing copy.
+    """
+    benefits={str(item).strip().casefold()
+              for item in (brief.get("benefits") or []) if str(item).strip()}
+    if not benefits:
+        return
+    messages=[]
+    seen=set()
+    for item in (brief.get("hero_claims") or [])[:4]:
+        claim=str(item).strip()
+        canonical=claim.casefold()
+        if claim and canonical not in benefits and canonical not in seen:
+            messages.append(claim)
+            seen.add(canonical)
+    if not messages:
+        return
+
+    x,y,w,h=rect
+    columns=2 if len(messages)>1 else 1
+    rows=(len(messages)+columns-1)//columns
+    band_h=min(h*.37,max(80,36+43*rows))
+    top=y+h-band_h-9
+    scene.rect("claims",x+7,top,w-14,band_h,
+               _dark_accent(colors["accent"]),rad=8,opacity=".93",
+               ident="ai-hero-claims-panel")
+    scene.rect("claims",x+7,top,6,band_h,colors["accent"],
+               ident="ai-hero-claims-rail")
+    scene.text("claims","КЛЮЧЕВЫЕ ТЕЗИСЫ",
+               x+21,top+4,w-42,24,17,11,"#FFFFFF",
+               True,"ai-hero-claims-heading",1)
+    left=x+19
+    upper=top+32
+    cw=(w-38)/columns
+    ch=(band_h-36)/rows
+    for i,claim in enumerate(messages):
+        col,row=i%columns,i//columns
+        cx=left+col*cw
+        cy=upper+row*ch
+        scene.el("claims","circle",f"ai-hero-claim-dot-{i}",{
+            "cx":cx+6,"cy":cy+max(9,ch*.33),
+            "r":3.6,"fill":colors["accent"],
+        })
+        scene.text("claims",claim,cx+17,cy+1,
+                   cw-25,max(16,ch-2),
+                   max(13,min(18,ch*.46)),10,
+                   "#FFFFFF",True,f"ai-hero-claim-{i}",3)
 
 
 def _specs(scene, brief, rect, colors):
@@ -236,14 +304,15 @@ def _footer(scene, brief, rect, colors):
                   accent,ident="ai-cta-price")
     scene.polygon("cta_bg",[(x+split+28,y),(x+w,y),
                              (x+w,y+h),(x+split-18,y+h)],
-                  "#A31324",ident="ai-cta-contacts")
+                  _dark_accent(accent),ident="ai-cta-contacts")
     from .campaign_layout import _format_price
     cost=_format_price(brief.get("price"))
     currency=str(brief.get("currency") or "Br")
     text=(cost+" "+currency+(" с НДС" if brief.get("vat",True) else "")
           if cost else "ЗАПРОСИТЕ ПРЕДЛОЖЕНИЕ")
     scene.text("price",text,x+18,y+h*.24,split-35,h*.55,
-               max(29,min(56,split*.09)),19,"#FFFFFF",True,"ai-price",2)
+               max(29,min(56,split*.09)),19,
+               _contrast_text(accent),True,"ai-price",2)
     phones=[str(p).strip() for p in (brief.get("phones") or []) if str(p).strip()][:2]
     if phones:
         sx=x+split+45
@@ -277,6 +346,7 @@ def render_ai_concept_svg(brief, key, concept, *,
     # Layout geometry is entirely AI-authored and passed through validation.
     _header(scene,brief,logo,_rect(layout,"header",scene),colors)
     _hero(scene,hero,detail,backdrop,_rect(layout,"hero",scene),colors,ai_product)
+    _hero_claims(scene,brief,_rect(layout,"hero",scene),colors)
     _specs(scene,brief,_rect(layout,"specs",scene),colors)
     _dimensions(scene,brief,drawing,_rect(layout,"dimensions",scene),colors)
     _benefits(scene,brief,_rect(layout,"benefits",scene),colors)

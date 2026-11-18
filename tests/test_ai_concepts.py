@@ -302,3 +302,39 @@ def test_ai_accent_palette_is_visible_in_svg_even_with_brief_accent():
                       if node.get("id","").startswith("ai-hero-underline-")),None)
     assert underline is not None
     assert underline.get("fill") == "#126BA8"
+
+
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_ai_pro_preserves_sales_claims_when_benefits_are_also_present(fmt):
+    """All supplied hero claims survive instead of being dropped for benefits."""
+    from app.ai_concept_renderer import render_ai_concept_svg
+    brief=default_brief()
+    assert brief["hero_claims"] and brief["benefits"]
+    selected=ai_layout.normalize_concepts({"concepts":_concepts()})[0]
+    root=ET.fromstring(render_ai_concept_svg(brief,fmt,selected))
+    labels=[node for node in root.findall(".//s:text",SVG)
+            if node.get("id","").startswith("ai-hero-claim-")
+            and not node.get("id","").startswith("ai-hero-claims-heading")]
+    assert len(labels)==4
+    full_text=" ".join(" ".join(n.itertext()) for n in labels)
+    for phrase in brief["hero_claims"]:
+        assert phrase in full_text,(fmt,phrase,full_text)
+    assert "…" not in full_text
+    assert "КЛЮЧЕВЫЕ ТЕЗИСЫ" in " ".join(
+        " ".join(n.itertext()) for n in root.findall(".//s:text",SVG))
+
+
+def test_ai_pro_footer_matches_palette_and_bright_accents_use_dark_price_text():
+    from app.ai_concept_renderer import render_ai_concept_svg
+    items=_concepts()
+    items[0]["palette"]["accent"]="#FFEA4C"
+    selected=ai_layout.normalize_concepts({"concepts":items})[0]
+    root=ET.fromstring(render_ai_concept_svg(default_brief(),"4x3",selected))
+    price=[node for node in root.findall(".//s:text",SVG)
+           if node.get("id","").startswith("ai-price-")]
+    assert len(price)==1 and price[0].get("fill")=="#172235"
+    contact=[node for node in root.iter()
+             if node.get("id","").startswith("ai-cta-contacts-")]
+    assert len(contact)==1
+    assert contact[0].get("fill") not in ("#A31324", "#FFEA4C")
