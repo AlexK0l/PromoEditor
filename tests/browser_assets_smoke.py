@@ -25,6 +25,7 @@ def main():
         # Without an API key the default hybrid option falls back to the free template.
         page.wait_for_function("document.getElementById('mode-template').checked")
         assert page.locator('#mode-template').is_checked()
+        assert page.locator('#mode-hybrid').is_disabled()
         assert page.locator('#reference_example').count()==1
         assert page.locator('#file-reference_example').is_hidden()
         page.locator('#optional-materials > summary').click()
