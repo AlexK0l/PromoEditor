@@ -108,6 +108,10 @@ def test_ai_poster_route_without_exemplar_downloads_raster_and_originals(
     images=Images()
     monkeypatch.setattr(ai_poster_service,"client",
                         lambda:type("API",(),{"images":images})())
+    # SDK fake is process-local; this unit test deliberately keeps the
+    # app handler in-process. A separate subprocess test covers real isolation.
+    monkeypatch.setattr(main,"run_render_task",
+                        lambda action,*args:main._full_posters_sync(*args))
     with TestClient(main.app) as client:
         response=client.post(
             "/api/ai-posters",
@@ -160,7 +164,7 @@ def test_quota_error_for_full_poster_is_429_without_network(monkeypatch,tmp_path
     monkeypatch.setattr(main,"_guard_rate",lambda req:None)
     def quota(*a,**kw):
         raise QuotaExceeded("CI: quota blocked")
-    monkeypatch.setattr(main,"generate_full_posters",quota)
+    monkeypatch.setattr(main,"run_render_task",quota)
     with TestClient(main.app) as client:
         response=client.post(
             "/api/ai-posters",data={

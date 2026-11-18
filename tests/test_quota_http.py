@@ -47,7 +47,7 @@ def test_paid_routes_preserve_quota_status(monkeypatch, route, error, status):
             monkeypatch.setattr(main, "generate_concepts", failure)
             response = client.post("/api/concepts", data={"payload": payload})
         elif route == "generate":
-            monkeypatch.setattr(main, "_generate_sync", failure)
+            monkeypatch.setattr(main, "run_render_task", failure)
             response = client.post("/api/generate", data={
                 "payload": payload,
                 "use_openai": "true",

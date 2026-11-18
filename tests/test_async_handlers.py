@@ -69,12 +69,13 @@ def test_six_concept_previews_do_not_block_other_requests(monkeypatch):
         lambda *args, **kwargs: [{"id": "concept_0"}],
     )
 
-    def slow_preview(*args):
+    def slow_preview(task, *args):
+        assert task == 'previews'
         started.set()
         assert release.wait(10), "rendering worker was never released"
         return {"concept_set_id": "a" * 32, "concepts": []}
 
-    monkeypatch.setattr(main, "_build_concept_previews_sync", slow_preview)
+    monkeypatch.setattr(main, "run_render_task", slow_preview)
 
     async def post(client):
         return await client.post(

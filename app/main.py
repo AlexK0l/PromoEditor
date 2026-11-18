@@ -27,6 +27,7 @@ from .openai_service import (analyze_documents, generate_visuals,
 from .ai_poster_service import (generate_full_posters, WARNING as AI_POSTER_WARNING,
                                 VERSION as AI_POSTER_VERSION)
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable
+from .render_worker import run_render_task, RenderWorkerError
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .image_analysis import validate_image_dimensions
@@ -624,12 +625,14 @@ async def create_full_ai_posters(request:Request):
         if drawing and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
             drawing=await asyncio.to_thread(pdf_first_page_png,drawing)
         return await asyncio.to_thread(
-            _full_posters_sync,brief,product,
+            run_render_task,'posters',brief,product,
             chosen_bytes(report,records,'logo'),drawing,
             chosen_bytes(report,records,'reference_example'),model,quality)
     except QuotaExceeded as exc:
         raise HTTPException(429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
+        raise HTTPException(503,detail=str(exc)) from exc
+    except RenderWorkerError as exc:
         raise HTTPException(503,detail=str(exc)) from exc
     except HTTPException:
         raise
@@ -678,11 +681,13 @@ async def create_ai_concepts(request:Request):
             generate_concepts,brief,hero=hero_raw,reference=reference_raw,
             style=style,goal=goal)
         return await asyncio.to_thread(
-            _build_concept_previews_sync, brief, report, records, concepts,
+            run_render_task,'previews', brief, report, records, concepts,
             style, goal, hero_raw, reference_raw)
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
+    except RenderWorkerError as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc)) from exc
@@ -797,13 +802,15 @@ async def generate(request:Request):
     try:
         image_references=([reference_example_raw] if reference_example_raw else [])+references
         result=await asyncio.to_thread(
-            _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
+            run_render_task,'generate',brief,hero_raw,detail_raw,logo_raw,drawing_raw,
             image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
             str(form.get('quality','medium')),design_prompt,report,background_raw,
             concept,concept_set_id,reference_example_raw,mode)
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
+    except RenderWorkerError as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))

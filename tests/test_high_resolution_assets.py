@@ -75,14 +75,15 @@ def test_upload_accepts_24mp_and_generation_receives_exact_original(
 
     captured = {}
 
-    def fake_generate(brief, hero_raw, *args):
+    def fake_generate(task, brief, hero_raw, *args):
+        assert task == 'generate'
         captured["sha256"] = hashlib.sha256(hero_raw).hexdigest()
         captured["length"] = len(hero_raw)
         with Image.open(io.BytesIO(hero_raw)) as image:
             captured["dimensions"] = image.size
         return {"test_confirmed": True}
 
-    monkeypatch.setattr(main_module, "_generate_sync", fake_generate)
+    monkeypatch.setattr(main_module, "run_render_task", fake_generate)
     requested = client.post(
         "/api/generate",
         data={**_payload(), "asset_report": json.dumps(report, ensure_ascii=False),
