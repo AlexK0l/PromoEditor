@@ -125,7 +125,7 @@ def test_openai_concept_request_uses_example_only_if_uploaded(monkeypatch):
     assert density["spec_label_value_chars"][0]==[len(v) for v in brief["specs"][0]]
     assert density["phone_chars"]==[len(v) for v in brief["phones"]]
     assert not any(phone in first[0]["text"] for phone in brief["phones"])
-    assert "product-first" in captured[0]["instructions"]
+    assert "Concept A: make the original product large" in captured[0]["instructions"]
     assert all("data:image/jpeg;base64," in item["image_url"]
                for item in second if item["type"]=="input_image")
 
