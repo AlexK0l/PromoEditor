@@ -502,14 +502,27 @@ def test_ai_pro_pale_foreground_is_replaced_for_readability(fmt,bad_ink):
     concepts[0]["palette"]["foreground"]=bad_ink
     item=ai_layout.normalize_concepts({"concepts":concepts})[0]
     root=ET.fromstring(render_ai_concept_svg(default_brief(),fmt,item))
+    # A's first two lead stats now sit in dark/accent tiles; WHITE labels
+    # are correct there. All other data lives on light cards.
+    tiles={}
+    for node in root.findall(".//s:rect",SVG):
+        ident=node.get("id","")
+        if ident.startswith("ai-sales-stat-tile-"):
+            number=int(ident.removeprefix("ai-sales-stat-tile-").split("-")[0])
+            tiles[number]=node.get("fill")
     ids=("ai-spec-name-","ai-benefit-text-","ai-slogan-",
          "ai-roi-name-","ai-dim-name-")
     for prefix in ids:
         nodes=[node for node in root.findall(".//s:text",SVG)
                if node.get("id","").startswith(prefix)]
         assert nodes,(fmt,prefix)
-        assert all(_contrast_ratio(node.get("fill"),"#FFFFFF")>=4.5
-                   for node in nodes),(fmt,prefix,bad_ink)
+        for node in nodes:
+            background="#FFFFFF"
+            if prefix=="ai-spec-name-":
+                number=int(node.get("id").removeprefix(prefix).split("-")[0])
+                background=tiles.get(number,background)
+            assert _contrast_ratio(node.get("fill"),background)>=4.5,(
+                fmt,prefix,bad_ink,node.get("id"),background)
 
 
 def test_ai_pro_preserves_accessible_dark_foreground():
@@ -519,7 +532,10 @@ def test_ai_pro_preserves_accessible_dark_foreground():
         ai_layout.normalize_concepts({"concepts":_concepts()})[0]))
     nodes=[n for n in root.findall(".//s:text",SVG)
            if n.get("id","").startswith("ai-spec-name-")]
-    assert nodes and all(node.get("fill")=="#182235" for node in nodes)
+    assert len(nodes)==8
+    for node in nodes:
+        number=int(node.get("id").removeprefix("ai-spec-name-").split("-")[0])
+        assert node.get("fill")==("#FFFFFF" if number<2 else "#182235")
 
 
 @pytest.mark.parametrize("fmt", ["4x3", "9x16"])
