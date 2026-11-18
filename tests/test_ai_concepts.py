@@ -347,3 +347,56 @@ def test_ai_pro_footer_matches_palette_and_bright_accents_use_dark_price_text():
              if node.get("id","").startswith("ai-cta-contacts-")]
     assert len(contact)==1
     assert contact[0].get("fill") not in ("#A31324", "#FFEA4C")
+
+
+def test_verbose_ai_descriptions_are_safely_compacted_without_extra_paid_calls(monkeypatch):
+    """An overlong model rationale must not waste the whole paid AI request."""
+    concepts=_concepts()
+    concepts[0]["rationale"]="Сильная рекламная композиция. " * 25
+    concepts[1]["name"]="Инженерная композиция и подробные преимущества " * 4
+    concepts[2]["scene_prompt"]="Background only, empty industrial terminal, no text. " * 35
+    captured=[]
+    class Responses:
+        def create(self, **kwargs):
+            captured.append(kwargs)
+            return type("Result",(),{
+                "output_text":json.dumps({"concepts":concepts},ensure_ascii=False)
+            })()
+    monkeypatch.setattr("app.openai_service.client",
+                        lambda:type("API",(),{"responses":Responses()})())
+    results=ai_layout.generate_concepts(default_brief())
+    assert len(captured)==1  # No second Responses API request.
+    assert len(results)==3
+    assert all(len(item["name"])<=75 and
+               len(item["rationale"])<=260 and
+               len(item["scene_prompt"])<=600 for item in results)
+    assert results[0]["rationale"].endswith("…")
+    assert results[1]["name"].endswith("…")
+    assert results[2]["scene_prompt"].endswith("…")
+    assert results[0]["layouts"]==concepts[0]["layouts"]
+    assert results[0]["palette"]==concepts[0]["palette"]
+    # The original JSON-like data is not rewritten or used as factual copy.
+    assert len(concepts[0]["rationale"])>260
+    instructions=captured[0]["instructions"]
+    assert "rationale under 260 characters" in instructions
+
+
+@pytest.mark.parametrize("field,value", [
+    ("name", None),
+    ("rationale", "\n \t "),
+    ("rationale", ["not", "a", "string"]),
+    ("scene_prompt", 42),
+])
+def test_ai_concept_keeps_invalid_metadata_types_rejected(field,value):
+    concept=_concepts()[0]
+    concept[field]=value
+    with pytest.raises(ValueError, match=f"Неверное поле концепта: {field}"):
+        ai_layout.validate_concept(concept)
+
+
+def test_ai_concept_explanation_260_characters_is_not_ellipsized():
+    concept=_concepts()[0]
+    concept["rationale"]="Я" * 260
+    normalized=ai_layout.validate_concept(concept)
+    assert normalized["rationale"]=="Я" * 260
+
