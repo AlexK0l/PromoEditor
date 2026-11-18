@@ -83,7 +83,8 @@
       <div class="composer-bottom">
         <fieldset class="mode-choice" id="generation-mode">
           <legend>Способ создания макета</legend>
-          <label><input type="radio" name="generation_mode" id="mode-ai-pro" value="ai_pro" checked><span><strong>AI PRO — художественная генерация OpenAI</strong><small>Полные AI-постеры без эталона · отдельно доступны три редактируемые SVG-композиции</small></span></label>
+          <label><input type="radio" name="generation_mode" id="mode-hybrid" value="hybrid" checked><span><strong>Гибридный PRO — рекомендуемый</strong><small>AI создаёт только фон; оригинальная техника, логотип, чертёж и точные цифры остаются отдельными слоями SVG. Для 4:3 и 9:16 нужны 2 платных вызова Images.</small></span></label>
+          <label><input type="radio" name="generation_mode" id="mode-ai-pro" value="ai_pro"><span><strong>AI-концепции / экспериментальные растровые постеры</strong><small>Три AI-планировки с редактируемым SVG; полностью нарисованные AI-постеры — растр, требуют проверки фактов</small></span></label>
           <label><input type="radio" name="generation_mode" id="mode-template" value="template"><span><strong>Быстрый шаблон</strong><small>Старый генератор без платного планирования дизайна</small></span></label>
         </fieldset>
         <div class="ai-creative-settings" id="ai-creative-settings">
@@ -108,7 +109,7 @@
               <button type="button" class="style-pill" data-style="minimal" aria-pressed="false"><span class="style-dot dot-light"></span>Минимальный</button>
             </div>
           </div>
-          <label class="ai-choice" for="use-openai"><span class="ai-text"><strong>Дополнительно создать AI-фон в финале</strong><small id="ai-description">Не обязательно: два платных запроса для двух форматов; исходная техника и текст остаются отдельными слоями</small></span><input id="use-openai" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span></label>
+          <label class="ai-choice" for="use-openai"><span class="ai-text"><strong>AI-фон (обязателен в гибридном режиме)</strong><small id="ai-description">Не обязательно: два платных запроса для двух форматов; исходная техника и текст остаются отдельными слоями</small></span><input id="use-openai" type="checkbox" role="switch"><span class="toggle-track" aria-hidden="true"></span></label>
         </div>
         <section id="asset-workflow" class="asset-workflow" aria-labelledby="asset-workflow-title">
           <div class="asset-workflow-head">
@@ -165,7 +166,7 @@
           <div class="prompt-head"><div>
             <span class="step-label">ШАГ 3 · НАСТОЯЩАЯ ГЕНЕРАЦИЯ OPENAI IMAGES</span>
             <h3 id="openai-posters-title">Рекламный AI-постер без эталона</h3>
-            <p>OpenAI создаст два полноценных рекламных изображения вашей техники — 4:3 и 9:16. Визуальная композиция, окружение и графические элементы создаются моделью изображений, а не сеткой SVG.</p>
+            <p>Эксперимент: модель нарисует готовые растровые постеры 4:3 и 9:16. Этот результат не заменяет точную гибридную SVG-версию и требует проверки перед публикацией.</p>
           </div><button type="button" id="generate-ai-posters-btn" class="primary-button">Создать 2 AI-постера · 2 платных вызова</button></div>
           <p class="field-tip">Фото товара обязательно, рекламный эталон — нет. Это художественные растровые постеры, а не технически проверенный вектор: OpenAI может ошибиться в кириллице, цифрах и деталях техники. Перед публикацией сверьте факты с оригиналами. Дневной лимит Images API и бюджет OpenAI должны позволять два вызова.</p>
           <p id="openai-posters-status" role="status" aria-live="polite">По умолчанию применяется профессиональная рекламная арт-дирекция для промышленной техники. Выберите качество OpenAI в дополнительных настройках.</p>
@@ -179,7 +180,7 @@
           <div class="prompt-head"><div>
             <span class="step-label">ШАГ 3 · AI-КОНЦЕПЦИИ</span>
             <h3 id="ai-concepts-title">Выберите рекламную композицию</h3>
-            <p>Альтернативный способ для редактируемых SVG: OpenAI планирует три компоновки, приложение рисует их векторно. Для художественной AI-генерации изображений воспользуйтесь кнопкой выше.</p>
+            <p>Экспериментальный режим: OpenAI планирует три компоновки; текст, техника, чертёж и бренд остаются отдельными объектами. При необходимости в финале можно добавить AI-фон.</p>
           </div><button type="button" id="generate-concepts-btn" class="primary-button">Создать 3 AI-концепции</button></div>
           <p id="ai-concepts-status" role="status" aria-live="polite">Сначала проанализируйте материалы, затем создайте концепции. Это отдельный платный запрос к OpenAI.</p>
           <div id="ai-concept-cards" class="ai-concept-grid" role="group" aria-label="Варианты рекламного дизайна" hidden></div>
@@ -350,7 +351,7 @@
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261118-full-openai-posters-1" defer></script>
+  <script src="/static/app.js?v=20261118-hybrid-pro-1" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>
