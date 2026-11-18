@@ -41,7 +41,7 @@ def main():
         page.locator('#design-options > summary').click()
         page.locator('[data-style="reference_pro"]').click()
         assert page.locator('#style').input_value()=='reference_pro'
-        page.locator('#advanced-settings summary').click()
+        page.locator('#advanced-settings > summary').click()
         assert page.locator('#advanced-settings').evaluate('(el)=>el.open')
         page.locator('#data-facts > summary').click()
         page.locator('#proof-points').fill('Старый факт из другого проекта')
