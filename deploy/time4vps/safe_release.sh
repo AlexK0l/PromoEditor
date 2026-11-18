@@ -144,10 +144,12 @@ fi
 
 # Once mutation starts, any failure restores Git HEAD, virtualenv and env.
 switched=1
+# Never serve requests using a mixture of old and newly installed packages.
+systemctl stop promoeditor
 as_app git -C "$ROOT" merge --ff-only "$TARGET"
 as_app "$ROOT/.venv/bin/python" -m pip install --disable-pip-version-check \
   --no-cache-dir -r "$ROOT/requirements.txt"
-systemctl restart promoeditor
+systemctl start promoeditor
 check_endpoints || die "New version failed HTTP smoke test."
 [[ "$(as_app git -C "$ROOT" rev-parse HEAD)" == "$TARGET" ]] ||
   die "Deployed checkout differs from pinned target."
