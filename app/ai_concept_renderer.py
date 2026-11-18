@@ -393,34 +393,66 @@ def _economy(scene, brief, rect, colors, system="sales"):
     panel_detail(scene,"roi",rect,system,a)
 
 
-def _footer(scene, brief, rect, colors):
+
+def _footer(scene, brief, rect, colors, system="sales"):
+    """A high-contrast bottom signature, not the same red footer three times."""
     x,y,w,h=rect
-    accent=colors["accent"]
+    a=colors["accent"]
+    ink=colors["foreground"]
     split=w*.58
-    scene.polygon("cta_bg",[(x,y),(x+split+20,y),
-                             (x+split-30,y+h),(x,y+h)],
-                  accent,ident="ai-cta-price")
-    scene.polygon("cta_bg",[(x+split+28,y),(x+w,y),
-                             (x+w,y+h),(x+split-18,y+h)],
-                  _dark_accent(accent),ident="ai-cta-contacts")
+    if system=="engineering":
+        scene.rect("cta_bg",x,y,w,h,"#1A3044",
+                   ident="ai-cta-contacts")
+        scene.rect("cta_bg",x,y,w,5,a,
+                   ident="ai-engineering-footer-rail")
+        scene.rect("cta_bg",x+split+17,y+15,2,h-30,
+                   "#698195",ident="ai-engineering-cta-divider")
+        scene.rect("cta_bg",x+15,y+15,6,h-30,a,
+                   ident="ai-cta-price")
+        price_ink="#FFFFFF"
+        contact_ink="#FFFFFF"
+    elif system=="editorial":
+        scene.rect("cta_bg",x,y,w,h,"#FBFAF6",
+                   ident="ai-cta-contacts")
+        scene.rect("cta_bg",x,y,w,2,"#D5D5CE",
+                   ident="ai-editorial-footer-border")
+        scene.rect("cta_bg",x+18,y+12,max(8,split*.28),3,a,
+                   ident="ai-cta-price")
+        scene.rect("cta_bg",x+split+17,y+17,1.5,h-34,
+                   "#C6C6BF",ident="ai-editorial-cta-divider")
+        price_ink=ink
+        contact_ink=ink
+    else:
+        scene.polygon("cta_bg",[
+            (x,y),(x+split+20,y),(x+split-30,y+h),(x,y+h)
+        ],a,ident="ai-cta-price")
+        scene.polygon("cta_bg",[
+            (x+split+28,y),(x+w,y),
+            (x+w,y+h),(x+split-18,y+h)
+        ],_dark_accent(a),ident="ai-cta-contacts")
+        price_ink=_contrast_text(a)
+        contact_ink="#FFFFFF"
+
     from .campaign_layout import _format_price
     cost=_format_price(brief.get("price"))
     currency=str(brief.get("currency") or "Br")
-    text=(cost+" "+currency+(" с НДС" if brief.get("vat",True) else "")
-          if cost else "ЗАПРОСИТЕ ПРЕДЛОЖЕНИЕ")
-    scene.text("price",text,x+18,y+h*.24,split-35,h*.55,
-               max(29,min(56,split*.09)),19,
-               _contrast_text(accent),True,"ai-price",2)
-    phones=[str(p).strip() for p in (brief.get("phones") or []) if str(p).strip()][:2]
+    price=(cost+" "+currency+(" с НДС" if brief.get("vat",True) else "")
+           if cost else "ЗАПРОСИТЕ ПРЕДЛОЖЕНИЕ")
+    scene.text("price",price,x+18,y+h*.24,split-35,h*.55,
+               max(29,min(56,split*.09)),19,price_ink,True,
+               "ai-price",2)
+    phones=[str(p).strip() for p in (brief.get("phones") or [])
+            if str(p).strip()][:2]
     if phones:
         sx=x+split+45
-        scene.text("contacts","СВЯЖИТЕСЬ С НАМИ",sx,y+9,w-(sx-x)-16,h*.26,
-                   max(15,min(26,h*.24)),12,"#FFFFFF",True,
+        scene.text("contacts","СВЯЖИТЕСЬ С НАМИ",
+                   sx,y+9,w-(sx-x)-16,h*.26,
+                   max(15,min(26,h*.24)),12,contact_ink,True,
                    "ai-contact-heading",2)
         for i,phone in enumerate(phones):
             scene.text("contacts",phone,sx,y+h*(.35+i*.28),
                        w-(sx-x)-16,h*.28,max(16,min(26,h*.22)),
-                       12,"#FFFFFF",True,f"ai-contact-{i}",1)
+                       12,contact_ink,True,f"ai-contact-{i}",1)
 
 
 def render_ai_concept_svg(brief, key, concept, *,
@@ -442,13 +474,17 @@ def render_ai_concept_svg(brief, key, concept, *,
     scene.rect("background",0,0,scene.w,scene.h,colors["background"],
                ident="ai-art-directed-paper")
     layout=concept["layouts"][key]
-    # Layout geometry is entirely AI-authored and passed through validation.
-    _header(scene,brief,logo,_rect(layout,"header",scene),colors)
-    _hero(scene,hero,detail,backdrop,_rect(layout,"hero",scene),colors,ai_product)
-    _hero_claims(scene,brief,_rect(layout,"hero",scene),colors)
-    _specs(scene,brief,_rect(layout,"specs",scene),colors)
-    _dimensions(scene,brief,drawing,_rect(layout,"dimensions",scene),colors)
-    _benefits(scene,brief,_rect(layout,"benefits",scene),colors)
-    _economy(scene,brief,_rect(layout,"roi",scene),colors)
-    _footer(scene,brief,_rect(layout,"footer",scene),colors)
+    system=direction_of(concept)
+    direction_mark(scene,system,colors["accent"])
+    # Geometry and factual content remain validated and separately editable.
+    _header(scene,brief,logo,_rect(layout,"header",scene),colors,system)
+    _hero(scene,hero,detail,backdrop,_rect(layout,"hero",scene),
+          colors,ai_product,system)
+    _hero_claims(scene,brief,_rect(layout,"hero",scene),colors,system)
+    _specs(scene,brief,_rect(layout,"specs",scene),colors,system)
+    _dimensions(scene,brief,drawing,_rect(layout,"dimensions",scene),
+                colors,system)
+    _benefits(scene,brief,_rect(layout,"benefits",scene),colors,system)
+    _economy(scene,brief,_rect(layout,"roi",scene),colors,system)
+    _footer(scene,brief,_rect(layout,"footer",scene),colors,system)
     return scene.export()
