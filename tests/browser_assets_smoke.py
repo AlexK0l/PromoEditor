@@ -42,6 +42,7 @@ def main():
         assert page.locator('#style').input_value()=='reference_pro'
         page.locator('#advanced-settings summary').click()
         assert page.locator('#advanced-settings').evaluate('(el)=>el.open')
+        page.locator('#data-facts > summary').click()
         page.locator('#proof-points').fill('Старый факт из другого проекта')
         page.locator('#topbar-menu > summary').click()
         page.locator('#reset-btn').click()
