@@ -223,6 +223,11 @@ def _section_banner(scene, section, text, rect, colors, system, font):
 
 
 def _specs(scene, brief, rect, colors, system="sales"):
+    """Hero-first sales uses lead-stat tiles; B/C use precise editorial rows.
+
+    Always typeset every submitted fact. Only use large cards if the physical
+    panel and first two factual strings are short enough for real typography.
+    """
     rows=_lines(brief,"specs",8)
     if not rows:return
     x,y,w,h=rect
@@ -231,11 +236,45 @@ def _specs(scene, brief, rect, colors, system="sales"):
     band=min(40,h*.17)
     _section_banner(scene,"specs","ХАРАКТЕРИСТИКИ",
                     (x,y,w,band),colors,system,max(17,min(25,w*.045)))
+    top=y+band+7
     gap=3
-    row_h=(h-band-12-gap*(len(rows)-1))/len(rows)
-    if row_h<28:raise ValueError("AI выделил слишком мало места для характеристик.")
-    for i,(name,value) in enumerate(rows):
-        sy=y+band+7+i*(row_h+gap)
+    feature_tiles=(system=="sales" and len(rows)>=4 and
+                   w>=420 and h>=395 and
+                   all(len(name)<=26 and len(value)<=20
+                       for name,value in rows[:2]))
+    visible=rows
+    first_index=0
+    remaining=h-band-12
+    if feature_tiles:
+        tile_h=min(124,remaining*.35)
+        tile_w=(w-27)/2
+        tile_y=top
+        for i,(name,value) in enumerate(rows[:2]):
+            tx=x+6+i*(tile_w+15)
+            fill=("#203447" if i==0 else a)
+            fg=("#FFFFFF" if i==0 else _contrast_text(a))
+            scene.rect("specs",tx,tile_y,tile_w,tile_h,fill,rad=6,
+                       ident=f"ai-sales-stat-tile-{i}")
+            scene.rect("specs",tx+11,tile_y+12,20,3,
+                       a if i==0 else fg,ident=f"ai-sales-stat-rule-{i}")
+            scene.text("specs",name,tx+12,tile_y+21,tile_w-24,
+                       tile_h*.34,18,12,fg,True,
+                       f"ai-spec-name-{i}",2)
+            scene.text("specs",value,tx+12,tile_y+tile_h*.51,
+                       tile_w-24,tile_h*.43,
+                       max(25,min(38,tile_w*.13)),15,fg,True,
+                       f"ai-spec-value-{i}",2)
+        top+=tile_h+9
+        remaining-=tile_h+9
+        visible=rows[2:]
+        first_index=2
+
+    row_h=(remaining-gap*(len(visible)-1))/len(visible)
+    if row_h<28:
+        raise ValueError("AI выделил слишком мало места для характеристик.")
+    for index,(name,value) in enumerate(visible):
+        i=index+first_index
+        sy=top+index*(row_h+gap)
         shade=("#FFFFFF" if system=="editorial" else
                "#EEF2F5" if system=="engineering" and i%2==0 else
                "#F3F5F7" if i%2==0 else "#FFFFFF")
