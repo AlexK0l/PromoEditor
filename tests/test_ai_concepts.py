@@ -520,3 +520,77 @@ def test_ai_pro_preserves_accessible_dark_foreground():
     nodes=[n for n in root.findall(".//s:text",SVG)
            if n.get("id","").startswith("ai-spec-name-")]
     assert nodes and all(node.get("fill")=="#182235" for node in nodes)
+
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_three_art_directed_ai_systems_are_visually_distinct_and_editable(fmt):
+    """Same geometry and SAME customer facts must produce three different ads.
+
+    This checks actual SVG plus raster pixels rather than merely a green
+    validation pass. No paid OpenAI request or fabricated product imagery.
+    """
+    from PIL import ImageChops, ImageDraw
+    from app.ai_concept_renderer import render_ai_concept_svg
+    from app.editable_export import rasterize_svg
+    from app.ai_art_direction import direction_of
+
+    brief=default_brief()
+    designs=ai_layout.normalize_concepts({"concepts":_concepts()})
+    hero=Image.new("RGBA",(900,480),(0,0,0,0))
+    brush=ImageDraw.Draw(hero)
+    brush.polygon([(55,100),(690,66),(830,125),(830,300),(85,310)],
+                  fill="#E9B423")
+    brush.rectangle((90,300,830,333),fill="#232E35")
+    for px in (560,680,790):
+        brush.ellipse((px-42,302,px+42,386),fill="#202831")
+    samples=[]
+    for index,design in enumerate(designs):
+        svg=render_ai_concept_svg(brief,fmt,design,hero=hero)
+        root=ET.fromstring(svg)
+        mark=["sales","engineering","editorial"][index]
+        assert direction_of(design)==mark
+        ids=[el.get("id","") for el in root.iter()]
+        assert any(el.startswith("ai-art-system-"+mark) for el in ids)
+        assert any(el.startswith("ai-"+mark+"-stage") for el in ids)
+        assert any(el.startswith("original-product-photo-") for el in ids)
+        texts=" ".join(" ".join(el.itertext())
+                       for el in root.findall(".//s:text",SVG))
+        for required in ("ZubrTrail 500","44 т","229 998",
+                         "+375 (225) 72-01-03"):
+            assert required in texts,(fmt,mark,required)
+        png,_=rasterize_svg(svg)
+        image=Image.open(io.BytesIO(png)).convert("RGB")
+        assert image.size==({"4x3":(1440,1080),
+                            "9x16":(1080,1920)}[fmt])
+        samples.append(image.resize((180,240)))
+
+    # A/B/C use identical source facts, dimensions and photos; changing only
+    # label strings would not produce significantly different raster pixels.
+    for first,second in ((0,1),(0,2),(1,2)):
+        delta=ImageChops.difference(samples[first],samples[second])
+        histogram=delta.convert("L").histogram()
+        changed=sum(histogram[18:])
+        assert changed > 180*240*.12,(fmt,first,second,changed)
+
+
+@pytest.mark.parametrize("system,expected_background,expected_ink", [
+    (0,"#F9FAFC",None),
+    (1,"#1A3044","#FFFFFF"),
+    (2,"#FCFBF8",None),
+])
+def test_ai_system_header_treatments_and_source_palette_are_distinct(
+        system,expected_background,expected_ink):
+    from app.ai_concept_renderer import render_ai_concept_svg
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[system]
+    root=ET.fromstring(render_ai_concept_svg(default_brief(),"4x3",item))
+    headers=[el for el in root.findall(".//s:rect",SVG)
+             if el.get("id","").startswith("ai-header-panel-")]
+    assert len(headers)==1
+    assert headers[0].get("fill")==expected_background
+    model=[el for el in root.findall(".//s:text",SVG)
+           if el.get("id","").startswith("ai-product-model-")]
+    assert len(model)==1
+    if expected_ink:
+        assert model[0].get("fill")==expected_ink
+    assert item["palette"]["accent"]=="#D51E2A"
+
