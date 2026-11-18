@@ -30,8 +30,16 @@ WARNING = (
 
 def _input_png(raw: bytes, label: str):
     img, _ = analysis_preview(raw, max_edge=1500)
+    # Preserve readable silhouettes in transparent product cutouts instead
+    # of PIL.convert("RGB") turning fully transparent pixels black.
+    if "A" in img.getbands():
+        light = Image.new("RGBA", img.size, (245, 247, 250, 255))
+        light.alpha_composite(img.convert("RGBA"))
+        rgb = light.convert("RGB")
+    else:
+        rgb = img.convert("RGB")
     file = io.BytesIO()
-    img.convert("RGB").save(file, "PNG")
+    rgb.save(file, "PNG")
     file.seek(0)
     file.name = label + ".png"
     return file
