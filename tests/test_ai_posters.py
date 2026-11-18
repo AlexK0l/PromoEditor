@@ -217,3 +217,18 @@ def test_partial_cached_poster_needs_only_one_remaining_daily_call(
     assert out["9x16"].size==(1080,1920)
     assert len(images.calls)==1
     assert images.calls[0]["size"]=="1024x1536"
+
+
+
+def test_transparent_vehicle_png_gets_a_clean_light_model_reference():
+    cutout=Image.new("RGBA",(120,80),(0,0,0,0))
+    for x in range(20,100):
+        for y in range(20,61):
+            cutout.putpixel((x,y),(225,30,30,255))
+    raw=io.BytesIO()
+    cutout.save(raw,"PNG")
+    result=ai_poster_service._input_png(raw.getvalue(),"vehicle")
+    with Image.open(result) as img:
+        assert img.getpixel((0,0))==(245,247,250)
+        red=img.getpixel((60,40))
+        assert red[0]>200 and red[1]<70
