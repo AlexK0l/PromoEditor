@@ -234,6 +234,7 @@ def test_time4vps_migration_proves_protection_before_removing_basic_auth():
     setup=(root/"deploy/time4vps/configure_caddy.sh").read_text()
     installer=(root/"deploy/time4vps/install.sh").read_text()
     updater=(root/"deploy/time4vps/update.sh").read_text()
+    safe_release=(root/"deploy/time4vps/safe_release.sh").read_text()
     assert "backup_site" in script and "backup_env" in script
     assert "provision_auth.py" in script
     assert 'local_status \'/api/config\'' in script
@@ -247,4 +248,9 @@ def test_time4vps_migration_proves_protection_before_removing_basic_auth():
     assert "rm -rf /opt/regionalresearch" not in script.lower()
     assert "basic_auth" not in setup
     assert "provision_auth.py" in installer
-    assert 'code=$(curl' in updater
+    # A reviewed SHA is now mandatory and the new release wrapper checks
+    # private auth before and after deployment, with automatic rollback.
+    assert 'safe_release.sh' in updater
+    assert '/api/config' in safe_release and 'api_code' in safe_release
+    assert '"401"' in safe_release and '"200"' in safe_release
+    assert 'on_exit' in safe_release and 'switched=1' in safe_release
