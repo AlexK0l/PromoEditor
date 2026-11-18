@@ -131,7 +131,7 @@ def test_ai_poster_route_without_exemplar_downloads_raster_and_originals(
             assert "ai_poster_4x3.png" in names
             assert "ai_poster_9x16.png" in names
             assert "REVIEW_BEFORE_PUBLICATION.txt" in names
-            assert z.read("originals/product_source")==_png()
+            assert z.read("originals/product_photo.png")==_png()
             assert "AI-макет" in z.read(
                 "REVIEW_BEFORE_PUBLICATION.txt").decode("utf8")
 
