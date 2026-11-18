@@ -404,7 +404,6 @@ button:disabled{cursor:not-allowed;opacity:.48}
 .data-group>summary strong{font-size:13px;font-weight:730}
 .data-group>summary small{font-size:11px;color:var(--muted)}
 .advanced[open] .data-group .chevron{transform:rotate(0);font-size:17px}
-.advanced[open] .data-group[open]>.data-group-summary .chevron{transform:rotate(180deg)}
 .advanced[open] .data-group[open]>summary .chevron{transform:rotate(180deg)}
 .data-group-body{display:flex;flex-direction:column;gap:14px;
   padding:9px 5px 21px}
@@ -417,3 +416,6 @@ button:disabled{cursor:not-allowed;opacity:.48}
   .data-group-body .extra-uploads{grid-template-columns:1fr}
   .data-group>summary{padding:14px 3px}
 }
+
+.mode-choice label.is-disabled{opacity:.57;cursor:not-allowed}
+.mode-choice label.is-disabled input{cursor:not-allowed}
