@@ -111,16 +111,23 @@
   }
 
   function isAiPro(){return checked('mode-ai-pro');}
+  let fullAiPosterSet=null;
+  function invalidateFullAiPosters(){
+    fullAiPosterSet=null;
+    $('openai-poster-results').hidden=true;
+  }
 
   function refreshGenerationMode(){
     const ai=isAiPro();
     $('ai-creative-settings').hidden=!ai;
     $('ai-concepts-workflow').hidden=!ai;
+    $('openai-posters-workflow').hidden=!ai;
     $('prompt-workflow').hidden=ai;
     $('generate-btn').textContent=ai
       ?'Собрать выбранную AI-концепцию →':'Создать PNG · JPEG · SVG →';
     $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
     $('generate-concepts-btn').disabled=isBusy||!apiReady;
+    $('generate-ai-posters-btn').disabled=isBusy||!apiReady;
     if(!isBusy){
       if(ai){
         setStatus(apiReady?'AI PRO · OpenAI':'AI PRO недоступен',
@@ -134,6 +141,7 @@
   }
 
   function invalidateAiConcepts(){
+    invalidateFullAiPosters();
     aiConceptSet=null;
     selectedAiConcept=null;
     $('ai-concept-cards').replaceChildren();
@@ -206,6 +214,55 @@
     }
   }
 
+  async function generateFullAiPosters(){
+    clearError();
+    if(!apiReady){showError('Для генерации AI-постеров необходим OpenAI API.');return;}
+    if(!get('model').trim()){showError('Укажите модель техники.','model');return;}
+    const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(!$('hero').files.length&&!$('detail').files.length){
+      showError('Для AI-постера загрузите фото рекламируемой техники.');return;
+    }
+    if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
+      showError('Сначала проанализируйте материалы и подтвердите выбор.');return;
+    }
+    invalidateFullAiPosters();busy(true);
+    $('openai-posters-status').textContent=
+      'OpenAI Images создаёт два полных рекламных постера. Это два платных запроса; не закрывайте страницу.';
+    setStatus('Художественная генерация OpenAI',
+      'Создаём два платных изображения: 4:3 и 9:16.','working');
+    try{
+      const form=new FormData();
+      form.append('payload',JSON.stringify(formBrief()));
+      if(window.PromoAssets)window.PromoAssets.append(form);
+      else fileIds.forEach(id=>appendFiles(form,id));
+      form.append('model',get('image-model'));
+      form.append('quality',get('image-quality'));
+      const response=await fetch('/api/ai-posters',{method:'POST',body:form});
+      if(!response.ok)throw new Error(await readError(response));
+      const result=await response.json();
+      if(!result.images?.['4x3']||!result.images?.['9x16']||!result.zip)
+        throw new Error('OpenAI не вернул оба формата.');
+      fullAiPosterSet=result;
+      for(const fmt of ['4x3','9x16']){
+        $('openai-poster-img-'+fmt).src=result.images[fmt];
+        $('openai-poster-link-'+fmt).href=result.images[fmt];
+      }
+      $('openai-posters-download').href=result.zip;
+      $('openai-poster-results').hidden=false;
+      $('openai-posters-status').textContent=
+        'Два AI-постера готовы. '+(result.reference_used
+          ?'Эталон использован только как ориентир стиля. '
+          :'Эталон не требовался. ')+
+        'Проверьте все надписи, характеристики, цену, контакты и конструкцию техники.';
+      setStatus('AI-постеры готовы',
+        'Скачайте PNG/JPEG/ZIP. Это цельные растровые макеты, не редактируемый SVG.','done');
+    }catch(error){
+      $('openai-posters-status').textContent='Не удалось создать оба постера.';
+      setStatus('Ошибка генерации OpenAI','Проверьте причину до следующей платной попытки.');
+      showError(error.message||'Ошибка художественной AI-генерации.');
+    }finally{busy(false);}
+  }
+
   async function generateAiConcepts(){
     clearError();
     if(!apiReady){showError('Для AI PRO требуется OPENAI_API_KEY. Переключитесь на быстрый шаблон.');return;}
@@ -261,6 +318,7 @@
     isBusy=on;
     $('generate-btn').disabled=on;
     $('generate-concepts-btn').disabled=on || !apiReady;
+    $('generate-ai-posters-btn').disabled=on || !apiReady;
     $('build-prompt-btn').disabled=on;
     $('analyze-assets-btn').disabled=on;
     $('asset-rebuild').disabled=on;
@@ -575,6 +633,7 @@
   });
   $('reset-btn').addEventListener('click',resetDemo);
   $('generate-concepts-btn').addEventListener('click',generateAiConcepts);
+  $('generate-ai-posters-btn').addEventListener('click',generateFullAiPosters);
   for(const id of ['mode-ai-pro','mode-template']){
     $(id).addEventListener('change',()=>{
       refreshGenerationMode();invalidateResult();clearError();
