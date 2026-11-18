@@ -82,8 +82,31 @@ def _intersection(a, b):
     return w * h
 
 
+def _bounded_design_text(value: Any, key: str, maximum: int) -> str:
+    """Compact AI-authored descriptions without discarding a paid layout.
+
+    Structured Outputs guarantees a JSON string, not its length. The fields
+    below are only design metadata (never the approved customer facts), so a
+    verbose explanation is safe to shorten locally. Missing or empty fields
+    still fail validation; geometry, source facts and colors stay strict.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"Неверное поле концепта: {key}.")
+    clean = " ".join(value.split())
+    if not clean:
+        raise ValueError(f"Неверное поле концепта: {key}.")
+    if len(clean) <= maximum:
+        return clean
+    snippet = clean[:maximum - 1]
+    # Avoid half-words when the final whitespace is close to the boundary.
+    boundary = snippet.rfind(" ")
+    if boundary >= (maximum - 1) * .8:
+        snippet = snippet[:boundary]
+    return snippet.rstrip(" ,.;:—-") + "…"
+
+
 def validate_concept(concept: dict[str, Any]) -> dict[str, Any]:
-    """Reject overlapping/out-of-canvas placements, invalid palette and fields."""
+    """Reject unsafe placements/palette; compact verbose AI-only prose."""
     if not isinstance(concept, dict):
         raise ValueError("Некорректный AI-концепт.")
     if set(concept) != {"name", "rationale", "scene_prompt", "palette", "layouts"}:
@@ -94,10 +117,10 @@ def validate_concept(concept: dict[str, Any]) -> dict[str, Any]:
     if any(not isinstance(value, str) or not HEX.fullmatch(value)
            for value in palette.values()):
         raise ValueError("AI предложил некорректный цвет.")
-    for key, maximum in (("name", 75), ("rationale", 260), ("scene_prompt", 600)):
-        value = concept.get(key)
-        if not isinstance(value, str) or not 1 <= len(value.strip()) <= maximum:
-            raise ValueError(f"Неверное поле концепта: {key}.")
+    descriptions = {
+        key: _bounded_design_text(concept.get(key), key, maximum)
+        for key, maximum in (("name", 75), ("rationale", 260), ("scene_prompt", 600))
+    }
     layouts = concept["layouts"]
     if not isinstance(layouts, dict) or set(layouts) != set(FORMATS):
         raise ValueError("Нужны компоновки 4:3 и 9:16.")
@@ -126,7 +149,7 @@ def validate_concept(concept: dict[str, Any]) -> dict[str, Any]:
                 smaller = min(first["w"]*first["h"], second["w"]*second["h"])
                 if overlap > smaller * .025:
                     raise ValueError(f"Блоки {name} и {other} перекрываются в {fmt}.")
-    return concept
+    return {**concept, **descriptions}
 
 
 # Exact raster sizes of the two exports. AI box coordinates are 0..1000.
@@ -291,6 +314,9 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "You are the art director of an industrial B2B advertising studio. "
         "Design EXACTLY THREE distinct, credible and high-end poster compositions "
         "for 4:3 and 9:16. Return only JSON matching the strict schema. "
+        "Keep each name under 75 characters, each rationale under 260 characters "
+        "(one concise sentence about visual hierarchy), and each scene_prompt "
+        "under 600 characters. Avoid paragraphs in rationale. "
         "Make them genuinely different spatial directions: A — expressive, "
         "product-first sales poster with a dominant hero; B — precise "
         "engineering/data-led editorial layout with a large technical panel; "
