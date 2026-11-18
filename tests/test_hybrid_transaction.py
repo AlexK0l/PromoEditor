@@ -139,3 +139,41 @@ def test_full_raster_poster_outputs_survive_zip_failure(monkeypatch, tmp_path):
     assert not (cache / "4x3.png").exists()
     assert output["raster_only"] is True
     assert (tmp_path / output["job_id"] / "ai_posters.zip").is_file()
+
+
+def test_approved_reference_preset_does_not_modify_legacy_demo():
+    from app.approved_presets import approved_zubrtrail_500
+    from app.render import compute_roi
+    approved = approved_zubrtrail_500()
+    assert approved["price"] == "6527000"
+    assert approved["currency"] == "₽"
+    assert approved["phones"] == ["+7 (951) 704-30-42",
+                                   "+7 (951) 704-29-95"]
+    assert len(approved["specs"]) == 10
+    assert len(approved["dimensions"]) == 7
+    result = compute_roi(approved)
+    assert result["per_trip"] == 4500
+    assert result["annual"] == 1080000
+    assert result["gross"] == 5400000
+    assert result["premium"] == 2284450
+    assert result["net"] == 3115550
+    with TestClient(main.app) as client:
+        actual = client.get("/api/presets/zubrtrail-500")
+        assert actual.status_code == 200
+        assert actual.json()["brief"] == approved
+        config = client.get("/api/config").json()
+        assert "hybrid" in config["generation_modes"]
+    assert default_brief()["price"] != approved["price"]
+
+
+def test_completed_hybrid_response_reports_actual_mode(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "STORAGE", tmp_path)
+    monkeypatch.setattr(main, "rasterize_svg", lambda svg: (b"png", b"jpeg"))
+    out = main._generate_sync(
+        default_brief(), _png(), None, None, None, [], False, False,
+        "gpt-image-2.5-flare", "medium", "demo no paid image",
+        generation_mode="hybrid")
+    assert out["generation_mode"] == "hybrid"
+    brief_file = tmp_path / out["job_id"] / "brief.json"
+    metadata = json.loads(brief_file.read_text(encoding="utf-8"))["_metadata"]
+    assert metadata["generation_mode"] == "hybrid"
