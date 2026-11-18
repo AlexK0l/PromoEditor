@@ -414,6 +414,7 @@ def normalize_paid_ai_concepts(payload: dict[str, Any], brief: dict) -> list[dic
             candidate[key] = metadata[key]
 
         adjusted = False
+        repair_status = {fmt: "original" for fmt in FORMATS}
         for fmt in FORMATS:
             original = candidate["layouts"][fmt]
             try:
@@ -424,8 +425,12 @@ def normalize_paid_ai_concepts(payload: dict[str, Any], brief: dict) -> list[dic
             replacement = _repair_roi_footer(candidate, fmt, brief, index)
             if replacement is None:
                 # A safe, editable layout is better than discarding a paid
-                # response and asking OpenAI to repeat it.
+                # response and asking OpenAI to repeat it. BUT label this
+                # honestly: it is no longer the AI-authored composition.
                 replacement = _safe_layout(fmt, index)
+                repair_status[fmt] = "fallback"
+            else:
+                repair_status[fmt] = "repaired"
             candidate["layouts"][fmt] = replacement
             adjusted = True
 
@@ -437,7 +442,8 @@ def normalize_paid_ai_concepts(payload: dict[str, Any], brief: dict) -> list[dic
         validated = validate_concept(candidate)
         for fmt in FORMATS:
             validate_renderability(validated, brief, fmt)
-        result.append(dict(validated, id=f"concept_{index}"))
+        result.append(dict(validated, id=f"concept_{index}",
+                           layout_repair=repair_status))
     return result
 
 
@@ -511,21 +517,26 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "You are the art director of an industrial B2B advertising studio. "
         "Design EXACTLY THREE distinct, credible and high-end poster compositions "
         "for 4:3 and 9:16. Return only JSON matching the strict schema. "
+        "Return the name and rationale IN RUSSIAN, not English. "
         "Keep each name under 75 characters, each rationale under 260 characters "
         "(one concise sentence about visual hierarchy), and each scene_prompt "
         "under 600 characters. All three descriptive fields must be nonempty. "
         "Avoid paragraphs in rationale. "
-        "Make them genuinely different spatial directions: A — expressive, "
-        "product-first sales poster with a dominant hero; B — precise "
-        "engineering/data-led editorial layout with a large technical panel; "
-        "C — premium restrained advertising with intentional whitespace. "
-        "Vary position and relative size of hero, specs and sales blocks, "
-        "not merely colors or concept names. "
-        "For EACH format, supply disjoint rectangles on a normalized 1000×1000 "
+        "The server's visual designer gives concept A a bold kinetic product "
+        "stage with angled industrial shapes, B a deep-blue drafting/grid "
+        "language for technical editorial storytelling, and C a spacious warm "
+        "minimalist art direction with thin hairline typography treatments. "
+        "Your geometry and palette MUST support these three DIFFERENT systems. "
+        "Concept A: make the original product large and dominant. "
+        "Concept B: prioritize a generous specifications + original drawing "
+        "hierarchy; keep the product visible. "
+        "Concept C: make an elegant hero, breathing room and precise aligned "
+        "information; retain all approved facts. "
+        "Avoid nearly identical zone arrangements and accent colors. "
+        "For EACH format, supply disjoint rectangles on a normalized 1000x1000 "
         "design plane (integer x,y,w,h). Required zones: header, hero, specs, "
-        "Important: ROI and footer MUST NOT overlap; leave a visible gap between "
-        "them in both formats. All seven zones must be disjoint. "
-        "dimensions, benefits, roi, footer. No overlaps, no out-of-bounds zones. "
+        "dimensions, benefits, roi, footer. Every zone must be in bounds. "
+        "In particular ROI and footer must NOT overlap; leave a visible gap. "
         "Hero w >=350 and h>=170. Header/footer h>=75. Each zone w>=100 h>=48. "
         "CRITICAL: the copy_density field contains CHARACTER COUNTS per "
         "factual label, value, claim and phone. Size zones to fit the LONGEST "
@@ -540,6 +551,9 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "for 9:16 it maps to 1080x1920. "
         "Allocate generous space for product silhouette and factual specifications; "
         "avoid tiny captions. Build distinct spatial compositions, not just colors. "
+        "Choose foreground hex color with at least 4.5:1 contrast against "
+        "white and light gray text panels; do not use white/light gray text "
+        "on white specification cards. "
         "Choose palette hex colors. scene_prompt describes only photorealistic "
         "industrial BACKGROUND behind a separately composited original product, "
         "without lettering, logos, vehicles, or invented product geometry. "

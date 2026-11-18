@@ -125,7 +125,7 @@ def test_openai_concept_request_uses_example_only_if_uploaded(monkeypatch):
     assert density["spec_label_value_chars"][0]==[len(v) for v in brief["specs"][0]]
     assert density["phone_chars"]==[len(v) for v in brief["phones"]]
     assert not any(phone in first[0]["text"] for phone in brief["phones"])
-    assert "product-first" in captured[0]["instructions"]
+    assert "Concept A: make the original product large" in captured[0]["instructions"]
     assert all("data:image/jpeg;base64," in item["image_url"]
                for item in second if item["type"]=="input_image")
 
@@ -436,6 +436,7 @@ def test_paid_model_roi_footer_overlap_is_repaired_without_another_api_call(monk
     assert repaired[0]["layouts"]["4x3"]["roi"]["h"]<130
     assert repaired[0]["layouts"]["9x16"]==raw[0]["layouts"]["9x16"]
     assert "адаптировано" in repaired[0]["rationale"]
+    assert repaired[0]["layout_repair"]=={"4x3":"repaired","9x16":"original"}
     assert raw[0]["layouts"]["4x3"]["roi"]["h"]==130  # source unchanged
     from app.ai_concept_renderer import render_ai_concept_svg
     for item in repaired:
@@ -457,8 +458,10 @@ def test_paid_ai_response_with_severe_overlap_recovers_distinct_safe_composition
                 for item in fixed})==3
     for item in fixed:
         assert "адаптировано" in item["rationale"]
+        assert item["layout_repair"]=={"4x3":"fallback","9x16":"fallback"}
         for fmt in ("4x3","9x16"):
-            ai_layout.validate_concept({k:v for k,v in item.items() if k!="id"})
+            ai_layout.validate_concept({k:v for k,v in item.items()
+                                        if k not in ("id","layout_repair")})
             assert ET.fromstring(render_ai_concept_svg(default_brief(),fmt,item)).tag.endswith("svg")
 
 
@@ -467,6 +470,8 @@ def test_paid_layout_recovery_preserves_valid_and_rejects_untrusted_palette():
     exact=ai_layout.normalize_paid_ai_concepts({"concepts":raw},default_brief())
     assert all(item["layouts"]==raw[i]["layouts"] for i,item in enumerate(exact))
     assert all("адаптировано" not in item["rationale"] for item in exact)
+    assert all(item["layout_repair"]=={"4x3":"original","9x16":"original"}
+               for item in exact)
     bad=_concepts()
     bad[0]["palette"]["accent"]="url(javascript:alert(1))"
     with pytest.raises(ValueError,match="цвет"):
@@ -484,4 +489,202 @@ def test_paid_ai_layout_preflight_failure_uses_readable_no_cost_fallback():
         ai_layout.validate_renderability(concept,brief,"4x3")
         ai_layout.validate_renderability(concept,brief,"9x16")
     assert raw[2]["layouts"]["4x3"]["specs"]["h"]==180
+
+
+
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+@pytest.mark.parametrize("bad_ink", ["#FFFFFF", "#F7F7F7", "#D9DDE1"])
+def test_ai_pro_pale_foreground_is_replaced_for_readability(fmt,bad_ink):
+    """Reproduce the washed-out specs, headings, benefits and ROI from VPS."""
+    from app.ai_concept_renderer import render_ai_concept_svg, _contrast_ratio
+    concepts=_concepts()
+    concepts[0]["palette"]["foreground"]=bad_ink
+    item=ai_layout.normalize_concepts({"concepts":concepts})[0]
+    root=ET.fromstring(render_ai_concept_svg(default_brief(),fmt,item))
+    # A's first two lead stats now sit in dark/accent tiles; WHITE labels
+    # are correct there. All other data lives on light cards.
+    tiles={}
+    for node in root.findall(".//s:rect",SVG):
+        ident=node.get("id","")
+        if ident.startswith("ai-sales-stat-tile-"):
+            number=int(ident.removeprefix("ai-sales-stat-tile-").split("-")[0])
+            tiles[number]=node.get("fill")
+    ids=("ai-spec-name-","ai-benefit-text-","ai-slogan-",
+         "ai-roi-name-","ai-dim-name-")
+    for prefix in ids:
+        nodes=[node for node in root.findall(".//s:text",SVG)
+               if node.get("id","").startswith(prefix)]
+        assert nodes,(fmt,prefix)
+        for node in nodes:
+            background="#FFFFFF"
+            if prefix=="ai-spec-name-":
+                number=int(node.get("id").removeprefix(prefix).split("-")[0])
+                background=tiles.get(number,background)
+            assert _contrast_ratio(node.get("fill"),background)>=4.5,(
+                fmt,prefix,bad_ink,node.get("id"),background)
+
+
+def test_ai_pro_preserves_accessible_dark_foreground():
+    from app.ai_concept_renderer import render_ai_concept_svg
+    root=ET.fromstring(render_ai_concept_svg(
+        default_brief(),"4x3",
+        ai_layout.normalize_concepts({"concepts":_concepts()})[0]))
+    nodes=[n for n in root.findall(".//s:text",SVG)
+           if n.get("id","").startswith("ai-spec-name-")]
+    assert len(nodes)==8
+    for node in nodes:
+        number=int(node.get("id").removeprefix("ai-spec-name-").split("-")[0])
+        assert node.get("fill")==("#FFFFFF" if number<2 else "#182235")
+
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_three_art_directed_ai_systems_are_visually_distinct_and_editable(fmt):
+    """Same geometry and SAME customer facts must produce three different ads.
+
+    This checks actual SVG plus raster pixels rather than merely a green
+    validation pass. No paid OpenAI request or fabricated product imagery.
+    """
+    from PIL import ImageChops, ImageDraw
+    from app.ai_concept_renderer import render_ai_concept_svg
+    from app.editable_export import rasterize_svg
+    from app.ai_art_direction import direction_of
+
+    brief=default_brief()
+    designs=ai_layout.normalize_concepts({"concepts":_concepts()})
+    hero=Image.new("RGBA",(900,480),(0,0,0,0))
+    brush=ImageDraw.Draw(hero)
+    brush.polygon([(55,100),(690,66),(830,125),(830,300),(85,310)],
+                  fill="#E9B423")
+    brush.rectangle((90,300,830,333),fill="#232E35")
+    for px in (560,680,790):
+        brush.ellipse((px-42,302,px+42,386),fill="#202831")
+    samples=[]
+    for index,design in enumerate(designs):
+        svg=render_ai_concept_svg(brief,fmt,design,hero=hero)
+        root=ET.fromstring(svg)
+        mark=["sales","engineering","editorial"][index]
+        assert direction_of(design)==mark
+        ids=[el.get("id","") for el in root.iter()]
+        assert any(el.startswith("ai-art-system-"+mark) for el in ids)
+        assert any(el.startswith("ai-"+mark+"-stage") for el in ids)
+        assert any(el.startswith("original-product-photo-") for el in ids)
+        texts=" ".join(" ".join(el.itertext())
+                       for el in root.findall(".//s:text",SVG))
+        for required in ("ZubrTrail 500","44 т","229 998",
+                         "+375 (225) 72-01-03"):
+            assert required in texts,(fmt,mark,required)
+        png,_=rasterize_svg(svg)
+        image=Image.open(io.BytesIO(png)).convert("RGB")
+        assert image.size==({"4x3":(1440,1080),
+                            "9x16":(1080,1920)}[fmt])
+        samples.append(image.resize((180,240)))
+
+    # A/B/C use identical source facts, dimensions and photos; changing only
+    # label strings would not produce significantly different raster pixels.
+    for first,second in ((0,1),(0,2),(1,2)):
+        delta=ImageChops.difference(samples[first],samples[second])
+        histogram=delta.convert("L").histogram()
+        changed=sum(histogram[18:])
+        assert changed > 180*240*.12,(fmt,first,second,changed)
+
+
+@pytest.mark.parametrize("system,expected_background,expected_ink", [
+    (0,"#F9FAFC",None),
+    (1,"#1A3044","#FFFFFF"),
+    (2,"#FCFBF8",None),
+])
+def test_ai_system_header_treatments_and_source_palette_are_distinct(
+        system,expected_background,expected_ink):
+    from app.ai_concept_renderer import render_ai_concept_svg
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[system]
+    root=ET.fromstring(render_ai_concept_svg(default_brief(),"4x3",item))
+    headers=[el for el in root.findall(".//s:rect",SVG)
+             if el.get("id","").startswith("ai-header-panel-")]
+    assert len(headers)==1
+    assert headers[0].get("fill")==expected_background
+    model=[el for el in root.findall(".//s:text",SVG)
+           if el.get("id","").startswith("ai-product-model-")]
+    assert len(model)==1
+    if expected_ink:
+        assert model[0].get("fill")==expected_ink
+    assert item["palette"]["accent"]=="#D51E2A"
+
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_sales_art_direction_has_large_metric_tiles_and_keeps_all_specs(fmt):
+    from app.ai_concept_renderer import render_ai_concept_svg
+    brief=default_brief()
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[0]
+    root=ET.fromstring(render_ai_concept_svg(brief,fmt,item))
+    ids=[el.get("id","") for el in root.iter()]
+    assert len([x for x in ids if x.startswith("ai-sales-stat-tile-")])==2
+    copy=" ".join(" ".join(node.itertext())
+                  for node in root.findall(".//s:text",SVG))
+    for name,value in brief["specs"][:8]:
+        assert name in copy and value in copy,(fmt,name,value)
+    assert len([x for x in ids if x.startswith("ai-spec-name-")])==8
+    assert len([x for x in ids if x.startswith("ai-spec-value-")])==8
+
+
+def test_overlong_lead_stat_labels_fall_back_to_safe_original_table():
+    from app.ai_concept_renderer import render_ai_concept_svg
+    brief=default_brief()
+    original=brief["specs"][0]
+    brief["specs"][0]=(
+        "Длинная техническая характеристика с примечаниями",
+        original[1],
+    )
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[0]
+    root=ET.fromstring(render_ai_concept_svg(brief,"4x3",item))
+    ids=[el.get("id","") for el in root.iter()]
+    assert not any(x.startswith("ai-sales-stat-tile-") for x in ids)
+    assert len([x for x in ids if x.startswith("ai-spec-row-")])==8
+
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_engineering_specs_use_contrasting_dark_table_with_readable_copy(fmt):
+    from app.ai_concept_renderer import render_ai_concept_svg, _contrast_ratio
+    design=ai_layout.normalize_concepts({"concepts":_concepts()})[1]
+    root=ET.fromstring(render_ai_concept_svg(default_brief(),fmt,design))
+    panel=[node for node in root.findall(".//s:rect",SVG)
+           if node.get("id","").startswith("ai-specs-panel-")]
+    assert len(panel)==1 and panel[0].get("fill")=="#1E3549"
+    cells={}
+    for node in root.findall(".//s:rect",SVG):
+        ident=node.get("id","")
+        if ident.startswith("ai-spec-row-"):
+            idx=int(ident.removeprefix("ai-spec-row-").split("-")[0])
+            cells[idx]=node.get("fill")
+    assert len(cells)==8
+    for prefix in ("ai-spec-name-","ai-spec-value-"):
+        texts=[node for node in root.findall(".//s:text",SVG)
+               if node.get("id","").startswith(prefix)]
+        assert len(texts)==8
+        for node in texts:
+            idx=int(node.get("id").removeprefix(prefix).split("-")[0])
+            assert _contrast_ratio(node.get("fill"),cells[idx])>=4.5,(
+                fmt,idx,prefix,node.get("fill"),cells[idx])
+
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_all_original_vehicle_pixels_fit_above_the_user_claim_ribbon(fmt):
+    """Previously the large burgundy bar obscured the wheels of the trailer."""
+    from app.ai_concept_renderer import render_ai_concept_svg
+    brief=default_brief()
+    source=Image.new("RGBA",(900,500),(0,0,0,0))
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[0]
+    root=ET.fromstring(render_ai_concept_svg(
+        brief,fmt,item,hero=source))
+    photo=[node for node in root.findall(".//s:image",SVG)
+           if node.get("id","").startswith("original-product-photo-")]
+    ribbon=[node for node in root.findall(".//s:rect",SVG)
+            if node.get("id","").startswith("ai-hero-claims-panel-")]
+    assert len(photo)==len(ribbon)==1
+    assert (float(photo[0].get("y"))+float(photo[0].get("height"))
+            < float(ribbon[0].get("y"))-3)
+    names=[node for node in root.findall(".//s:text",SVG)
+           if node.get("id","").startswith("ai-hero-claim-")
+           and "heading" not in node.get("id","")]
+    assert len(names)==4
 

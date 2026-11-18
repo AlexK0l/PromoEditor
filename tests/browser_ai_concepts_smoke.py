@@ -30,6 +30,8 @@ def main():
                 "rationale":f"Самостоятельная композиция {i+1}",
                 "previews":{"4x3":"/static/demo_4x3.svg",
                             "9x16":"/static/demo_9x16.svg"},
+                "layout_repair":({"4x3":"fallback","9x16":"repaired"}
+                                 if i==0 else {"4x3":"original","9x16":"original"}),
                 "layout_spec":{"4x3":{"hero":{"w":610}},
                                "9x16":{"hero":{"w":900}}},
             } for i in range(3)]
@@ -59,6 +61,19 @@ def main():
             assert card.locator(".ai-concept-preview--landscape img").get_attribute("src")=="/static/demo_4x3.svg"
             assert card.locator(".ai-concept-preview--portrait img").get_attribute("src")=="/static/demo_9x16.svg"
             assert "4:3" in card.inner_text() and "9:16" in card.inner_text()
+        assert "резервную сетку" in page.locator("#ai-concepts-status").inner_text().lower()
+        assert "не передавался" in page.locator("#ai-concepts-status").inner_text().lower()
+        first=page.locator(".ai-concept-card").nth(0)
+        assert "Резервная сетка" in first.inner_text()
+        assert "исправлена" in first.inner_text()
+        # Force a thumbnail error, without an extra paid request or a misleading
+        # broken-img icon and its full English alt string in the card.
+        page.locator(".ai-concept-card").nth(2).locator(
+            ".ai-concept-preview--portrait img").evaluate(
+            "(img) => img.dispatchEvent(new Event('error'))")
+        assert page.locator(".ai-preview-error").count()==1
+        assert "открыть файл" in page.locator(".ai-preview-error").inner_text()
+        assert len(requests)==1
         page.locator(".ai-concept-card").nth(1).locator("button").click()
         assert page.locator(".ai-concept-card").nth(1).get_attribute("class").endswith("is-selected")
         assert not page.locator("#generate-btn").is_disabled()

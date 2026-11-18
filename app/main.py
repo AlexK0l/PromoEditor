@@ -480,7 +480,8 @@ def _build_concept_previews_sync(brief, report, records, concepts,
                     previews[fmt]=f'/files/{job_id}/{name}'
                 cards.append({'index':i,'name':concept['name'],
                               'rationale':concept['rationale'],
-                              'previews':previews,'layout_spec':concept['layouts']})
+                              'previews':previews,'layout_spec':concept['layouts'],
+                              'layout_repair':concept.get('layout_repair',{})})
         except Exception:
             shutil.rmtree(folder,ignore_errors=True)
             raise
@@ -627,7 +628,8 @@ async def generate(request:Request):
                 raise HTTPException(409,detail='Материалы или данные изменились. Пересоздайте AI-концепции.')
             concept=stored['concepts'][index]
             from .ai_layout import validate_concept
-            validate_concept({k:v for k,v in concept.items() if k!='id'})
+            validate_concept({k:v for k,v in concept.items()
+                              if k not in ('id','layout_repair')})
         except HTTPException:
             raise
         except (ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:
