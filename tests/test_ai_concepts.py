@@ -641,3 +641,28 @@ def test_overlong_lead_stat_labels_fall_back_to_safe_original_table():
     assert not any(x.startswith("ai-sales-stat-tile-") for x in ids)
     assert len([x for x in ids if x.startswith("ai-spec-row-")])==8
 
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_engineering_specs_use_contrasting_dark_table_with_readable_copy(fmt):
+    from app.ai_concept_renderer import render_ai_concept_svg, _contrast_ratio
+    design=ai_layout.normalize_concepts({"concepts":_concepts()})[1]
+    root=ET.fromstring(render_ai_concept_svg(default_brief(),fmt,design))
+    panel=[node for node in root.findall(".//s:rect",SVG)
+           if node.get("id","").startswith("ai-specs-panel-")]
+    assert len(panel)==1 and panel[0].get("fill")=="#1E3549"
+    cells={}
+    for node in root.findall(".//s:rect",SVG):
+        ident=node.get("id","")
+        if ident.startswith("ai-spec-row-"):
+            idx=int(ident.removeprefix("ai-spec-row-").split("-")[0])
+            cells[idx]=node.get("fill")
+    assert len(cells)==8
+    for prefix in ("ai-spec-name-","ai-spec-value-"):
+        texts=[node for node in root.findall(".//s:text",SVG)
+               if node.get("id","").startswith(prefix)]
+        assert len(texts)==8
+        for node in texts:
+            idx=int(node.get("id").removeprefix(prefix).split("-")[0])
+            assert _contrast_ratio(node.get("fill"),cells[idx])>=4.5,(
+                fmt,idx,prefix,node.get("fill"),cells[idx])
+
