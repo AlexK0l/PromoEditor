@@ -17,14 +17,14 @@ import secrets
 import shutil
 import subprocess
 import sys
-import threading
 from pathlib import Path
 
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable
+from .worker_slots import MEMORY_HEAVY_SLOT
 
 BASE = Path(__file__).resolve().parent.parent
 # A single heavy child per Uvicorn worker prevents overlapping 4:3/9:16 renders.
-_RENDER_SLOTS = threading.BoundedSemaphore(1)
+_RENDER_SLOTS = MEMORY_HEAVY_SLOT
 _BLOB = re.compile(r"blob-[0-9]+\.bin\Z")
 _ACTIONS = {"generate": "_generate_sync", "previews": "_build_concept_previews_sync"}
 
@@ -114,6 +114,11 @@ def run_render_task(action: str, *args):
                     # No raw uploads, tokens or generated imagery in stdout.
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    # Paid Images requests need the API key; authentication
+                    # session material is unrelated and excluded.
+                    env={k: v for k, v in os.environ.items() if k not in (
+                        "PROMO_PASSWORD_HASH", "PROMO_SESSION_SECRET",
+                    )},
                     timeout=_timeout(),
                     check=False,
                 )

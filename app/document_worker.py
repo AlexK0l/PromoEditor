@@ -13,14 +13,15 @@ from contextlib import redirect_stdout
 import os
 import subprocess
 import sys
-import threading
 from pathlib import Path
+
+from .worker_slots import MEMORY_HEAVY_SLOT
 
 _MAX_INPUT_BYTES = 20 * 1024 * 1024
 _MAX_OUTPUT_BYTES = 32 * 1024 * 1024
 # The production Time4VPS systemd unit has MemoryMax=800M.
 # Only one parsing subprocess runs at a time in this Uvicorn worker.
-_PARSE_SLOTS = threading.BoundedSemaphore(1)
+_PARSE_SLOTS = MEMORY_HEAVY_SLOT
 _ROOT = Path(__file__).resolve().parent.parent
 
 

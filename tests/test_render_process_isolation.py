@@ -98,3 +98,8 @@ def test_invalid_render_timeout_fails_closed(monkeypatch, tmp_path):
     with pytest.raises(RenderWorkerError, match="PROMO_RENDER_TIMEOUT_SECONDS"):
         run_render_task("generate", *_args())
     assert list(tmp_path.iterdir()) == []
+
+
+def test_render_and_document_workers_share_memory_budget_slot():
+    from app.document_worker import _PARSE_SLOTS
+    assert _PARSE_SLOTS is render_worker._RENDER_SLOTS
