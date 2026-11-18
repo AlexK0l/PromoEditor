@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
 from .openai_service import analyze_documents, generate_visuals
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable
+from .render_worker import run_render_task, RenderWorkerError
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .image_analysis import validate_image_dimensions
@@ -528,7 +529,7 @@ async def create_ai_concepts(request:Request):
             generate_concepts,brief,hero=hero_raw,reference=reference_raw,
             style=style,goal=goal)
         return await asyncio.to_thread(
-            _build_concept_previews_sync, brief, report, records, concepts,
+            run_render_task, 'previews', brief, report, records, concepts,
             style, goal, hero_raw, reference_raw)
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429,detail=str(exc)) from exc
@@ -639,13 +640,15 @@ async def generate(request:Request):
     try:
         image_references=([reference_example_raw] if reference_example_raw else [])+references
         result=await asyncio.to_thread(
-            _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
+            run_render_task,'generate',brief,hero_raw,detail_raw,logo_raw,drawing_raw,
             image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
             str(form.get('quality','medium')),design_prompt,report,background_raw,
             concept,concept_set_id,reference_example_raw)
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
+    except RenderWorkerError as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
