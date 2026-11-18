@@ -221,6 +221,44 @@ def normalize_concepts(payload: dict[str, Any], brief: dict | None = None) -> li
     return output
 
 
+def _copy_density(brief: dict) -> dict[str, Any]:
+    """Give the art director text LENGTHS, not customers' phone numbers or claims.
+
+    The final SVG still receives exact approved copy directly from the server.
+    Only bounded sizes help the model reserve enough space for every row.
+    """
+    def lines(key: str, limit: int):
+        values=brief.get(key) or []
+        if not isinstance(values, list):
+            return []
+        return [min(len(str(item).strip()),160) for item in values[:limit]
+                if str(item).strip()]
+
+    def pairs(key: str, limit: int):
+        values=brief.get(key) or []
+        if not isinstance(values, list):
+            return []
+        return [
+            [min(len(str(item[0]).strip()),90),
+             min(len(str(item[1]).strip()),160)]
+            for item in values[:limit]
+            if isinstance(item,(tuple,list)) and len(item)>=2
+            and str(item[0]).strip() and str(item[1]).strip()
+        ]
+
+    return {
+        "model_chars":min(len(str(brief.get("model") or "")),80),
+        "slogan_chars":min(len(str(brief.get("slogan") or "")),250),
+        "hero_claim_chars":lines("hero_claims",4),
+        "benefit_chars":lines("benefits",6),
+        "proof_chars":lines("proof_points",4),
+        "spec_label_value_chars":pairs("specs",8),
+        "dimension_label_value_chars":pairs("dimensions",4),
+        "phone_chars":lines("phones",2),
+        "price_chars":min(len(str(brief.get("price") or "")),30),
+    }
+
+
 def generate_concepts(brief: dict, *, hero: bytes | None = None,
                       reference: bytes | None = None, style: str = "premium",
                       goal: str = "sales") -> list[dict]:
@@ -244,6 +282,7 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "has_price": bool(brief.get("price")),
         "phone_count": len(brief.get("phones", [])),
         "show_roi": bool(brief.get("show_roi")),
+        "copy_density": _copy_density(brief),
         "style": style, "goal": goal,
         "notes": str(brief.get("design_notes", ""))[:850],
         "reference_uploaded": reference is not None,
@@ -252,12 +291,22 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "You are the art director of an industrial B2B advertising studio. "
         "Design EXACTLY THREE distinct, credible and high-end poster compositions "
         "for 4:3 and 9:16. Return only JSON matching the strict schema. "
+        "Make them genuinely different spatial directions: A — expressive, "
+        "product-first sales poster with a dominant hero; B — precise "
+        "engineering/data-led editorial layout with a large technical panel; "
+        "C — premium restrained advertising with intentional whitespace. "
+        "Vary position and relative size of hero, specs and sales blocks, "
+        "not merely colors or concept names. "
         "For EACH format, supply disjoint rectangles on a normalized 1000×1000 "
         "design plane (integer x,y,w,h). Required zones: header, hero, specs, "
         "dimensions, benefits, roi, footer. No overlaps, no out-of-bounds zones. "
         "Hero w >=350 and h>=170. Header/footer h>=75. Each zone w>=100 h>=48. "
-        "CRITICAL: size zones for the actual copy. Each specifications row needs "
-        "at least 28 output pixels plus a 3px separator and a heading. "
+        "CRITICAL: the copy_density field contains CHARACTER COUNTS per "
+        "factual label, value, claim and phone. Size zones to fit the LONGEST "
+        "items; no microscopic captions, ellipses or missing selling points. "
+        "Reserve hero space for user sales claims when benefits are also present. "
+        "Each specifications row needs at least 28 output pixels plus a "
+        "3px separator and a heading. "
         "Benefits need room for up to four items plus proof claims. "
         "Economy needs four legible metrics (one row in wide blocks or two "
         "rows in narrower blocks); a tiny ROI panel is invalid. "
