@@ -177,3 +177,43 @@ def test_untrusted_reference_is_not_promoted_to_factual_source():
     assert "Never import claims" in prompt
     assert "not its product, claims or branding" in prompt
     assert "44 т" in prompt
+
+
+
+def test_two_paid_images_require_two_available_daily_calls_before_start(
+        monkeypatch,tmp_path):
+    from app.ai_quota import QuotaExceeded
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","1")
+    images=Images()
+    monkeypatch.setattr(ai_poster_service,"client",
+                        lambda:type("API",(),{"images":images})())
+    with pytest.raises(QuotaExceeded,match="Ни один новый платный"):
+        ai_poster_service.generate_full_posters(
+            default_brief(),_png(),cache_dir=tmp_path/"cache")
+    assert images.calls==[]
+
+
+def test_partial_cached_poster_needs_only_one_remaining_daily_call(
+        monkeypatch,tmp_path):
+    import sqlite3
+    from app.ai_quota import _utc_day
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","2")
+    with sqlite3.connect(tmp_path/"openai_call_quota.sqlite3") as db:
+        db.execute("CREATE TABLE paid_call_usage "
+                   "(utc_day TEXT,category TEXT,attempts INTEGER)")
+        db.execute("INSERT INTO paid_call_usage VALUES (?,?,?)",
+                   (_utc_day(),"image",1))
+    cache=tmp_path/"existing"
+    cache.mkdir()
+    Image.new("RGB",(640,420),"red").save(cache/"4x3.png","PNG")
+    images=Images()
+    monkeypatch.setattr(ai_poster_service,"client",
+                        lambda:type("API",(),{"images":images})())
+    out=ai_poster_service.generate_full_posters(
+        default_brief(),_png(),cache_dir=cache)
+    assert out["4x3"].size==(1440,1080)
+    assert out["9x16"].size==(1080,1920)
+    assert len(images.calls)==1
+    assert images.calls[0]["size"]=="1024x1536"
