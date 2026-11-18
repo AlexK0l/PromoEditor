@@ -33,6 +33,7 @@ from .image_analysis import validate_image_dimensions
 from .editable_export import build_promo_prompt, create_editable_svg, rasterize_svg
 from .ai_layout import generate_concepts, STYLES, GOALS
 from .ai_concept_renderer import render_ai_concept_svg
+from .approved_presets import approved_zubrtrail_500
 from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
@@ -102,7 +103,7 @@ def config():
             'logout_csrf_token':issue_form_token('logout') if auth_enabled() else None,
             'image_models':['gpt-image-2.5-flare','gpt-image-2.5-sunburst'],
             'max_file_mb':20,'max_files':MAX_FILES,'multi_assets':True,'asset_analysis':True,'formats':[{'id':'4x3','size':[1440,1080]},{'id':'9x16','size':[1080,1920]}],
-            'preview':True,'generation_modes':['ai_pro','template'],'ai_concepts':3,'reference_required':False,
+            'preview':True,'generation_modes':['hybrid','ai_pro','template'],'ai_concepts':3,'reference_required':False,
             'export_formats':['png','jpeg','svg'],'editable_format':'svg'}
 
 
@@ -112,6 +113,13 @@ def demo():
             'reference_4x3':'/static/demo_4x3.svg',
             'reference_9x16':'/static/demo_9x16.svg',
             'sample_hero':'/static/demo_4x3.svg'}
+
+
+@app.get('/api/presets/zubrtrail-500')
+def approved_zubrtrail_preset():
+    return {'brief':approved_zubrtrail_500(),
+            'source':'Утверждённый рекламный эталон ZubrTrail 500 от 18.11.2026',
+            'notice':'Загрузите оригинальные фотографии, логотип и чертёж самостоятельно.'}
 
 
 def _clean_jobs():
@@ -287,7 +295,7 @@ def _demo_hero():
 def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                    use_demo,use_openai,model,quality,design_prompt,asset_report=None,
                    background_raw=None,concept=None,concept_set_id=None,
-                   reference_example_raw=None):
+                   reference_example_raw=None,generation_mode='template'):
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
@@ -350,7 +358,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         briefing=dict(brief)
         briefing['_metadata']={
             'generator':'AI-directed editable SVG' if concept else 'PromoEditor SVG template',
-            'generation_mode':'ai_pro' if concept else 'template',
+            'generation_mode':'ai_pro' if concept else generation_mode,
             'concept_set_id':concept_set_id,
             'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
             'ai_product_visualization':ai_product,
@@ -441,7 +449,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
             'asset_selection':f'/files/{job_id}/asset_selection.json',
             'layout_spec':f'/files/{job_id}/layout_spec.json',
-            'generation_mode':'ai_pro' if concept else 'template',
+            'generation_mode':'ai_pro' if concept else generation_mode,
             'selected_assets':(asset_report or {}).get('selected_assets',{}),
             'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
         }
@@ -792,7 +800,7 @@ async def generate(request:Request):
             _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
             image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
             str(form.get('quality','medium')),design_prompt,report,background_raw,
-            concept,concept_set_id,reference_example_raw)
+            concept,concept_set_id,reference_example_raw,mode)
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
