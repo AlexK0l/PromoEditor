@@ -36,6 +36,32 @@ def _dark_accent(hex_color):
         f"{round(int(hex_color[i:i+2],16)*.35):02X}" for i in (1,3,5))
 
 
+def _luminance(hex_color):
+    channels=[int(hex_color[index:index+2],16)/255 for index in (1,3,5)]
+    linear=[channel/12.92 if channel<=.04045
+            else ((channel+.055)/1.055)**2.4 for channel in channels]
+    return sum(channel*weight for channel,weight in
+               zip(linear,(.2126,.7152,.0722)))
+
+
+def _contrast_ratio(one, two):
+    light, dark=sorted((_luminance(one),_luminance(two)),reverse=True)
+    return (light+.05)/(dark+.05)
+
+
+def _readable_panel_ink(preferred):
+    """Use the AI foreground only if readable on ALL fixed light surfaces.
+
+    The model chooses a palette but the renderer ALWAYS draws the header,
+    alternating spec rows, benefits and ROI on near-white panels. A white
+    'foreground' on these panels made real customer specs disappear.
+    """
+    surfaces=("#FFFFFF","#F9FAFC","#F3F5F7","#F3F5F8","#FFF3F4")
+    if all(_contrast_ratio(preferred,panel)>=4.5 for panel in surfaces):
+        return preferred
+    return "#172235"
+
+
 def _contrast_text(hex_color):
     """Keep AI-authored pale accents readable behind price text."""
     rgb=[int(hex_color[i:i+2],16)/255 for i in (1,3,5)]
@@ -329,7 +355,8 @@ def render_ai_concept_svg(brief, key, concept, *,
                           hero=None, detail=None, logo=None,
                           drawing=None, backdrop=None, ai_product=False):
     """Render the chosen AI-authored layout into separately editable SVG layers."""
-    validate_concept({k:v for k,v in concept.items() if k!="id"})
+    validate_concept({k:v for k,v in concept.items()
+                      if k not in ("id","layout_repair")})
     if key not in ("4x3", "9x16"):
         raise ValueError("Неизвестный формат.")
     validate_renderability(concept, brief, key, has_drawing=drawing is not None)
@@ -337,7 +364,7 @@ def render_ai_concept_svg(brief, key, concept, *,
     palette=concept["palette"]
     colors={
         "background":palette["background"],
-        "foreground":palette["foreground"],
+        "foreground":_readable_panel_ink(palette["foreground"]),
         "accent":palette["accent"],
     }
     scene.rect("background",0,0,scene.w,scene.h,colors["background"],

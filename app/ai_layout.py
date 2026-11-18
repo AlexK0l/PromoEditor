@@ -414,6 +414,7 @@ def normalize_paid_ai_concepts(payload: dict[str, Any], brief: dict) -> list[dic
             candidate[key] = metadata[key]
 
         adjusted = False
+        repair_status = {fmt: "original" for fmt in FORMATS}
         for fmt in FORMATS:
             original = candidate["layouts"][fmt]
             try:
@@ -424,8 +425,12 @@ def normalize_paid_ai_concepts(payload: dict[str, Any], brief: dict) -> list[dic
             replacement = _repair_roi_footer(candidate, fmt, brief, index)
             if replacement is None:
                 # A safe, editable layout is better than discarding a paid
-                # response and asking OpenAI to repeat it.
+                # response and asking OpenAI to repeat it. BUT label this
+                # honestly: it is no longer the AI-authored composition.
                 replacement = _safe_layout(fmt, index)
+                repair_status[fmt] = "fallback"
+            else:
+                repair_status[fmt] = "repaired"
             candidate["layouts"][fmt] = replacement
             adjusted = True
 
@@ -437,7 +442,8 @@ def normalize_paid_ai_concepts(payload: dict[str, Any], brief: dict) -> list[dic
         validated = validate_concept(candidate)
         for fmt in FORMATS:
             validate_renderability(validated, brief, fmt)
-        result.append(dict(validated, id=f"concept_{index}"))
+        result.append(dict(validated, id=f"concept_{index}",
+                           layout_repair=repair_status))
     return result
 
 
@@ -511,6 +517,7 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "You are the art director of an industrial B2B advertising studio. "
         "Design EXACTLY THREE distinct, credible and high-end poster compositions "
         "for 4:3 and 9:16. Return only JSON matching the strict schema. "
+        "Return the name and rationale IN RUSSIAN, not English. "
         "Keep each name under 75 characters, each rationale under 260 characters "
         "(one concise sentence about visual hierarchy), and each scene_prompt "
         "under 600 characters. All three descriptive fields must be nonempty. "
@@ -540,6 +547,9 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
         "for 9:16 it maps to 1080x1920. "
         "Allocate generous space for product silhouette and factual specifications; "
         "avoid tiny captions. Build distinct spatial compositions, not just colors. "
+        "Choose foreground hex color with at least 4.5:1 contrast against "
+        "white and light gray text panels; do not use white/light gray text "
+        "on white specification cards. "
         "Choose palette hex colors. scene_prompt describes only photorealistic "
         "industrial BACKGROUND behind a separately composited original product, "
         "without lettering, logos, vehicles, or invented product geometry. "

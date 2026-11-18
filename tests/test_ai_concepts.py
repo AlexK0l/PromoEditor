@@ -436,6 +436,7 @@ def test_paid_model_roi_footer_overlap_is_repaired_without_another_api_call(monk
     assert repaired[0]["layouts"]["4x3"]["roi"]["h"]<130
     assert repaired[0]["layouts"]["9x16"]==raw[0]["layouts"]["9x16"]
     assert "адаптировано" in repaired[0]["rationale"]
+    assert repaired[0]["layout_repair"]=={"4x3":"repaired","9x16":"original"}
     assert raw[0]["layouts"]["4x3"]["roi"]["h"]==130  # source unchanged
     from app.ai_concept_renderer import render_ai_concept_svg
     for item in repaired:
@@ -457,8 +458,10 @@ def test_paid_ai_response_with_severe_overlap_recovers_distinct_safe_composition
                 for item in fixed})==3
     for item in fixed:
         assert "адаптировано" in item["rationale"]
+        assert item["layout_repair"]=={"4x3":"fallback","9x16":"fallback"}
         for fmt in ("4x3","9x16"):
-            ai_layout.validate_concept({k:v for k,v in item.items() if k!="id"})
+            ai_layout.validate_concept({k:v for k,v in item.items()
+                                        if k not in ("id","layout_repair")})
             assert ET.fromstring(render_ai_concept_svg(default_brief(),fmt,item)).tag.endswith("svg")
 
 
@@ -467,6 +470,8 @@ def test_paid_layout_recovery_preserves_valid_and_rejects_untrusted_palette():
     exact=ai_layout.normalize_paid_ai_concepts({"concepts":raw},default_brief())
     assert all(item["layouts"]==raw[i]["layouts"] for i,item in enumerate(exact))
     assert all("адаптировано" not in item["rationale"] for item in exact)
+    assert all(item["layout_repair"]=={"4x3":"original","9x16":"original"}
+               for item in exact)
     bad=_concepts()
     bad[0]["palette"]["accent"]="url(javascript:alert(1))"
     with pytest.raises(ValueError,match="цвет"):
@@ -485,3 +490,33 @@ def test_paid_ai_layout_preflight_failure_uses_readable_no_cost_fallback():
         ai_layout.validate_renderability(concept,brief,"9x16")
     assert raw[2]["layouts"]["4x3"]["specs"]["h"]==180
 
+
+
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+@pytest.mark.parametrize("bad_ink", ["#FFFFFF", "#F7F7F7", "#D9DDE1"])
+def test_ai_pro_pale_foreground_is_replaced_for_readability(fmt,bad_ink):
+    """Reproduce the washed-out specs, headings, benefits and ROI from VPS."""
+    from app.ai_concept_renderer import render_ai_concept_svg, _contrast_ratio
+    concepts=_concepts()
+    concepts[0]["palette"]["foreground"]=bad_ink
+    item=ai_layout.normalize_concepts({"concepts":concepts})[0]
+    root=ET.fromstring(render_ai_concept_svg(default_brief(),fmt,item))
+    ids=("ai-spec-name-","ai-benefit-text-","ai-slogan-",
+         "ai-roi-name-","ai-dim-name-")
+    for prefix in ids:
+        nodes=[node for node in root.findall(".//s:text",SVG)
+               if node.get("id","").startswith(prefix)]
+        assert nodes,(fmt,prefix)
+        assert all(_contrast_ratio(node.get("fill"),"#FFFFFF")>=4.5
+                   for node in nodes),(fmt,prefix,bad_ink)
+
+
+def test_ai_pro_preserves_accessible_dark_foreground():
+    from app.ai_concept_renderer import render_ai_concept_svg
+    root=ET.fromstring(render_ai_concept_svg(
+        default_brief(),"4x3",
+        ai_layout.normalize_concepts({"concepts":_concepts()})[0]))
+    nodes=[n for n in root.findall(".//s:text",SVG)
+           if n.get("id","").startswith("ai-spec-name-")]
+    assert nodes and all(node.get("fill")=="#182235" for node in nodes)
