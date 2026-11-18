@@ -11,6 +11,8 @@ from .editable_export import Scene
 from .campaign_layout import _lines, _photo
 from .campaign_pro_v4 import _tight_product_photo, _side_elevation
 from .render import compute_roi
+from .ai_art_direction import (direction_of,direction_mark,hero_stage,
+                               hero_frame,panel_detail)
 
 
 def _rect(layout, name, canvas):
@@ -72,40 +74,55 @@ def _contrast_text(hex_color):
     return "#172235" if light>.183 else "#FFFFFF"
 
 
-def _header(scene, brief, logo, rect, colors):
+def _header(scene, brief, logo, rect, colors, system='sales'):
     x,y,w,h=rect
     accent, ink=colors["accent"], colors["foreground"]
-    _panel(scene,"heading",x,y,w,h,"header","#F9FAFC",0)
-    scene.rect("heading",x,y,w,max(9,h*.09),accent,ident="ai-header-line")
+    paper="#1A3044" if system=="engineering" else (
+        "#FCFBF8" if system=="editorial" else "#F9FAFC")
+    _panel(scene,"heading",x,y,w,h,"header",paper,0)
+    if system=="engineering":
+        scene.rect("heading",x,y,w,5,accent,ident="ai-header-line")
+        scene.rect("heading",x,y+h-4,w,4,accent,
+                   ident="ai-engineering-header-base")
+        ink="#FFFFFF"
+        model_color="#FFFFFF"
+    elif system=="editorial":
+        scene.rect("heading",x,y,w,3,accent,ident="ai-header-line")
+        scene.rect("heading",x+15,y+h-7,max(5,w*.18),2,accent,
+                   ident="ai-editorial-header-hairline")
+        model_color=ink
+    else:
+        scene.rect("heading",x,y,w,max(9,h*.09),accent,
+                   ident="ai-header-line")
+        model_color=accent
     logo_w=min(w*.19, max(100,h*1.2))
     if logo is not None:
         scene.bitmap("logo",logo,x+11,y+16,logo_w-19,h-29,"original-logo")
     else:
         scene.text("logo",str(brief.get("brand") or "ПРОМО").upper(),x+10,y+25,
-                   logo_w-14,h-30,max(20,min(39,h*.32)),13,accent,
+                   logo_w-14,h-30,max(20,min(39,h*.32)),13,
+                   "#FFFFFF" if system=="engineering" else accent,
                    True,"ai-brand",2)
     left=x+logo_w+14
     _heading(scene,"heading",str(brief.get("category") or "").upper(),
              left,y+12,w-logo_w-28,h*.22,ink,29)
     scene.text("heading",str(brief.get("model") or ""),
                left,y+h*.32,w-logo_w-28,h*.40,
-               max(31,min(64,h*.42)),20,accent,True,"ai-product-model",2)
+               max(31,min(64,h*.42)),20,model_color,True,"ai-product-model",2)
     slogan=str(brief.get("slogan") or "")
     if slogan:
         scene.text("heading",slogan,left,y+h*.77,w-logo_w-28,h*.22,
                    max(16,min(25,h*.19)),12,ink,True,"ai-slogan",2)
 
 
-def _hero(scene, hero, detail, backdrop, rect, colors, ai_product):
+def _hero(scene, hero, detail, backdrop, rect, colors, ai_product,
+          system='sales'):
     x,y,w,h=rect
-    _panel(scene,"photos",x,y,w,h,"hero","#EAF0F4")
     if backdrop is not None and not ai_product:
-        item=_photo(scene,backdrop,x,y,w,h,"ai-scene",layer="photos",cover=True)
+        _panel(scene,"photos",x,y,w,h,"hero","#EAF0F4")
+        _photo(scene,backdrop,x,y,w,h,"ai-scene",layer="photos",cover=True)
     else:
-        scene.polygon("photos",[(x,y+h*.72),(x+w,y+h*.59),(x+w,y+h),
-                               (x,y+h)],"#DAE1E8",ident="ai-ground-plane")
-        scene.polygon("photos",[(x,y),(x+w*.32,y),(x+w*.10,y+h)],
-                      "#F5F7FA",ident="ai-light-beam")
+        hero_stage(scene,rect,colors,system)
     source=hero
     if source is not None:
         product=source if ai_product else _tight_product_photo(source)
@@ -125,10 +142,13 @@ def _hero(scene, hero, detail, backdrop, rect, colors, ai_product):
         scene.rect("photos",dx-3,dy-3,iw+6,ih+6,"#FFFFFF",
                    rad=6,ident="ai-detail-frame")
         _photo(scene,detail,dx,dy,iw,ih,"detail-photo",layer="photos",trim=True)
-    scene.rect("photos",x,y+h-5,w,5,colors["accent"],ident="ai-hero-underline")
+    hero_frame(scene,rect,colors,system)
+    if system=="sales":
+        scene.rect("photos",x,y+h-5,w,5,colors["accent"],
+                   ident="ai-hero-underline")
 
 
-def _hero_claims(scene, brief, rect, colors):
+def _hero_claims(scene, brief, rect, colors, system='sales'):
     """Preserve user-written sales claims in addition to benefit cards.
 
     Avoid repeating claims when only hero_claims are supplied: the benefits
@@ -154,13 +174,17 @@ def _hero_claims(scene, brief, rect, colors):
     rows=(len(messages)+columns-1)//columns
     band_h=min(h*.37,max(80,36+43*rows))
     top=y+h-band_h-9
+    background=("#1E3246" if system=="engineering" else
+                "#FCFAF5" if system=="editorial" else
+                _dark_accent(colors["accent"]))
+    claim_ink="#172235" if system=="editorial" else "#FFFFFF"
     scene.rect("claims",x+7,top,w-14,band_h,
-               _dark_accent(colors["accent"]),rad=8,opacity=".93",
-               ident="ai-hero-claims-panel")
+               background,rad=6 if system=="editorial" else 8,
+               opacity=".96",ident="ai-hero-claims-panel")
     scene.rect("claims",x+7,top,6,band_h,colors["accent"],
                ident="ai-hero-claims-rail")
     scene.text("claims","КЛЮЧЕВЫЕ ТЕЗИСЫ",
-               x+21,top+4,w-42,24,17,11,"#FFFFFF",
+               x+21,top+4,w-42,24,17,11,claim_ink,
                True,"ai-hero-claims-heading",1)
     left=x+19
     upper=top+32
@@ -177,7 +201,7 @@ def _hero_claims(scene, brief, rect, colors):
         scene.text("claims",claim,cx+17,cy+1,
                    cw-25,max(16,ch-2),
                    max(13,min(18,ch*.46)),10,
-                   "#FFFFFF",True,f"ai-hero-claim-{i}",3)
+                   claim_ink,True,f"ai-hero-claim-{i}",3)
 
 
 def _specs(scene, brief, rect, colors):
