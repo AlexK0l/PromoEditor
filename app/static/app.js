@@ -107,6 +107,13 @@
       'Нет API-ключа. Быстрый шаблон доступен без OpenAI.';
     $('use-openai').disabled=!apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
+    for(const id of ['mode-hybrid','mode-ai-pro']){
+      $(id).disabled=!apiReady;
+      $(id).closest('label').classList.toggle('is-disabled',!apiReady);
+    }
+    $('hybrid-mode-hint').textContent=apiReady?
+      'AI рисует только фон. Два платных запроса; исходники и SVG останутся редактируемыми.':
+      'Недоступно: на сервере не подключён OpenAI. Выберите бесплатный вариант.';
     refreshGenerationMode();
   }
 
@@ -489,6 +496,7 @@
     $('advanced-settings').open=false;
     $('color-label').textContent='#E31B26';
     hasDemo=false;
+    $('brief-data-hint').textContent='Характеристики, цена и телефоны — в разделе «Данные для рекламы». По эталону ZubrTrail 500 они заполняются автоматически.';
     $('reset-btn').textContent='Заполнить пример';
     latest=null;$('download-panel').hidden=true;
     ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=true);
@@ -514,6 +522,7 @@
       $('mode-template').checked=!apiReady;
       $('mode-ai-pro').checked=false;
       $('advanced-settings').open=false;
+      $('brief-data-hint').textContent='Эталон загружен: 10 характеристик, 7 размеров, цена 6 527 000 ₽, телефоны и расчёт выгоды. Для проверки откройте «Данные для рекламы».';
       hasDemo=false;
       latest=null;$('download-panel').hidden=true;
       markPromptStale();
@@ -551,6 +560,7 @@
       $('mode-ai-pro').checked=false;
       $('use-openai').checked=false;$('use-demo').checked=true;$('parse-ai').checked=false;
       $('advanced-settings').open=false;
+      $('brief-data-hint').textContent='Загружен тестовый пример. Его значения не являются подтверждёнными сведениями о вашем товаре.';
       $('extract-box').hidden=true;
       hasDemo=true;
       latest=null;$('download-panel').hidden=true;
