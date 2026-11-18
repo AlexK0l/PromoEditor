@@ -142,10 +142,10 @@
         <details id="advanced-settings" class="advanced">
       <summary><span class="settings-icon" aria-hidden="true">⚙</span><span><strong>Данные для рекламы</strong><small>Точные характеристики, цена, телефоны и расчёт выгоды</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
       <div class="advanced-body">
-        <div class="advanced-group">
-          <div class="group-title"><h3>Характеристики и преимущества</h3><p>Если цифры должны быть точными, впишите их здесь или извлеките из документов.</p></div>
-
-          <label class="field" for="claims"><span>Короткие преимущества <span class="field-hint">одно на строку, до 4</span></span><textarea id="claims" rows="3" placeholder="Легче на 2,5 т&#10;Больше полезной нагрузки"></textarea></label>
+        <details id="data-facts" class="data-group">
+            <summary><span><strong>Характеристики и размеры</strong><small>ТТХ, преимущества, габариты</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+            <div class="data-group-body">
+              <label class="field" for="claims"><span>Короткие преимущества <span class="field-hint">одно на строку, до 4</span></span><textarea id="claims" rows="3" placeholder="Легче на 2,5 т&#10;Больше полезной нагрузки"></textarea></label>
           <label class="field" for="specs"><span>Технические характеристики <span class="field-hint">Название | Значение</span></span><textarea id="specs" class="monospace" rows="5" placeholder="Грузоподъёмность | 44 т&#10;Объём кузова | 55 м³"></textarea></label>
           <label class="field" for="benefits"><span>Другие преимущества</span><textarea id="benefits" rows="3" placeholder="Алюминиевый кузов&#10;Проверенные компоненты"></textarea></label>
           <label class="field" for="proof-points"><span>Подтверждённые факты <span class="field-hint">для PRO, до 4 строк</span></span><textarea id="proof-points" rows="3" placeholder="Например: гарантия 24 месяца — только если подтверждена&#10;Сервисное обслуживание по договору"></textarea><small class="field-tip">Не копируйте заявления из эталона. Публикуйте только собственные проверенные факты.</small></label>
@@ -153,37 +153,46 @@
           <div class="document-tools"><div><strong>Характеристики из документов</strong><small>После загрузки нажмите «Извлечь характеристики» рядом с документами. Проверьте все значения перед применением.</small></div></div>
           <label class="check-field"><input id="parse-ai" type="checkbox"><span>Использовать OpenAI для анализа документов <small>Отдельный платный запрос</small></span></label>
           <div id="extract-box" class="extract-box" hidden><strong>Предложенные характеристики</strong><p id="extract-summary"></p><textarea id="extract-result" rows="5" aria-label="Извлечённые характеристики для проверки"></textarea><button type="button" id="apply-extracted" class="secondary-button">Применить к таблице ТТХ</button><small>Проверяйте данные перед публикацией.</small></div>
-        </div>
-        <div class="advanced-group">
-          <div class="group-title"><h3>Другие материалы</h3><p>Дополнительные изображения не обязательны.</p></div>
-          <div class="extra-uploads">
+            </div>
+          </details>
+        <details id="data-photos" class="data-group">
+            <summary><span><strong>Другие изображения</strong><small>Дополнительный ракурс и референсы</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+            <div class="data-group-body">
+              <div class="extra-uploads">
             <label class="mini-upload" for="detail"><span class="mini-icon">▣</span><span><strong>Второе фото</strong><small id="file-detail">Дополнительный ракурс</small></span><span class="mini-plus">+</span><input id="detail" type="file" accept="image/png,image/jpeg,image/webp"></label>
             <label class="mini-upload" for="references"><span class="mini-icon">▧</span><span><strong>Референсы</strong><small id="file-references">Можно несколько; до 2 попадут в AI-сцену</small></span><span class="mini-plus">+</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>
           </div>
           <div class="extra-clear"><button type="button" data-clear="detail" hidden>Убрать второе фото</button><button type="button" data-clear="references" hidden>Убрать референсы</button></div>
-        </div>
-        <div class="advanced-group">
-          <div class="group-title"><h3>Цена и контакты</h3></div>
-          <div class="price-grid"><label class="field" for="price"><span>Цена</span><input id="price" placeholder="229998" inputmode="decimal"></label><label class="field" for="currency"><span>Валюта</span><select id="currency"><option value="Br">Br</option><option value="BYN">BYN</option><option value="₽">₽</option><option value="€">€</option><option value="$">$</option></select></label></div>
+            </div>
+          </details>
+        <details id="data-contacts" class="data-group">
+            <summary><span><strong>Цена и контакты</strong><small>Цена, валюта и телефоны</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+            <div class="data-group-body">
+              <div class="price-grid"><label class="field" for="price"><span>Цена</span><input id="price" placeholder="229998" inputmode="decimal"></label><label class="field" for="currency"><span>Валюта</span><select id="currency"><option value="Br">Br</option><option value="BYN">BYN</option><option value="₽">₽</option><option value="€">€</option><option value="$">$</option></select></label></div>
           <label class="check-field"><input id="vat" type="checkbox" checked><span>Указывать «с НДС»</span></label>
           <label class="field" for="phones"><span>Телефоны <span class="field-hint">до двух, каждый с новой строки</span></span><textarea id="phones" rows="2" placeholder="+375 (29) 000-00-00"></textarea></label>
-        </div>
-        <div class="advanced-group">
-          <div class="group-title"><h3>Расчёт окупаемости</h3><p>Добавляйте только если исходные данные проверены.</p></div>
-          <label class="check-field"><input id="show-roi" type="checkbox"><span>Показать расчёт на промоматериале</span></label>
+            </div>
+          </details>
+        <details id="data-roi" class="data-group">
+            <summary><span><strong>Экономический расчёт</strong><small>Окупаемость и дополнительная выручка</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+            <div class="data-group-body">
+              <label class="check-field"><input id="show-roi" type="checkbox"><span>Показать расчёт на промоматериале</span></label>
           <div id="roi-fields" class="roi-fields" hidden>
             <div class="two-fields"><label class="field" for="extra-payload"><span>Доп. загрузка, т</span><input id="extra-payload" value="2.5" inputmode="decimal"></label><label class="field" for="distance"><span>Плечо, км</span><input id="distance" value="300" inputmode="decimal"></label></div>
             <div class="two-fields"><label class="field" for="rate"><span>Ставка за т/км</span><input id="rate" value="0.19" inputmode="decimal"></label><label class="field" for="trips"><span>Рейсов в год</span><input id="trips" value="240" inputmode="decimal"></label></div>
             <div class="two-fields"><label class="field" for="years"><span>Горизонт, лет</span><input id="years" value="5" inputmode="decimal"></label><label class="field" for="baseline-price"><span>Цена аналога</span><input id="baseline-price" value="149499" inputmode="decimal"></label></div>
             <div id="roi-preview" class="roi-preview">Заполните параметры для расчёта.</div>
           </div>
-        </div>
-        <div class="advanced-group">
-          <div class="group-title"><h3>Точная настройка дизайна</h3></div>
-          <label class="field" for="accent"><span>Акцентный цвет</span><div class="color-control"><input id="accent" type="color" value="#e31b26"><span id="color-label">#E31B26</span></div></label>
+            </div>
+          </details>
+        <details id="data-design" class="data-group">
+            <summary><span><strong>Точные настройки</strong><small>Цвет, качество AI и демонстрация</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+            <div class="data-group-body">
+              <label class="field" for="accent"><span>Акцентный цвет</span><div class="color-control"><input id="accent" type="color" value="#e31b26"><span id="color-label">#E31B26</span></div></label>
           <div class="two-fields"><label class="field" for="image-model"><span>Модель OpenAI</span><select id="image-model"><option value="gpt-image-2.5-flare">GPT Image 2.5 Flare</option><option value="gpt-image-2.5-sunburst">GPT Image 2.5 Sunburst</option></select></label><label class="field" for="image-quality"><span>Качество</span><select id="image-quality"><option value="low">Черновое</option><option value="medium" selected>Стандартное</option><option value="high">Высокое</option></select></label></div>
           <label class="check-field"><input id="use-demo" type="checkbox"><span>Использовать демонстрационную иллюстрацию, если нет фото <small>Только в режиме без OpenAI. Демонстрация не является изображением вашего товара.</small></span></label>
-        </div>
+            </div>
+          </details>
       </div>
     </details>
 
