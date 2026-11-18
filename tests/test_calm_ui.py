@@ -81,6 +81,13 @@ def test_all_advanced_controls_remain_available_but_closed_at_launch():
     for ident, detail in mapping.items():
         assert detail in parser.parents.get(ident, ()), (ident, parser.parents.get(ident))
         assert detail in parser.closed_by_default, detail
+    for ident, subgroup in {
+        "specs": "data-facts", "dimensions": "data-facts",
+        "price": "data-contacts", "phones": "data-contacts",
+        "show-roi": "data-roi", "image-quality": "data-design",
+    }.items():
+        assert subgroup in parser.parents[ident]
+        assert subgroup in parser.closed_by_default
     assert "logo" in parser.parents and "drawing" in parser.parents
     assert not parser.parents["logo"] and not parser.parents["drawing"]
     # The brief must still precede the prominent creation button.
