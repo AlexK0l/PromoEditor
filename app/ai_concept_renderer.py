@@ -232,7 +232,8 @@ def _specs(scene, brief, rect, colors, system="sales"):
     if not rows:return
     x,y,w,h=rect
     a,ink=colors["accent"],colors["foreground"]
-    _panel(scene,"specs",x,y,w,h,"specs")
+    _panel(scene,"specs",x,y,w,h,"specs",
+           "#1E3549" if system=="engineering" else "#FFFFFF")
     band=min(40,h*.17)
     _section_banner(scene,"specs","ХАРАКТЕРИСТИКИ",
                     (x,y,w,band),colors,system,max(17,min(25,w*.045)))
@@ -276,7 +277,8 @@ def _specs(scene, brief, rect, colors, system="sales"):
         i=index+first_index
         sy=top+index*(row_h+gap)
         shade=("#FFFFFF" if system=="editorial" else
-               "#EEF2F5" if system=="engineering" and i%2==0 else
+               "#29465B" if system=="engineering" and i%2==0 else
+               "#243F55" if system=="engineering" else
                "#F3F5F7" if i%2==0 else "#FFFFFF")
         scene.rect("specs",x+5,sy,w-10,row_h,shade,rad=3,
                    ident=f"ai-spec-row-{i}")
@@ -286,11 +288,15 @@ def _specs(scene, brief, rect, colors, system="sales"):
         else:
             scene.rect("specs",x+5,sy,5,row_h,a,ident=f"ai-spec-edge-{i}")
         label_w=w*.58
+        name_ink="#FFFFFF" if system=="engineering" else ink
         scene.text("specs",name,x+15,sy+2,label_w-21,row_h-4,
-                   max(14,min(21,row_h*.44)),11,ink,True,
+                   max(14,min(21,row_h*.44)),11,name_ink,True,
                    f"ai-spec-name-{i}",2)
-        value_ink=(a if system!="editorial"
-                   and _contrast_ratio(a,shade)>=4.5 else ink)
+        value_ink=(
+            a if system!="editorial" and
+            _contrast_ratio(a,shade)>=4.5 else
+            "#FFFFFF" if system=="engineering" else ink
+        )
         scene.text("specs",value,x+label_w,sy+2,w-label_w-13,row_h-4,
                    max(16,min(26,row_h*.52)),11,value_ink,True,
                    f"ai-spec-value-{i}",2)
