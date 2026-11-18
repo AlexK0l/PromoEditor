@@ -53,6 +53,12 @@ def main():
         assert len(requests)==1
         assert "reference_example" not in requests[0]
         assert page.locator("#generate-btn").is_disabled()
+        assert page.locator(".ai-concept-preview").count()==6
+        for i in range(3):
+            card=page.locator(".ai-concept-card").nth(i)
+            assert card.locator(".ai-concept-preview--landscape img").get_attribute("src")=="/static/demo_4x3.svg"
+            assert card.locator(".ai-concept-preview--portrait img").get_attribute("src")=="/static/demo_9x16.svg"
+            assert "4:3" in card.inner_text() and "9:16" in card.inner_text()
         page.locator(".ai-concept-card").nth(1).locator("button").click()
         assert page.locator(".ai-concept-card").nth(1).get_attribute("class").endswith("is-selected")
         assert not page.locator("#generate-btn").is_disabled()

@@ -151,19 +151,30 @@
     for(const item of aiConceptSet.concepts){
       const card=document.createElement('article');
       card.className='ai-concept-card'+(item.index===selectedAiConcept?' is-selected':'');
-      const img=document.createElement('img');
-      img.src=item.previews['4x3'];img.alt='Концепция '+(item.index+1)+': '+item.name;
-      img.loading='lazy';card.appendChild(img);
+      const gallery=document.createElement('div');
+      gallery.className='ai-concept-previews';
+      for(const [format,label,shape] of [
+        ['4x3','Горизонтальный · 4:3','landscape'],
+        ['9x16','Вертикальный · 9:16','portrait']
+      ]){
+        const preview=document.createElement('a');
+        preview.href=item.previews[format];preview.target='_blank';preview.rel='noopener';
+        preview.className='ai-concept-preview ai-concept-preview--'+shape;
+        preview.setAttribute('aria-label','Открыть '+label+' концепции '+item.name);
+        const image=document.createElement('img');
+        image.src=item.previews[format];
+        image.alt=label+' · концепция '+(item.index+1)+': '+item.name;
+        image.loading='lazy';
+        const name=document.createElement('span');name.textContent=label;
+        preview.append(image,name);
+        gallery.appendChild(preview);
+      }
+      card.appendChild(gallery);
       const heading=document.createElement('strong');
       heading.textContent=String.fromCharCode(65+item.index)+' · '+item.name;
       card.appendChild(heading);
       const caption=document.createElement('p');caption.textContent=item.rationale;
       card.appendChild(caption);
-      const links=document.createElement('div');links.className='concept-switch';
-      const portrait=document.createElement('a');portrait.href=item.previews['9x16'];
-      portrait.target='_blank';portrait.rel='noopener';
-      portrait.textContent='Посмотреть 9:16';
-      links.appendChild(portrait);card.appendChild(links);
       const choose=document.createElement('button');choose.type='button';
       choose.textContent=item.index===selectedAiConcept?'✓ Концепция выбрана':'Выбрать эту концепцию';
       choose.setAttribute('aria-pressed',String(item.index===selectedAiConcept));
@@ -204,7 +215,7 @@
       renderAiConcepts();refreshGenerationMode();
       $('ai-concepts-status').textContent=
         'Три концепции готовы. Эталон '+(result.reference_used?'использован как стилистический ориентир.':'не потребовался.')+
-        ' Выберите понравившуюся композицию.';
+        ' Сравните оба формата у каждой концепции и выберите лучший вариант.';
       $('ai-concepts-workflow').scrollIntoView({behavior:'smooth',block:'center'});
     }catch(error){
       $('ai-concepts-status').textContent='Не удалось создать концепции.';
