@@ -23,6 +23,7 @@ from PIL import Image, ImageDraw
 
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
 from .openai_service import analyze_documents, generate_visuals
+from .ai_poster_service import generate_full_posters, WARNING as AI_POSTER_WARNING
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -56,6 +57,8 @@ ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
 FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
        'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','layout_spec.json','edit.png'}
 FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16')})
+FILES.update({f'ai_poster_{fmt}.{ext}' for fmt in ('4x3','9x16') for ext in ('png','jpg')})
+FILES.add('ai_posters.zip')
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
@@ -489,6 +492,120 @@ def _build_concept_previews_sync(brief, report, records, concepts,
                 'reference_used':reference_raw is not None,
                 'style':style,'goal':goal,
                 'message':'AI разработал три композиции. Выберите одну для финальной сборки.'}
+
+
+
+
+def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
+                       reference_raw, model, quality):
+    """Store model-authored artwork separate from the validated SVG output."""
+    # These calls spend from the persistent daily Images API budget.
+    posters = generate_full_posters(
+        brief, product_raw, logo=logo_raw, drawing=drawing_raw,
+        reference=reference_raw, model=model, quality=quality)
+    _clean_jobs()
+    job_id=secrets.token_hex(16)
+    folder=STORAGE/job_id
+    folder.mkdir(mode=0o700)
+    try:
+        images={};jpegs={}
+        for fmt in ('4x3','9x16'):
+            png=f'ai_poster_{fmt}.png'
+            jpg=f'ai_poster_{fmt}.jpg'
+            posters[fmt].save(folder/png,format='PNG')
+            posters[fmt].save(folder/jpg,format='JPEG',
+                              quality=93,subsampling=0)
+            images[fmt]=f'/files/{job_id}/{png}'
+            jpegs[fmt]=f'/files/{job_id}/{jpg}'
+        archive=folder/'ai_posters.zip'
+        with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,
+                             compresslevel=6) as z:
+            for fmt in ('4x3','9x16'):
+                z.write(folder/f'ai_poster_{fmt}.png',
+                        arcname=f'ai_poster_{fmt}.png')
+                z.write(folder/f'ai_poster_{fmt}.jpg',
+                        arcname=f'ai_poster_{fmt}.jpg')
+            z.writestr('brief.json',
+                       json.dumps(brief,ensure_ascii=False,indent=2))
+            z.writestr('REVIEW_BEFORE_PUBLICATION.txt',
+                       AI_POSTER_WARNING+'\nРедактируемые SVG создаются '
+                       'отдельно в режиме векторных концепций.\n')
+            for name,raw in (('product_photo',product_raw),
+                             ('customer_logo',logo_raw),
+                             ('drawing_preview',drawing_raw),
+                             ('style_reference',reference_raw)):
+                if not raw:
+                    continue
+                with Image.open(io.BytesIO(raw)) as original:
+                    suffix={ 'JPEG':'.jpg','PNG':'.png','WEBP':'.webp' }.get(
+                        original.format,'.bin')
+                z.writestr(f'originals/{name}{suffix}',
+                           raw,compress_type=zipfile.ZIP_STORED)
+        return {'job_id':job_id,'images':images,'jpeg':jpegs,
+                'zip':f'/files/{job_id}/ai_posters.zip',
+                'generation_mode':'openai_full_poster',
+                'ai_used':True,'raster_only':True,
+                'reference_used':reference_raw is not None,
+                'warnings':[AI_POSTER_WARNING]}
+    except Exception:
+        shutil.rmtree(folder,ignore_errors=True)
+        raise
+
+
+@app.post('/api/ai-posters')
+async def create_full_ai_posters(request:Request):
+    """Two explicit paid Images edits; never requires an exemplar.
+
+    User-authored facts and photos are treated as sources, not AI claims.
+    The resulting raster must be proofread prior to public distribution.
+    """
+    _guard_rate(request)
+    if not os.getenv('OPENAI_API_KEY'):
+        raise HTTPException(400,detail='Для AI-постеров настройте OPENAI_API_KEY.')
+    if int(request.headers.get('content-length') or 0)>MAX_ALL:
+        raise HTTPException(413,detail='Превышен общий лимит 68 МБ.')
+    form=await request.form()
+    raw=form.get('payload','{}')
+    if not isinstance(raw,str) or len(raw)>48000:
+        raise HTTPException(400,detail='Некорректный бриф.')
+    try:
+        brief=_normalize(json.loads(raw))
+    except (ValueError,json.JSONDecodeError) as exc:
+        raise HTTPException(400,detail='Некорректные данные брифа.') from exc
+    if not brief.get('model'):
+        raise HTTPException(400,detail='Укажите модель товара.')
+    from .openai_service import IMAGE_MODELS, IMAGE_QUALITIES
+    model=str(form.get('model','gpt-image-2.5-flare'))
+    quality=str(form.get('quality','medium'))
+    if model not in IMAGE_MODELS or quality not in IMAGE_QUALITIES:
+        raise HTTPException(400,detail='Недопустимые настройки модели OpenAI.')
+    groups=await _asset_groups(form)
+    prefs,cached=_asset_review(form)
+    try:
+        report,records=await asyncio.to_thread(
+            analyze_project,groups,prefs,cached_report=cached,use_ai=False)
+        product=chosen_bytes(report,records,'primary_photo')
+        if not product:
+            raise HTTPException(400,detail='Загрузите и выберите главное фото техники.')
+        drawing=chosen_bytes(report,records,'drawing')
+        drawing_id=report['selected_assets'].get('drawing')
+        if drawing and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
+            drawing=await asyncio.to_thread(pdf_first_page_png,drawing)
+        return await asyncio.to_thread(
+            _full_posters_sync,brief,product,
+            chosen_bytes(report,records,'logo'),drawing,
+            chosen_bytes(report,records,'reference_example'),model,quality)
+    except QuotaExceeded as exc:
+        raise HTTPException(429,detail=str(exc)) from exc
+    except QuotaStoreUnavailable as exc:
+        raise HTTPException(503,detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(400,detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            502,detail=f'Не удалось создать AI-постеры ({type(exc).__name__}).') from exc
 
 
 @app.post('/api/concepts')

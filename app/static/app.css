@@ -262,3 +262,15 @@ button:disabled{cursor:not-allowed;opacity:.48}
 }
 
 .ai-creative-settings[hidden],.ai-concepts-workflow[hidden],.ai-concept-grid[hidden]{display:none!important}
+
+
+/* Actual OpenAI Images posters, separately labelled from editable SVG plans. */
+.ai-poster-results{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);
+  align-items:start;gap:14px;margin-top:16px}
+.ai-poster-results>a:not(.secondary-button){min-width:0;display:flex;flex-direction:column;gap:8px;
+  color:#dce9fc;text-decoration:none;text-align:center;font-size:13px;font-weight:700}
+.ai-poster-results img{display:block;width:100%;max-height:420px;object-fit:contain;
+  background:#edf1f5;border-radius:8px}
+.ai-poster-results>.secondary-button{grid-column:1/-1;text-align:center}
+.ai-poster-results[hidden]{display:none!important}
+@media(max-width:650px){.ai-poster-results{grid-template-columns:minmax(0,1fr)}}

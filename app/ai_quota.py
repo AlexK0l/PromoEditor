@@ -113,3 +113,45 @@ def reserve_paid_call(kind: str) -> None:
             "Сервер не смог записать учёт платных вызовов OpenAI. "
             "Запрос отклонён, чтобы не превысить лимит расходов."
         ) from exc
+
+
+
+def check_paid_capacity(kind: str, needed: int) -> None:
+    """Reject multi-image workflows when the daily quota cannot cover them.
+
+    Read-only preflight: actual paid calls continue to use atomic reservations.
+    Concurrent external usage can still change available capacity later.
+    """
+    if kind not in _ENV or needed < 0:
+        raise ValueError("Неизвестная категория или число платных запросов.")
+    if needed == 0:
+        return
+    limit = _limit(kind)
+    env, _, label = _ENV[kind]
+    if limit == 0:
+        raise QuotaExceeded(
+            f"Платные вызовы OpenAI ({label}) отключены лимитом {env}=0.")
+    path = _data_dir() / "openai_call_quota.sqlite3"
+    used = 0
+    if path.is_file():
+        try:
+            with closing(sqlite3.connect(
+                f"file:{path}?mode=ro", uri=True, timeout=10)) as db:
+                row = db.execute(
+                    "SELECT attempts FROM paid_call_usage "
+                    "WHERE utc_day=? AND category=?",
+                    (_utc_day(), kind),
+                ).fetchone()
+                used = int(row[0]) if row else 0
+        except (OSError, sqlite3.Error) as exc:
+            raise QuotaStoreUnavailable(
+                "Невозможно проверить суточный остаток OpenAI. "
+                "Новые платные запросы заблокированы.") from exc
+    available = max(0, limit-used)
+    if available < needed:
+        raise QuotaExceeded(
+            f"Для создания двух AI-постеров нужно {needed} новых вызова "
+            f"OpenAI Images, а доступно сегодня по UTC: {available} "
+            f"(лимит {limit}). Проверьте {env} или дождитесь нового дня. "
+            "Ни один новый платный вызов не отправлен."
+        )
