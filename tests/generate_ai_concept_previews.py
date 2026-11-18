@@ -71,7 +71,7 @@ def main():
     brief["style"]="reference_pro"
     hero,drawing,logo=sources()
     proposal={
-        "id":"sample_ci",
+        "id":"concept_0",
         "name":"Техно-премиум",
         "rationale":"Продукт и чертёж остаются центральными.",
         "scene_prompt":"Bright grain terminal background without vehicles or words",
@@ -82,14 +82,22 @@ def main():
         },
         "layouts":layouts(),
     }
-    for key in ("4x3","9x16"):
-        svg=render_ai_concept_svg(brief,key,proposal,hero=hero,
-                                  drawing=drawing,logo=logo)
-        png,_=rasterize_svg(svg)
-        (target/f"ai_first_{key}.svg").write_bytes(svg)
-        (target/f"ai_first_{key}.png").write_bytes(png)
-        print(f"AI-first reference: {key} — {len(svg)} SVG bytes, {len(png)} PNG bytes")
-    print(f"Saved visual review to {target}")
+    # Same customer facts and SAME rectangles isolate the effect of actual
+    # visual direction: dynamic sales, blueprint, editorial minimalism.
+    for index,name in enumerate(("sales","engineering","editorial")):
+        design={**proposal,"id":f"concept_{index}"}
+        for key in ("4x3","9x16"):
+            svg=render_ai_concept_svg(brief,key,design,hero=hero,
+                                      drawing=drawing,logo=logo)
+            png,_=rasterize_svg(svg)
+            (target/f"ai_direction_{index}_{name}_{key}.svg").write_bytes(svg)
+            (target/f"ai_direction_{index}_{name}_{key}.png").write_bytes(png)
+            if index==0:
+                # Preserve existing CI artifact links consumed by reviewers.
+                (target/f"ai_first_{key}.svg").write_bytes(svg)
+                (target/f"ai_first_{key}.png").write_bytes(png)
+            print(f"Art direction {name}: {key} — {len(svg)} SVG, {len(png)} PNG bytes")
+    print(f"Saved six editable visual review samples to {target}")
 
 
 if __name__=="__main__":
