@@ -175,7 +175,8 @@ def main():
         assert 'Анализ выполнен' not in quick.locator('#assets-analysis-status').inner_text()
         quick.locator('#generate-btn').click()
         quick.wait_for_function('!document.getElementById("download-panel").hidden',timeout=60000)
-        assert 'Анализ выполнен' in quick.locator('#assets-analysis-status').inner_text()
+        assert quick.evaluate('window.PromoAssets.isReady()')
+        assert quick.locator('#asset-selection').count()==1
         assert quick.locator('#individual-downloads').evaluate('(el)=>!el.open')
         assert quick.locator('#download-all').is_enabled()
         assert not errors,errors
