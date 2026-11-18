@@ -9,6 +9,7 @@ import io
 import json
 from PIL import Image, ImageOps
 from .image_analysis import analysis_preview
+from .ai_quota import check_paid_capacity
 from .openai_service import (
     client, as_image, IMAGE_MODELS, IMAGE_QUALITIES,
     _default_visual_cache, _visual_lock,
@@ -157,9 +158,13 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
             brief, True, sources, model, quality, VERSION, "complete-poster")
     output = {}
     with _visual_lock(cache_dir):
+        # Before consuming even ONE image credit, require sufficient daily
+        # quota for all missing aspects. Partial paid images are reused.
+        cached = {fmt: _cached_visual(cache_dir, fmt) for fmt in FORMATS}
+        check_paid_capacity("image", sum(img is None for img in cached.values()))
         api = None
         for fmt, (target, api_size) in FORMATS.items():
-            image = _cached_visual(cache_dir, fmt)
+            image = cached[fmt]
             if image is None:
                 inputs = [_input_png(product_photo, "01_real_product")]
                 if logo:
