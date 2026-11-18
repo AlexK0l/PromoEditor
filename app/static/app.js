@@ -335,6 +335,7 @@
     $('analyze-assets-btn').disabled=on;
     $('asset-rebuild').disabled=on;
     $('reset-btn').disabled=on;
+    $('approved-preset-btn').disabled=on;
     $('inspect-btn').disabled=on||!$('documents').files.length;
     $('loading').hidden=!on;
     const button=$('generate-btn');
@@ -478,6 +479,37 @@
     ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=true);
     clearError();updateRoi();refreshStyle();updateFileLabels();updateAi();
   }
+  async function loadApprovedPreset(){
+    if(isBusy||isDemoLoading)return;
+    clearError();
+    const button=$('approved-preset-btn');
+    button.disabled=true;
+    try{
+      const response=await fetch('/api/presets/zubrtrail-500',{cache:'no-store'});
+      if(!response.ok)throw new Error(await readError(response));
+      const {brief}=await response.json();
+      if(!brief?.model)throw new Error('Утверждённый эталон недоступен.');
+      fillBrief(brief);
+      invalidateAiConcepts();
+      for(const id of fileIds)$(id).value='';
+      window.PromoAssets?.reset();
+      $('use-demo').checked=false;
+      $('use-openai').checked=apiReady;
+      $('mode-hybrid').checked=apiReady;
+      $('mode-template').checked=!apiReady;
+      $('mode-ai-pro').checked=false;
+      $('advanced-settings').open=true;
+      hasDemo=false;
+      latest=null;$('download-panel').hidden=true;
+      markPromptStale();
+      updateAi();updateFileLabels();updateRoi();refreshStyle();
+      setStatus('Эталон ZubrTrail 500 загружен',
+        'Цена, ТТХ, экономика и телефоны заполнены. Добавьте оригинальные изображения, логотип и чертёж.');
+      $('model').scrollIntoView({behavior:'smooth',block:'center'});
+    }catch(error){showError(error.message||'Не удалось загрузить утверждённый эталон.');}
+    finally{button.disabled=false;}
+  }
+
   async function resetDemo(){
     if(isBusy||isDemoLoading)return;
     if(hasDemo){clearForm();return;}
@@ -650,6 +682,7 @@
     $('promo-prompt-status').textContent='Промпт изменён вручную. Он будет отправлен для AI-сцены и сохранён в ZIP.';
     invalidateResult();
   });
+  $('approved-preset-btn').addEventListener('click',loadApprovedPreset);
   $('reset-btn').addEventListener('click',resetDemo);
   $('generate-concepts-btn').addEventListener('click',generateAiConcepts);
   $('generate-ai-posters-btn').addEventListener('click',generateFullAiPosters);
