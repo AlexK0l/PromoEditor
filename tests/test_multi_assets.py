@@ -327,7 +327,8 @@ def test_main_upload_exposes_drawing_before_advanced_settings():
     page=client.get("/").text
     assert page.count('id="drawing"')==1
     assert page.index('id="drawing"')<page.index('id="advanced-settings"')
-    assert "Использовать как чертёж" in page
+    assert 'id="asset-files-details"' in page
+    assert "Проверить файлы и выбрать главный ракурс" in page
     scripts=client.get("/static/assets.js").text
     assert "option('drawing','Использовать как чертёж')" in scripts
 
