@@ -6,7 +6,9 @@ not cross the values, and 9:16 must not silently drop user hero claims.
 import math
 import xml.etree.ElementTree as ET
 
-from PIL import Image
+from PIL import Image, ImageDraw
+import io
+import base64
 
 from app.editable_export import create_editable_svg, _font
 from app.render import default_brief
@@ -86,3 +88,51 @@ def test_four_portrait_dimensions_with_drawing_do_not_cross_rules_or_footer():
     assert max(float(x.get("y"))+float(x.get("height"))
                for x in cards) < float(footer.get("y"))
     assert "КЛЮЧЕВЫЕ ТЕЗИСЫ" in _text(root)
+
+
+def _two_view_engineering_sheet():
+    """A synthetic side+rear technical sheet, not a copied brand drawing."""
+    paper=Image.new("RGB",(1200,900),"white")
+    pen=ImageDraw.Draw(paper)
+    pen.rectangle((42,22,1140,340),outline="#252525",width=3)
+    for x in range(65,1125,28):
+        pen.line((x,40,x,338),fill="#313131",width=2)
+    for y in (123,173,223,273):
+        pen.line((42,y,1140,y),fill="#373737",width=2)
+    pen.rectangle((490,550,715,845),outline="#333333",width=3)
+    for x in range(510,700,24):
+        pen.line((x,560,x,825),fill="#333333",width=2)
+    return paper
+
+
+def test_portrait_enlarges_real_side_projection_from_two_view_drawing():
+    brief=default_brief()
+    brief["style"]="reference_pro"
+    original=_two_view_engineering_sheet()
+    root=ET.fromstring(create_editable_svg(brief,"9x16",drawing=original))
+    assert _parts(root,"pro3-portrait-side-view-label","text")
+    technical=_parts(root,"original-drawing","image")
+    assert len(technical)==1
+    href=technical[0].get("{http://www.w3.org/1999/xlink}href")
+    with Image.open(io.BytesIO(base64.b64decode(href.split(",",1)[1]))) as view:
+        assert view.width/view.height>2.9
+        placement_width=float(technical[0].get("width"))
+        placement_height=float(technical[0].get("height"))
+        displayed_width=min(placement_width, placement_height*view.width/view.height)
+        assert displayed_width>=495, displayed_width
+    assert original.size==(1200,900)  # Source is not cropped or rewritten.
+    for key,value in brief["dimensions"]:
+        assert value in _text(root),(key,value)
+
+
+def test_portrait_keeps_uncertain_technical_sheets_complete():
+    brief=default_brief()
+    brief["style"]="reference_pro"
+    # No evidence of a wide side projection: do not crop arbitrary contents.
+    sheet=Image.new("RGB",(900,900),"white")
+    root=ET.fromstring(create_editable_svg(brief,"9x16",drawing=sheet))
+    assert not _parts(root,"pro3-portrait-side-view-label","text")
+    image=_parts(root,"original-drawing","image")[0]
+    href=image.get("{http://www.w3.org/1999/xlink}href")
+    with Image.open(io.BytesIO(base64.b64decode(href.split(",",1)[1]))) as copy:
+        assert copy.size==(900,900)

@@ -12,6 +12,7 @@ from .campaign_layout import _check, _format_price, _lines, _photo, _rule, _spec
 from .campaign_pro import _tint, _benefit_icon
 from .editable_export import Scene, _wrap
 from .render import compute_roi
+from .drawing_views import _side_elevation
 
 INK = "#151923"
 RED = "#E31B26"
@@ -339,8 +340,16 @@ def _dims(scene, brief, detail, drawing, x, y, w, h, accent, portrait):
         work_h=h-59
         if drawing is not None:
             dw=w*.54
-            _photo(scene,drawing,x+10,work_y,dw-16,work_h,
+            # The same conservative real side-elevation crop as the 4:3 PRO
+            # layout. Never shrink a two-view technical sheet into a tiny
+            # poster inset; leave the complete original unchanged in ZIP.
+            view,cropped=_side_elevation(drawing)
+            _photo(scene,view,x+10,work_y,dw-16,work_h,
                    "original-drawing",layer="dimensions")
+            if cropped:
+                _type(scene,"dimensions","БОКОВОЙ ВИД",
+                      x+w-255,y+7,225,28,17,11,accent,True,
+                      "pro3-portrait-side-view-label",1)
             first=x+dw+4
             rest=w-dw-14
             cols=1
