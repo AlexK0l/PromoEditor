@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const fileIds = ['hero','documents','logo','detail','drawing','references','background','reference_example'];
   const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','proof-points','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo','design-style','design-goal'];
-  const placeholders = {documents:'Несколько документов · PDF / Word / Excel',logo:'Несколько логотипов',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Несколько референсов; система отберёт до 2',background:'Фото сцены (необязательно)',reference_example:'Необязательный рекламный пример'};
+  const placeholders = {documents:'Документы с характеристиками',logo:'Оригинальное изображение',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Референсы (необязательно)',background:'Свой фон (необязательно)',reference_example:'Пример оформления (необязательно)'};
   let latest = null;
   let apiReady = false;
   let isBusy = false;
@@ -78,8 +78,8 @@
   function updateFileLabels(){
     const heroFiles=Array.from($('hero').files);
     const hero=heroFiles[0];
-    $('hero-label').textContent=heroFiles.length>1?`${heroFiles.length} фотографий товара`:hero?(hero.name.length>45?hero.name.slice(0,42)+'…':hero.name):'Добавить фотографии товара';
-    $('hero-hint').textContent=hero?'Можно добавить ещё фотографии':'Перетащите несколько фото или выберите файлы';
+    $('hero-label').textContent=heroFiles.length>1?`${heroFiles.length} фотографий товара`:hero?(hero.name.length>45?hero.name.slice(0,42)+'…':hero.name):'Загрузите фото товара';
+    $('hero-hint').textContent=hero?'Можно добавить ещё фотографии':'Выберите фото, можно несколько.';
     $('hero-drop').classList.toggle('has-file',Boolean(hero));
     $('clear-hero').hidden=!hero;
     for(const id of fileIds.filter(v=>v!=='hero')){
@@ -92,7 +92,7 @@
     $('inspect-btn').disabled=isBusy||!$('documents').files.length;
     $('inspect-btn').hidden=!$('documents').files.length;
     const count=fileIds.reduce((total,id)=>total+$(id).files.length,0);
-    $('file-feedback').textContent=count?`Прикреплено файлов: ${count}. Лучшие материалы будут выбраны после анализа; не все войдут в промо.`:'Фото и логотипы встраиваются в SVG-исходники ZIP.';
+    $('file-feedback').textContent=count?`Файлов: ${count}. Лучший ракурс будет выбран автоматически при создании макета.`:'Изображения сохранятся в ZIP без изменений.';
   }
   function refreshStyle(){
     document.querySelectorAll('[data-style]').forEach(button=>{
@@ -130,9 +130,9 @@
     $('ai-concepts-workflow').hidden=!ai;
     $('openai-posters-workflow').hidden=!ai;
     $('prompt-workflow').hidden=ai;
+    $('expert-prompt').hidden=ai;
     $('generate-btn').textContent=ai
-      ?'Собрать выбранную AI-концепцию →':hybrid
-        ?'Собрать гибридный PRO · SVG + PNG →':'Создать PNG · JPEG · SVG →';
+      ?'Собрать выбранную AI-концепцию →':'Создать два макета →';
     $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
     $('generate-concepts-btn').disabled=isBusy||!apiReady;
     $('generate-ai-posters-btn').disabled=isBusy||!apiReady;
@@ -142,12 +142,13 @@
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
-        setStatus(apiReady?'Гибридный PRO · точный SVG':'Для гибридного режима нужен OpenAI',
-          apiReady?'AI создаёт только фон; оригиналы и данные остаются редактируемыми. 2 платных вызова.':
-            'Выберите бесплатный шаблон или настройте OpenAI API на сервере.');
+        setStatus(apiReady?'С AI-фоном · 2 платных запроса':'AI недоступен',
+          apiReady?'Фото, логотип, чертёж и точные надписи не перерисовываются.':
+            'Выберите бесплатный шаблон.');
       }else{
-        setStatus(checked('use-openai')?'Шаблон + AI-фон':'Быстрый шаблон',
-          checked('use-openai')?'2 платных запроса на изображение':'Без затрат на OpenAI.');
+        setStatus(checked('use-openai')?'Шаблон с AI-фоном':'Без AI · бесплатно',
+          checked('use-openai')?'Два платных запроса. Сохраним ваши фотографии и данные.':
+            'Точные макеты 4:3 и 9:16 без платных запросов.');
       }
     }
   }
@@ -369,6 +370,7 @@
   }
 
   async function generate(){
+    if(isBusy)return;
     clearError();
     if(!get('model').trim()){
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
@@ -381,16 +383,25 @@
     if(isAiPro()&&(!aiConceptSet||selectedAiConcept===null)){
       showError('Сначала создайте три AI-концепции и выберите одну из них.');return;
     }
-    if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
-      showError('Сначала нажмите «Проанализировать материалы», проверьте выбор и при необходимости измените приоритеты.');return;
-    }
     if(checked('use-openai')&&!apiReady){showError('OpenAI не подключён на сервере. Используйте обычную сборку или настройте ключ в VPS.');return;}
     if(!checked('use-openai')&&!isHybrid()&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
       showError('Сначала добавьте фото товара или нажмите «Заполнить пример» для пробного комплекта.');return;
     }
     invalidateResult();busy(true);
-    setStatus('Создаём промо','Генерируем два SVG-исходника, PNG и JPEG.','working');
+    setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
     try {
+      if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
+        // The basic workflow runs FREE asset analysis automatically.
+        // Even when an expert explicitly enabled paid analysis, do not
+        // spend on it without using the separate confirmed action.
+        setStatus('Выбираем главное фото','Бесплатно проверяем ракурсы и роли файлов.','working');
+        const report=await window.PromoAssets.analyze(formBrief(),{freeOnly:true});
+        if(!report)throw new Error('Не удалось автоматически выбрать файлы.');
+      }
+      const selected=window.PromoAssets?.getReport?.();
+      if(isHybrid()&&window.PromoAssets?.hasFiles()&&!selected?.selected_assets?.primary_photo)
+        throw new Error('Не найдено главное фото товара. Откройте проверку материалов и назначьте главный ракурс.');
+      setStatus('Создаём оба макета','Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
       const prompt=(promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim();
       const form=new FormData();form.append('payload',JSON.stringify(formBrief()));
       form.append('prompt',prompt);
@@ -423,6 +434,10 @@
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
+      if(/файл|фото|ракурс|материал/i.test(error.message||'')){
+        $('asset-review-details').open=true;
+        $('asset-files-details').open=true;
+      }
       showError(error.message||'Не удалось завершить генерацию.');
     }finally{busy(false);}
   }
@@ -498,7 +513,7 @@
       $('mode-hybrid').checked=apiReady;
       $('mode-template').checked=!apiReady;
       $('mode-ai-pro').checked=false;
-      $('advanced-settings').open=true;
+      $('advanced-settings').open=false;
       hasDemo=false;
       latest=null;$('download-panel').hidden=true;
       markPromptStale();
@@ -532,6 +547,8 @@
       $('color-label').textContent=selectedAccent.toUpperCase();
       for(const id of fileIds)$(id).value='';
       window.PromoAssets?.reset();
+      $('mode-template').checked=true;$('mode-hybrid').checked=false;
+      $('mode-ai-pro').checked=false;
       $('use-openai').checked=false;$('use-demo').checked=true;$('parse-ai').checked=false;
       $('advanced-settings').open=false;
       $('extract-box').hidden=true;
