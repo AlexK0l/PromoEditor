@@ -655,6 +655,7 @@
     }
     set('specs',asLines(combined));
     $('advanced-settings').open=true;
+    $('data-facts').open=true;
     markPromptStale();invalidateResult();
     setStatus('ТТХ перенесены','Проверьте каждую характеристику по источникам перед публикацией.');
     $('specs').scrollIntoView({behavior:'smooth',block:'center'});
@@ -677,6 +678,8 @@
       set('dimensions',asLines(facts.dimensions.map(row=>[row.label,row.value])));count++;
     }
     $('advanced-settings').open=true;
+    $('data-facts').open=true;
+    $('data-contacts').open=true;
     markPromptStale();invalidateResult();
     setStatus('Предложения перенесены',count?
       'Перенесено незаполненных полей: '+count+'. Проверьте каждый факт.':
@@ -714,7 +717,7 @@
   $('apply-extracted').addEventListener('click',()=>{
     const values=$('extract-result').value.trim();
     if(!values){showError('Нет характеристик для переноса.');return;}
-    set('specs',values);$('advanced-settings').open=true;$('extract-box').hidden=true;
+    set('specs',values);$('advanced-settings').open=true;$('data-facts').open=true;$('extract-box').hidden=true;
     markPromptStale();invalidateResult();setStatus('ТТХ перенесены','Проверьте каждую характеристику до публикации.');
     $('specs').scrollIntoView({behavior:'smooth',block:'center'});
   });
