@@ -105,6 +105,11 @@ def test_prompt_reaches_two_ai_generation_requests(monkeypatch):
             calls.append(kwargs)
             return type('Result',(),{'data':[type('Datum',(),{'b64_json':encoded})()]})()
     monkeypatch.setattr(openai_service,'client',lambda:type('API',(),{'images':Images()})())
+    # This test asserts in-process prompt dispatch with a fake SDK.
+    # A separate integration test exercises the real child-process boundary.
+    from app import main
+    monkeypatch.setattr(main, 'run_render_task',
+                        lambda action,*args:main._generate_sync(*args))
     monkeypatch.setenv('OPENAI_API_KEY','fake-for-test-only')
     prompt='Красивый светлый фон с мягкой подсветкой техники.'
     r=client.post('/api/generate',data={'payload':payload(),'use_openai':'true','prompt':prompt})
