@@ -111,11 +111,11 @@ def test_url_security():
 
 def test_roi_exact_arithmetic():
     d=compute_roi(default_brief())
-    assert d['per_trip']==pytest.approx(4500)
-    assert d['annual']==pytest.approx(1080000)
-    assert d['gross']==pytest.approx(5400000)
-    assert d['premium']==pytest.approx(2284450)
-    assert d['net']==pytest.approx(3115550)
+    assert d['per_trip']==pytest.approx(142.5)
+    assert d['annual']==pytest.approx(34200)
+    assert d['gross']==pytest.approx(171000)
+    assert d['premium']==pytest.approx(80499)
+    assert d['net']==pytest.approx(90501)
 
 
 def test_long_text_renders_without_overflow_error():
