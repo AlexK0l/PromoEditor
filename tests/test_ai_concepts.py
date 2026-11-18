@@ -182,8 +182,8 @@ def test_ai_concepts_preview_and_final_preserve_approved_facts_and_originals(
             root=ET.fromstring(svg)
             texts=" ".join(" ".join(n.itertext())
                            for n in root.findall(".//s:text",SVG))
-            for wanted in ("ZubrTrail 500","6 527 000",
-                           "44 т","+7 (951) 704-30-42"):
+            for wanted in ("ZubrTrail 500","229 998",
+                           "44 т","+375 (225) 72-01-03"):
                 assert wanted in texts,(fmt,wanted,texts[:500])
             assert len(root.findall(".//s:image",SVG))>=2
             assert kit.read(f"poster_{fmt}.png").startswith(b"\x89PNG")
@@ -242,7 +242,7 @@ def test_narrow_portrait_economics_keeps_all_four_labels_and_amounts():
         if node.get("id","").startswith("ai-roi-value-")
     ]
     assert len(labels)==len(values)==4
-    for expected in ("ЗА РЕЙС, ₽","РЕЙСОВ В ГОД","ЗА ГОД, ₽","БАЛАНС, ₽"):
+    for expected in ("ЗА РЕЙС, Br","РЕЙСОВ В ГОД","ЗА ГОД, Br","БАЛАНС, Br"):
         assert expected in labels,(expected,labels)
     from app.render import compute_roi
     money=compute_roi(brief)
@@ -571,8 +571,8 @@ def test_three_art_directed_ai_systems_are_visually_distinct_and_editable(fmt):
         assert any(el.startswith("original-product-photo-") for el in ids)
         texts=" ".join(" ".join(el.itertext())
                        for el in root.findall(".//s:text",SVG))
-        for required in ("ZubrTrail 500","44 т","6 527 000",
-                         "+7 (951) 704-30-42"):
+        for required in ("ZubrTrail 500","44 т","229 998",
+                         "+375 (225) 72-01-03"):
             assert required in texts,(fmt,mark,required)
         png,_=rasterize_svg(svg)
         image=Image.open(io.BytesIO(png)).convert("RGB")
