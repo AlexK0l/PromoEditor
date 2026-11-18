@@ -103,3 +103,27 @@ def test_invalid_render_timeout_fails_closed(monkeypatch, tmp_path):
 def test_render_and_document_workers_share_memory_budget_slot():
     from app.document_worker import _PARSE_SLOTS
     assert _PARSE_SLOTS is render_worker._RENDER_SLOTS
+
+
+def test_paid_raster_poster_worker_respects_zero_quota_before_api(monkeypatch, tmp_path):
+    """The additional raster-poster action is isolated and fail-closed too."""
+    import io
+    from PIL import Image
+
+    monkeypatch.setenv("PROMO_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY", "0")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-never-sent")
+    with io.BytesIO() as output:
+        Image.new("RGB", (180, 110), "yellow").save(output, "PNG")
+        photo = output.getvalue()
+    with pytest.raises(QuotaExceeded, match="PROMO_AI_IMAGE_CALLS_PER_DAY=0"):
+        run_render_task("posters", default_brief(), photo, None, None,
+                        None, "gpt-image-2.5-flare", "medium")
+    assert not list(tmp_path.iterdir())
+
+
+def test_unknown_worker_action_cannot_launch_subprocess(monkeypatch, tmp_path):
+    monkeypatch.setenv("PROMO_DATA_DIR", str(tmp_path))
+    with pytest.raises(RenderWorkerError, match="Неизвестное"):
+        run_render_task("raw-file-upload", b"secret-but-test-only")
+    assert not list(tmp_path.iterdir())
