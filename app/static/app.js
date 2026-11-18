@@ -165,8 +165,26 @@
         image.src=item.previews[format];
         image.alt=label+' · концепция '+(item.index+1)+': '+item.name;
         image.loading='lazy';
+        image.addEventListener('error',()=>{
+          // Avoid a broken-image icon + huge alt text (seen on the 3rd 9:16
+          // card). Keep the original URL so users can retry without
+          // triggering another paid OpenAI request.
+          const warning=document.createElement('span');
+          warning.className='ai-preview-error';
+          warning.textContent='Превью не загрузилось · открыть файл';
+          image.replaceWith(warning);
+        },{once:true});
         const name=document.createElement('span');name.textContent=label;
         preview.append(image,name);
+        const repair=item.layout_repair?.[format];
+        if(repair==='fallback' || repair==='repaired'){
+          const notice=document.createElement('span');
+          notice.className='ai-layout-repair ai-layout-repair--'+repair;
+          notice.textContent=repair==='fallback'
+            ?'Резервная сетка вместо AI-композиции'
+            :'Геометрия AI-композиции исправлена';
+          preview.appendChild(notice);
+        }
         gallery.appendChild(preview);
       }
       card.appendChild(gallery);
@@ -213,9 +231,17 @@
         throw new Error('Не удалось получить три полноценные концепции.');
       aiConceptSet=result;selectedAiConcept=null;
       renderAiConcepts();refreshGenerationMode();
-      $('ai-concepts-status').textContent=
-        'Три концепции готовы. Эталон '+(result.reference_used?'использован как стилистический ориентир.':'не потребовался.')+
-        ' Сравните оба формата у каждой концепции и выберите лучший вариант.';
+      const fallbackCount=result.concepts.reduce((total,item)=>
+        total+Object.values(item.layout_repair||{}).filter(v=>v==='fallback').length,0);
+      const completeness=fallbackCount
+        ?'Получены три варианта, но '+fallbackCount+
+          ' из шести макетов используют резервную сетку вместо композиции AI. '
+        :'Три концепции готовы. ';
+      const referenceNote=result.reference_used
+        ?'Загруженный эталон использован только как ориентир стиля. '
+        :'Рекламный эталон не передавался — сходство с образцом не оценивалось. ';
+      $('ai-concepts-status').textContent=completeness+referenceNote+
+        'Сравните оба формата у каждой концепции.';
       $('ai-concepts-workflow').scrollIntoView({behavior:'smooth',block:'center'});
     }catch(error){
       $('ai-concepts-status').textContent='Не удалось создать концепции.';
