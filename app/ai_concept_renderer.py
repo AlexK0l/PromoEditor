@@ -115,9 +115,37 @@ def _header(scene, brief, logo, rect, colors, system='sales'):
                    max(16,min(25,h*.19)),12,ink,True,"ai-slogan",2)
 
 
+def _distinct_sales_claims(brief):
+    """Nonduplicated user claims that must be shown besides benefits."""
+    benefits={str(item).strip().casefold()
+              for item in (brief.get("benefits") or []) if str(item).strip()}
+    if not benefits:
+        return []
+    messages=[]
+    seen=set()
+    for item in (brief.get("hero_claims") or [])[:4]:
+        claim=str(item).strip()
+        key=claim.casefold()
+        if claim and key not in benefits and key not in seen:
+            messages.append(claim)
+            seen.add(key)
+    return messages
+
+
+def _claim_band_height(brief, rect):
+    messages=_distinct_sales_claims(brief)
+    if not messages:
+        return 0
+    h=rect[3]
+    columns=2 if len(messages)>1 else 1
+    rows=(len(messages)+columns-1)//columns
+    return min(h*.37,max(80,36+43*rows))
+
+
 def _hero(scene, hero, detail, backdrop, rect, colors, ai_product,
-          system='sales'):
+          system='sales', reserved_claims=0):
     x,y,w,h=rect
+    photo_h=h if ai_product else max(95,h-reserved_claims-17)
     if backdrop is not None and not ai_product:
         _panel(scene,"photos",x,y,w,h,"hero","#EAF0F4")
         _photo(scene,backdrop,x,y,w,h,"ai-scene",layer="photos",cover=True)
@@ -126,19 +154,19 @@ def _hero(scene, hero, detail, backdrop, rect, colors, ai_product,
     source=hero
     if source is not None:
         product=source if ai_product else _tight_product_photo(source)
-        _photo(scene,product,x+w*.015,y+h*.02,w*.97,h*.94,
+        _photo(scene,product,x+w*.015,y+photo_h*.02,w*.97,photo_h*.94,
                "ai-product-bitmap" if ai_product else "original-product-photo")
         if ai_product:
-            scene.text("claims","AI-ВИЗУАЛИЗАЦИЯ",x+15,y+h*.88,w*.45,h*.08,
+            scene.text("claims","AI-ВИЗУАЛИЗАЦИЯ",x+15,y+8 if reserved_claims else y+h*.88,w*.45,h*.08,
                        19,12,"#B11D2E",True,"ai-visual-disclosure",1)
     else:
         scene.text("photos","ФОТО ТОВАРА",x+w*.20,y+h*.38,w*.60,h*.22,
                    35,18,"#8995A6",True,"ai-photo-placeholder",1)
     if detail is not None and h >= 160 and w >= 340:
         dx=x+11
-        dy=y+h*.73
         iw=min(w*.25,160)
-        ih=min(h*.24,110)
+        ih=min(h*.24,110,max(35,photo_h*.24))
+        dy=y+photo_h-ih-12
         scene.rect("photos",dx-3,dy-3,iw+6,ih+6,"#FFFFFF",
                    rad=6,ident="ai-detail-frame")
         _photo(scene,detail,dx,dy,iw,ih,"detail-photo",layer="photos",trim=True)
@@ -154,25 +182,13 @@ def _hero_claims(scene, brief, rect, colors, system='sales'):
     Avoid repeating claims when only hero_claims are supplied: the benefits
     block already uses them as its fallback. Never invent marketing copy.
     """
-    benefits={str(item).strip().casefold()
-              for item in (brief.get("benefits") or []) if str(item).strip()}
-    if not benefits:
-        return
-    messages=[]
-    seen=set()
-    for item in (brief.get("hero_claims") or [])[:4]:
-        claim=str(item).strip()
-        canonical=claim.casefold()
-        if claim and canonical not in benefits and canonical not in seen:
-            messages.append(claim)
-            seen.add(canonical)
+    messages=_distinct_sales_claims(brief)
     if not messages:
         return
-
     x,y,w,h=rect
     columns=2 if len(messages)>1 else 1
     rows=(len(messages)+columns-1)//columns
-    band_h=min(h*.37,max(80,36+43*rows))
+    band_h=_claim_band_height(brief,rect)
     top=y+h-band_h-9
     background=("#1E3246" if system=="engineering" else
                 "#FCFAF5" if system=="editorial" else
@@ -523,8 +539,9 @@ def render_ai_concept_svg(brief, key, concept, *,
     direction_mark(scene,system,colors["accent"])
     # Geometry and factual content remain validated and separately editable.
     _header(scene,brief,logo,_rect(layout,"header",scene),colors,system)
-    _hero(scene,hero,detail,backdrop,_rect(layout,"hero",scene),
-          colors,ai_product,system)
+    hero_rect=_rect(layout,"hero",scene)
+    _hero(scene,hero,detail,backdrop,hero_rect,colors,ai_product,system,
+          _claim_band_height(brief,hero_rect))
     _hero_claims(scene,brief,_rect(layout,"hero",scene),colors,system)
     _specs(scene,brief,_rect(layout,"specs",scene),colors,system)
     _dimensions(scene,brief,drawing,_rect(layout,"dimensions",scene),
