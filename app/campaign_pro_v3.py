@@ -12,6 +12,7 @@ from .campaign_layout import _check, _format_price, _lines, _photo, _rule, _spec
 from .campaign_pro import _tint, _benefit_icon
 from .editable_export import Scene, _wrap
 from .render import compute_roi
+from .drawing_views import _side_elevation
 
 INK = "#151923"
 RED = "#E31B26"
@@ -339,8 +340,16 @@ def _dims(scene, brief, detail, drawing, x, y, w, h, accent, portrait):
         work_h=h-59
         if drawing is not None:
             dw=w*.54
-            _photo(scene,drawing,x+10,work_y,dw-16,work_h,
+            # The same conservative real side-elevation crop as the 4:3 PRO
+            # layout. Never shrink a two-view technical sheet into a tiny
+            # poster inset; leave the complete original unchanged in ZIP.
+            view,cropped=_side_elevation(drawing)
+            _photo(scene,view,x+10,work_y,dw-16,work_h,
                    "original-drawing",layer="dimensions")
+            if cropped:
+                _type(scene,"dimensions","БОКОВОЙ ВИД",
+                      x+w-255,y+7,225,28,17,11,accent,True,
+                      "pro3-portrait-side-view-label",1)
             first=x+dw+4
             rest=w-dw-14
             cols=1
@@ -388,6 +397,26 @@ def _dims(scene, brief, detail, drawing, x, y, w, h, accent, portrait):
                    rad=5,ident=f"pro-dimension-cell-{i}")
         scene.rect("dimensions",px,py,cw,4,accent,
                    ident=f"pro3-dim-cap-{i}")
+        if portrait:
+            # Four dimensional rows beside a supplied engineering drawing are
+            # only ~55px tall. Put label and value in SIDE-BY-SIDE columns.
+            # Previously a horizontal measuring rule crossed the value line.
+            split=px+cw*.46
+            _rule(scene,"dimensions",split,py+7,
+                  split,py+ch-7,"#E1E5EA",1.2,
+                  f"pro3-dim-column-divider-{i}")
+            _type(scene,"dimensions",name.upper(),px+10,py+5,
+                  split-px-21,ch-10,18,11,
+                  MID,True,f"pro-dimension-name-{i}",2)
+            _type(scene,"dimensions",value,split+11,py+5,
+                  px+cw-split-23,ch-10,29,12,
+                  accent,True,f"pro-dimension-value-{i}",2)
+            # Retain a small decorative measurement edge, but never under
+            # text. Its ID is stable for downstream editable-SVG consumers.
+            _rule(scene,"dimensions",px+cw-6,py+6,
+                  px+cw-6,py+ch-6,accent,1.5,
+                  f"pro-dimension-measure-{i}")
+            continue
         name_height=min(31,ch*.36)
         _type(scene,"dimensions",name.upper(),px+12,py+7,
               cw-22,name_height,21,11,
@@ -523,12 +552,13 @@ def _roi(scene, brief, x, y, w, h, accent):
               accent,True,f"pro-roi-value-{i}",1)
 
 
-def _proof(scene, facts, x, y, w, h, accent):
+def _proof(scene, facts, x, y, w, h, accent, *, verified=True):
     if not facts:
         return
     scene.rect("benefits",x,y,w,h,"#FDFDFE",
                ident="pro-proof-panel")
-    proof_title="ПОДТВЕРЖДЁННЫЕ ФАКТЫ" if w>=850 else "ПОДТВЕРЖДЕНО"
+    proof_title=("ПОДТВЕРЖДЁННЫЕ ФАКТЫ" if verified else "КЛЮЧЕВЫЕ ТЕЗИСЫ")
+    if w<850:proof_title="ПОДТВЕРЖДЕНО" if verified else "ТЕЗИСЫ"
     _slug(scene,"benefits",proof_title,
           x+5,y+4,min(w*.36,310),h-8,
           accent,"pro3-proof-slug",21)
@@ -560,10 +590,12 @@ def _bottom_band(scene, brief, proof, x, y, w, h, accent):
     with_roi=bool(brief.get("show_roi") and compute_roi(brief))
     if proof and with_roi:
         split=w*.49
-        _proof(scene,proof,x,y,split-6,h,accent)
+        _proof(scene,proof,x,y,split-6,h,accent,
+               verified=bool(brief.get("proof_points")))
         _roi(scene,brief,x+split+4,y,w-split-4,h,accent)
     elif proof:
-        _proof(scene,proof,x,y,w,h,accent)
+        _proof(scene,proof,x,y,w,h,accent,
+               verified=bool(brief.get("proof_points")))
     elif with_roi:
         _roi(scene,brief,x,y,w,h,accent)
 
@@ -692,6 +724,11 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
               if str(s).strip()][:6]
     proof=[str(s).strip()[:180] for s in (brief.get("proof_points") or [])
            if str(s).strip()][:4]
+    if not proof:
+        # The 4:3 premium renderer already falls back to supplied hero claims.
+        # Use the same user-authored facts in portrait; never invent copy.
+        proof=[str(s).strip()[:120] for s in (brief.get("hero_claims") or [])
+               if str(s).strip()][:4]
     with_dim=bool(dims or drawing is not None)
     has_roi=bool(brief.get("show_roi") and compute_roi(brief))
     with_band=bool(proof or has_roi)
@@ -728,7 +765,8 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
         if long_proof:
             # More source text requires its own full-width factual row.
             # The optional ROI receives the following short quantitative row.
-            _proof(scene,proof,0,820,1440,73,accent)
+            _proof(scene,proof,0,820,1440,73,accent,
+                   verified=bool(brief.get("proof_points")))
             _roi(scene,brief,0,899,1440,60,accent)
         elif with_band:
             _bottom_band(scene,brief,proof,0,881,1440,77,accent)
@@ -742,15 +780,23 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
         # Use two full-width editorial bands when both types are supplied.
         specs_h=0
         if facts:
-            limit=370 if both else 411
+            # Make space for full-width dimension rows beside a real drawing.
+            limit=(330 if both else 366) if drawing is not None else (
+                370 if both else 411)
             row_count=math.ceil(len(facts)/2)
             # Do not reserve four large rows for a 1–2-fact submission.
             specs_h=min(limit,116*row_count+7*(row_count-1))
         dims_h=(176 if both else 202) if with_dim else 0
-        benefit_h=(188 if both else 224) if benefits else 0
-        proof_h=(101 if both else 0)
-        roi_h=(120 if both else 0)
-        band_h=proof_h+roi_h if both else (146 if with_band else 0)
+        if drawing is not None and dims:
+            # Four one-column rows need ~55px each for readable side-by-side
+            # labels and values; previously 176px forced text onto red rules.
+            dims_h=max(202,60+55*len(dims)+7*(len(dims)-1))
+        benefit_h=((178 if both else 196) if drawing is not None
+                   else (188 if both else 224)) if benefits else 0
+        proof_h=(90 if drawing is not None else 101) if both else 0
+        roi_h=(110 if drawing is not None else 120) if both else 0
+        band_h=proof_h+roi_h if both else (
+            (132 if drawing is not None else 146) if with_band else 0)
         band_gap=10 if both else 0
         count=sum(bool(v) for v in (specs_h,dims_h,benefit_h,band_h))
         gaps=count*10+band_gap
@@ -770,7 +816,8 @@ def create_pro_campaign_svg(brief, key, hero=None, detail=None,
                       benefit_h,accent,True)
             cursor+=benefit_h+10
         if both:
-            _proof(scene,proof,14,cursor,1052,proof_h,accent)
+            _proof(scene,proof,14,cursor,1052,proof_h,accent,
+                   verified=bool(brief.get("proof_points")))
             cursor+=proof_h+10
             _roi(scene,brief,14,cursor,1052,roi_h,accent)
         elif with_band:
