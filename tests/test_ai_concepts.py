@@ -594,3 +594,34 @@ def test_ai_system_header_treatments_and_source_palette_are_distinct(
         assert model[0].get("fill")==expected_ink
     assert item["palette"]["accent"]=="#D51E2A"
 
+
+@pytest.mark.parametrize("fmt", ["4x3", "9x16"])
+def test_sales_art_direction_has_large_metric_tiles_and_keeps_all_specs(fmt):
+    from app.ai_concept_renderer import render_ai_concept_svg
+    brief=default_brief()
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[0]
+    root=ET.fromstring(render_ai_concept_svg(brief,fmt,item))
+    ids=[el.get("id","") for el in root.iter()]
+    assert len([x for x in ids if x.startswith("ai-sales-stat-tile-")])==2
+    copy=" ".join(" ".join(node.itertext())
+                  for node in root.findall(".//s:text",SVG))
+    for name,value in brief["specs"][:8]:
+        assert name in copy and value in copy,(fmt,name,value)
+    assert len([x for x in ids if x.startswith("ai-spec-name-")])==8
+    assert len([x for x in ids if x.startswith("ai-spec-value-")])==8
+
+
+def test_overlong_lead_stat_labels_fall_back_to_safe_original_table():
+    from app.ai_concept_renderer import render_ai_concept_svg
+    brief=default_brief()
+    original=brief["specs"][0]
+    brief["specs"][0]=(
+        "Длинная техническая характеристика с примечаниями",
+        original[1],
+    )
+    item=ai_layout.normalize_concepts({"concepts":_concepts()})[0]
+    root=ET.fromstring(render_ai_concept_svg(brief,"4x3",item))
+    ids=[el.get("id","") for el in root.iter()]
+    assert not any(x.startswith("ai-sales-stat-tile-") for x in ids)
+    assert len([x for x in ids if x.startswith("ai-spec-row-")])==8
+
