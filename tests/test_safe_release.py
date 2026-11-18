@@ -74,6 +74,20 @@ def test_release_and_report_never_mutate_other_server_services():
         assert forbidden not in report
 
 
+def test_legacy_updater_requires_reviewed_sha_and_uses_transactional_release():
+    legacy = DEPLOY / "update.sh"
+    text = legacy.read_text(encoding="utf-8")
+    subprocess.run(["bash", "-n", str(legacy)], check=True)
+    no_arg = subprocess.run(
+        ["bash", str(legacy)], text=True,
+        capture_output=True, check=False)
+    assert no_arg.returncode == 2
+    assert "unsafe auto-update is disabled" in no_arg.stderr
+    assert 'safe_release.sh" "$1"' in text
+    assert "git merge --ff-only" not in text
+    assert "pip install" not in text
+
+
 def test_release_script_is_explicitly_root_only_and_env_safe():
     script = (DEPLOY / "safe_release.sh").read_text(encoding="utf-8")
     assert '[[ "$EUID" -eq 0 ]]' in script
