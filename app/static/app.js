@@ -103,7 +103,7 @@
   }
   function updateAi(){
     $('ai-description').textContent=apiReady?
-      'Необязательные 2 платных запроса на фоны при финальном экспорте. Концепции создаются отдельно.':
+      'Два платных запроса на чистые фоны для 4:3 и 9:16. Исходная техника, логотип и все цифры остаются отдельными.':
       'Нет API-ключа. Быстрый шаблон доступен без OpenAI.';
     $('use-openai').disabled=!apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
@@ -111,6 +111,7 @@
   }
 
   function isAiPro(){return checked('mode-ai-pro');}
+  function isHybrid(){return checked('mode-hybrid');}
   let fullAiPosterSet=null;
   function invalidateFullAiPosters(){
     fullAiPosterSet=null;
@@ -119,12 +120,19 @@
 
   function refreshGenerationMode(){
     const ai=isAiPro();
+    const hybrid=isHybrid();
+    // Hybrid is the default accurate editable workflow, with a mandatory
+    // AI background and immutable customer product/brand/source drawings.
+    if(hybrid)$('use-openai').checked=true;
+    $('use-openai').disabled=hybrid || !apiReady;
+    $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
     $('ai-creative-settings').hidden=!ai;
     $('ai-concepts-workflow').hidden=!ai;
     $('openai-posters-workflow').hidden=!ai;
     $('prompt-workflow').hidden=ai;
     $('generate-btn').textContent=ai
-      ?'Собрать выбранную AI-концепцию →':'Создать PNG · JPEG · SVG →';
+      ?'Собрать выбранную AI-концепцию →':hybrid
+        ?'Собрать гибридный PRO · SVG + PNG →':'Создать PNG · JPEG · SVG →';
     $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
     $('generate-concepts-btn').disabled=isBusy||!apiReady;
     $('generate-ai-posters-btn').disabled=isBusy||!apiReady;
@@ -133,6 +141,10 @@
         setStatus(apiReady?'AI PRO · OpenAI':'AI PRO недоступен',
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
+      }else if(hybrid){
+        setStatus(apiReady?'Гибридный PRO · точный SVG':'Для гибридного режима нужен OpenAI',
+          apiReady?'AI создаёт только фон; оригиналы и данные остаются редактируемыми. 2 платных вызова.':
+            'Выберите бесплатный шаблон или настройте OpenAI API на сервере.');
       }else{
         setStatus(checked('use-openai')?'Шаблон + AI-фон':'Быстрый шаблон',
           checked('use-openai')?'2 платных запроса на изображение':'Без затрат на OpenAI.');
@@ -361,6 +373,10 @@
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
     }
     const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(isHybrid()&&!apiReady){showError('Для гибридного режима требуется OpenAI API. Выберите бесплатный шаблон.');return;}
+    if(isHybrid()&&!window.PromoAssets?.hasFiles()&&!$('hero').files.length&&!$('detail').files.length){
+      showError('Для гибридного режима загрузите исходное фото товара.');return;
+    }
     if(isAiPro()&&(!aiConceptSet||selectedAiConcept===null)){
       showError('Сначала создайте три AI-концепции и выберите одну из них.');return;
     }
@@ -368,7 +384,7 @@
       showError('Сначала нажмите «Проанализировать материалы», проверьте выбор и при необходимости измените приоритеты.');return;
     }
     if(checked('use-openai')&&!apiReady){showError('OpenAI не подключён на сервере. Используйте обычную сборку или настройте ключ в VPS.');return;}
-    if(!checked('use-openai')&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
+    if(!checked('use-openai')&&!isHybrid()&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
       showError('Сначала добавьте фото товара или нажмите «Заполнить пример» для пробного комплекта.');return;
     }
     invalidateResult();busy(true);
@@ -379,9 +395,9 @@
       form.append('prompt',prompt);
       if(window.PromoAssets)window.PromoAssets.append(form);
       else fileIds.forEach(id=>appendFiles(form,id));
-      form.append('use_openai',String(checked('use-openai')));
+      form.append('use_openai',String(isHybrid()||checked('use-openai')));
       form.append('use_demo',String(checked('use-demo')));
-      form.append('generation_mode',isAiPro()?'ai_pro':'template');
+      form.append('generation_mode',isAiPro()?'ai_pro':isHybrid()?'hybrid':'template');
       if(isAiPro()){
         form.append('concept_set_id',aiConceptSet.concept_set_id);
         form.append('concept_index',String(selectedAiConcept));
@@ -401,7 +417,7 @@
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
-      setStatus('Готово',(isAiPro()?'Выбранный AI-дизайн':'Шаблон')+
+      setStatus('Готово',(isAiPro()?'Выбранный AI-дизайн':isHybrid()?'Гибридный PRO':'Шаблон')+
         ': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){
@@ -445,7 +461,9 @@
   function clearForm(){
     for(const id of ['brand','model','category','slogan','design-notes','design-actions','claims','specs','benefits','proof-points','dimensions','price','phones','promo-prompt'])set(id,'');
     invalidateAiConcepts();
-    $('mode-ai-pro').checked=true;$('mode-template').checked=false;
+    $('mode-hybrid').checked=apiReady;
+    $('mode-ai-pro').checked=false;
+    $('mode-template').checked=!apiReady;
     markPromptStale();
     set('currency','Br');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
@@ -512,6 +530,7 @@
     }catch{
       $('api-state').textContent='Сервер недоступен';
     }
+    if(!apiReady && isHybrid())$('mode-template').checked=true;
     updateAi();refreshStyle();updateFileLabels();updateRoi();
   }
 
@@ -634,8 +653,9 @@
   $('reset-btn').addEventListener('click',resetDemo);
   $('generate-concepts-btn').addEventListener('click',generateAiConcepts);
   $('generate-ai-posters-btn').addEventListener('click',generateFullAiPosters);
-  for(const id of ['mode-ai-pro','mode-template']){
+  for(const id of ['mode-hybrid','mode-ai-pro','mode-template']){
     $(id).addEventListener('change',()=>{
+      if(!isHybrid())$('use-openai').checked=false;
       refreshGenerationMode();invalidateResult();clearError();
     });
   }
