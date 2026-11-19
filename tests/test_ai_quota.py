@@ -61,16 +61,41 @@ def test_concurrent_requests_cannot_exceed_sqlite_quota(quota_env, monkeypatch):
     assert _count(quota_env, "image") == 5
 
 
-def test_zero_and_invalid_limits_fail_closed(quota_env, monkeypatch):
+def test_zero_is_unlimited_but_disabled_and_invalid_fail_closed(quota_env, monkeypatch):
     monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY", "0")
-    with pytest.raises(ai_quota.QuotaExceeded, match="отключены"):
+    monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY", "0")
+    for _ in range(100):
+        ai_quota.check_paid_capacity("image", 2)
         ai_quota.reserve_paid_call("image")
+        ai_quota.reserve_paid_call("text")
+    assert not (quota_env / "openai_call_quota.sqlite3").exists(), (
+        "Unlimited calls must not depend on SQLite or create usage rows"
+    )
+    for kind, key in (("image", "PROMO_AI_IMAGE_CALLS_PER_DAY"),
+                      ("text", "PROMO_AI_TEXT_CALLS_PER_DAY")):
+        monkeypatch.setenv(key, "disabled")
+        with pytest.raises(ai_quota.QuotaExceeded, match="отключены"):
+            ai_quota.reserve_paid_call(kind)
+        with pytest.raises(ai_quota.QuotaExceeded, match="отключены"):
+            ai_quota.check_paid_capacity(kind, 1)
+        monkeypatch.setenv(key, "0")
     monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY", "-1")
     with pytest.raises(ai_quota.QuotaStoreUnavailable):
         ai_quota.reserve_paid_call("image")
     monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY", "not-a-number")
     with pytest.raises(ai_quota.QuotaStoreUnavailable):
         ai_quota.reserve_paid_call("image")
+
+
+def test_missing_quota_settings_default_to_unlimited(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROMO_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("PROMO_AI_IMAGE_CALLS_PER_DAY", raising=False)
+    monkeypatch.delenv("PROMO_AI_TEXT_CALLS_PER_DAY", raising=False)
+    for _ in range(101):
+        ai_quota.reserve_paid_call("image")
+        ai_quota.reserve_paid_call("text")
+    ai_quota.check_paid_capacity("image", 2)
+    assert not list(tmp_path.iterdir())
 
 
 def test_unwritable_counter_path_never_allows_paid_call(quota_env, monkeypatch):
@@ -147,7 +172,7 @@ def test_timeout_consumes_attempt_as_conservative_budget(quota_env, monkeypatch)
 def test_exhausted_layout_budget_rejected_before_openai_request(quota_env, monkeypatch):
     import openai
     monkeypatch.setenv("OPENAI_API_KEY", "test-token-not-real")
-    monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY", "0")
+    monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY", "disabled")
     monkeypatch.setattr(main, "_guard_rate", lambda request: None)
 
     report = {
