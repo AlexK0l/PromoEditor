@@ -130,8 +130,10 @@ if [[ "$http" != "200" ]]; then
   die "Preview /api/config responded HTTP $http; production unchanged."
 fi
 for service in promoeditor regionalresearch caddy; do
-  systemctl is-active --quiet "$service" ||
-    die "Service $service became inactive; investigate immediately."
+  if ! systemctl is-active --quiet "$service"; then
+    systemctl stop "$UNIT" || true
+    die "Service $service became inactive; stopped preview immediately."
+  fi
 done
 info "SUCCESS: $MODE preview on 127.0.0.1:$PORT ONLY."
 info "Windows PowerShell: ssh -N -L 18081:127.0.0.1:18081 root@YOUR_VPS_IP"
