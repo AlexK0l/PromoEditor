@@ -54,6 +54,7 @@ def main():
             "() => document.querySelector('#model').value === 'ZubrTrail 500'"
         )
         assert "6 527 000" in page.locator("#brief-data-hint").inner_text()
+        page.locator("#pro-workspace > summary").click()
         page.locator("#advanced-settings > summary").click()
         page.locator("#data-contacts > summary").click()
         page.locator("#data-facts > summary").click()
