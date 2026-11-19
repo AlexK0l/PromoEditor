@@ -28,11 +28,12 @@ def main():
         assert page.locator('#mode-hybrid').is_disabled()
         assert page.locator('#reference_example').count()==1
         assert page.locator('#file-reference_example').is_hidden()
+        page.locator('#pro-workspace > summary').click()
         page.locator('#optional-materials > summary').click()
         assert page.locator('#file-reference_example').is_visible()
         # CI deliberately has no API key: the explicit low-cost fallback
         # must still support the complete existing browser workflow.
-        page.locator('#mode-template').check()
+        assert page.locator('#quick-ai-toggle').is_disabled()
         assert page.locator('#ai-concepts-workflow').is_hidden()
         assert page.locator('.media-column label[for="drawing"]').count()==1
         assert page.locator('#advanced-settings label[for="drawing"]').count()==0
@@ -60,7 +61,7 @@ def main():
         assert page.locator('#reset-btn').inner_text()=='Заполнить пример'
         assert not errors,errors
         # Reset stays in safe free mode without API credentials.
-        page.locator('#mode-template').check()
+        assert page.locator('#quick-ai-toggle').is_disabled()
         page.locator('#model').fill('Промышленный подъёмник A1')
         upload(page,'hero','small.png',png('yellow',(360,240),15),'image/png')
         upload(page,'hero','large.png',png('red',(1320,840),10),'image/png')
@@ -148,6 +149,7 @@ def main():
         sheet.save(buf,format='JPEG',quality=92)
         upload(other,'hero','technical-sheet.jpg',buf.getvalue(),'image/jpeg')
         upload(other,'hero','product.png',png('yellow',(950,560),16),'image/png')
+        other.locator('#pro-workspace > summary').click()
         other.locator('#asset-files-details > summary').click()
         other.locator('#asset-review-details > summary').click()
         other.locator('#analyze-assets-btn').click()
