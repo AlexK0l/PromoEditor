@@ -44,7 +44,7 @@ jobs:
       - name: Publish UI screenshot pack for review
         uses: actions/upload-artifact@v4
         with:
-          name: promoeditor-ui-preview-pr56
+          name: promoeditor-ui-preview-pr58
           path: /tmp/promo-ui-preview/
           if-no-files-found: error
           retention-days: 30
