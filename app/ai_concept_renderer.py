@@ -370,10 +370,12 @@ def _dimensions(scene, brief, drawing, rect, colors, system="sales"):
     panel_detail(scene,"dimensions",rect,system,a)
 
 
-def _benefits(scene, brief, rect, colors, system="sales"):
-    claims=[str(t).strip() for t in
-            ((brief.get("benefits") or []) or (brief.get("hero_claims") or []))
-            if str(t).strip()][:4]
+def _benefits(scene, brief, rect, colors, system="sales", cinematic=False):
+    # Give the genuine source product the entire hero area in cinematic
+    # mode. Concise user-approved claims appear once, in the benefits panel.
+    preferred=((brief.get("hero_claims") or []) if cinematic else
+               ((brief.get("benefits") or []) or (brief.get("hero_claims") or [])))
+    claims=[str(t).strip() for t in preferred if str(t).strip()][:4]
     proofs=[str(t).strip() for t in (brief.get("proof_points") or [])
             if str(t).strip()][:3]
     if not claims and not proofs:return
@@ -556,12 +558,14 @@ def render_ai_concept_svg(brief, key, concept, *,
             cinematic=cinematic)
     hero_rect=_rect(layout,"hero",scene)
     _hero(scene,hero,detail,backdrop,hero_rect,colors,ai_product,system,
-          _claim_band_height(brief,hero_rect))
-    _hero_claims(scene,brief,_rect(layout,"hero",scene),colors,system)
+          0 if cinematic else _claim_band_height(brief,hero_rect))
+    if not cinematic:
+        _hero_claims(scene,brief,_rect(layout,"hero",scene),colors,system)
     _specs(scene,brief,_rect(layout,"specs",scene),colors,system)
     _dimensions(scene,brief,drawing,_rect(layout,"dimensions",scene),
                 colors,system)
-    _benefits(scene,brief,_rect(layout,"benefits",scene),colors,system)
+    _benefits(scene,brief,_rect(layout,"benefits",scene),colors,system,
+              cinematic=cinematic)
     _economy(scene,brief,_rect(layout,"roi",scene),colors,system)
     _footer(scene,brief,_rect(layout,"footer",scene),colors,system)
     return scene.export()
