@@ -359,6 +359,7 @@
   renderFiles();
   window.PromoAssets={
     append,analyze,reset,setAiReady,extractedSpecs,extraFacts,rows,
+    invalidateSelection:()=>markStale('Данные товара обновлены. Фотографии сохранены; программа перепроверит их при создании.'),
     hasFiles:()=>fileCount()>0,isReady:()=>!dirty&&!!report,
     getReport:()=>!dirty?report:null,getPreviousReport:()=>report,
     totalCount:fileCount,
