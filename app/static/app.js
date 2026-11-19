@@ -734,8 +734,13 @@
       $('quick-ai-toggle').checked=false;
       return;
     }
-    if(checked('quick-ai-toggle'))$('mode-hybrid').checked=true;
-    else $('mode-template').checked=true;
+    if(checked('quick-ai-toggle')){
+      $('mode-hybrid').checked=true;
+      $('use-openai').checked=true;
+    }else{
+      $('mode-template').checked=true;
+      $('use-openai').checked=false; // free means ZERO paid AI calls.
+    }
     refreshGenerationMode();invalidateResult();clearError();
   });
   $('approved-preset-btn').addEventListener('click',loadApprovedPreset);
