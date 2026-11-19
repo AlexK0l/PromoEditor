@@ -321,6 +321,12 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         ai_product=False
         paid_cache=None
         scene_direction=concept['scene_prompt'] if concept else ''
+        regions=concept['layouts'] if concept is not None else None
+        if regions and generation_mode=='hybrid':
+            # Distinct visual cache for each AI-selected spatial composition.
+            scene_direction+=(' | product safe zones: '+
+                              json.dumps({k:v['hero'] for k,v in regions.items()},
+                                         sort_keys=True))
         if use_openai:
             paid_cache=_default_visual_cache(
                 brief,hero is not None,references,model,quality,
@@ -329,7 +335,9 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                 brief,hero_present=(hero is not None),references=references,
                 model=model,quality=quality,design_prompt=design_prompt,
                 scene_direction=scene_direction,cache_dir=paid_cache,
-                consume_cache=False)
+                consume_cache=False,hero_regions={
+                    k:v['hero'] for k,v in regions.items()
+                } if regions else None)
             ai_product=hero is None
         paths={};jpeg_paths={};corel_paths={}
         for key in ('4x3','9x16'):
