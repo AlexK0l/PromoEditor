@@ -181,6 +181,9 @@ def main():
         quick.wait_for_function('!document.getElementById("download-panel").hidden',timeout=60000)
         assert quick.evaluate('window.PromoAssets.isReady()')
         assert quick.locator('#asset-selection').count()==1
+        assert quick.locator('#generated-previews').is_visible()
+        assert quick.locator('#generated-preview-4x3').get_attribute('src').endswith('poster_4x3.png')
+        assert quick.locator('#generated-preview-9x16').get_attribute('src').endswith('poster_9x16.png')
         assert quick.locator('#individual-downloads').evaluate('(el)=>!el.open')
         assert quick.locator('#download-all').is_enabled()
         assert not errors,errors
