@@ -65,9 +65,9 @@ def _pick_sales_concept(concepts: list[dict], brief: dict) -> dict:
         return (wide["w"] * wide["h"] * 2 + tall["w"] * tall["h"])
 
     chosen = dict(max(valid, key=score))
-    # All normal hybrid posters use the energetic sales artwork, even if
+    # All normal hybrid posters use the energetic cinematic artwork, even if
     # the most generous layout came from another of the three candidates.
-    chosen["id"] = "concept_0"
+    chosen["id"] = "hybrid_sales"
     # The original customer-approved brand accent always overrides AI colors.
     accent = str(brief.get("accent") or "")
     if (len(accent) == 7 and accent[0] == "#" and
