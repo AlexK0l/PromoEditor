@@ -20,7 +20,7 @@ def test_service_uses_dedicated_loopback_port_and_single_worker():
 
 
 def test_scripts_are_shell_parseable():
-    for f in ["preflight.sh", "install.sh", "configure_caddy.sh", "update.sh", "switch_to_password_login.sh"]:
+    for f in ["preflight.sh", "install.sh", "configure_caddy.sh", "update.sh", "switch_to_password_login.sh", "stage_review.sh"]:
         subprocess.run(["bash", "-n", str(BASE / f)], check=True)
 
 
@@ -55,3 +55,31 @@ def test_config_contains_no_real_secrets():
     assert "OPENAI_API_KEY=\n" in sample
     assert "PROMO_REQUESTS_PER_HOUR=" in sample
     assert "PROMO_DATA_DIR" not in sample  # fixed in systemd unit
+
+
+def test_pr_preview_is_isolated_rate_limited_and_rollback_free():
+    script = (BASE / "stage_review.sh").read_text()
+    assert "STAGE=/var/lib/promoeditor/pr58-preview" in script
+    assert "SOURCE=\"$STAGE/source\"" in script
+    assert "JOBS=\"$STAGE/jobs\"" in script
+    assert '[[ "$current" == "$TARGET" ]]' in script
+    assert "available_kib < needed*1024" in script
+    assert "required" not in script or "needed=1152" in script
+    assert "needed=1400" in script
+    assert "rr_bytes < 640*1024*1024" in script
+    assert "MemoryMax=480M" in script
+    assert "MemoryHigh=340M" in script
+    assert "RuntimeMaxSec=3600" in script
+    assert "Restart=no" in script
+    assert "PROMO_AUTH_ENABLED=0" in script
+    assert "OPENAI_API_KEY=" in script
+    assert '"ReadWritePaths=$JOBS"' in script
+    assert '--host 127.0.0.1 --port "$PORT"' in script
+    assert "ssh -N -L 18081:127.0.0.1:18081" in script
+    assert "EnvironmentFile=$ENV_FILE" in script
+    assert "systemctl restart" not in script
+    assert "systemctl stop promoeditor" not in script.replace(
+        "systemctl stop promoeditor-preview", "")
+    assert "docker compose" not in script
+    assert "/opt/promoeditor/.venv/bin/python" in script
+    assert "git -C /opt/promoeditor reset" not in script
