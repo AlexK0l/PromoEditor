@@ -56,6 +56,11 @@ def test_essential_first_view_is_one_form_one_switch_one_button():
     assert "Создать промо" in html
     assert "1 платный запрос на план + 2 на изображения" in html
     assert "pro-workspace" in parser.closed_by_default
+    assert "generated-previews" in parser.parents
+    assert "editing-suite" in parser.closed_by_default
+    app_js=(ROOT / "app.js").read_text(encoding="utf-8")
+    assert "$('quick-ai-toggle').addEventListener('change'" in app_js
+    assert "$('use-openai').checked=false; // free means ZERO paid AI calls." in app_js
     assert "mode-hybrid" in parser.parents
     assert "pro-workspace" in parser.parents["mode-hybrid"]
     assert "pro-workspace" in parser.parents["mode-template"]
