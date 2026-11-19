@@ -133,13 +133,22 @@
     if(hybrid)$('use-openai').checked=true;
     $('use-openai').disabled=hybrid || !apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
+    const simple=$('quick-ai-toggle');
+    simple.checked=hybrid;
+    simple.disabled=!apiReady;
+    simple.closest('.one-ai-choice').classList.toggle('is-disabled',!apiReady);
+    $('quick-ai-description').textContent=apiReady
+      ?(hybrid
+        ?'AI создаёт композицию и два художественных фона. 3 платных запроса; оригинальные фото и цифры сохраняются.'
+        :'Без AI: бесплатная сборка по локальному шаблону.')
+      :'OpenAI не подключён. Бесплатный макет можно создать без AI.';
     $('ai-creative-settings').hidden=!ai;
     $('ai-concepts-workflow').hidden=!ai;
     $('openai-posters-workflow').hidden=!ai;
     $('prompt-workflow').hidden=ai;
     $('expert-prompt').hidden=ai;
     $('generate-btn').textContent=ai
-      ?'Собрать выбранную AI-концепцию →':'Создать два макета →';
+      ?'Собрать выбранную AI-концепцию →':'Создать промо →';
     $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
     $('generate-concepts-btn').disabled=isBusy||!apiReady;
     $('generate-ai-posters-btn').disabled=isBusy||!apiReady;
@@ -149,8 +158,8 @@
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
-        setStatus(apiReady?'С AI-фоном · 2 платных запроса':'AI недоступен',
-          apiReady?'Фото, логотип, чертёж и точные надписи не перерисовываются.':
+        setStatus(apiReady?'AI-дизайн · 3 платных запроса':'AI недоступен',
+          apiReady?'1 план композиции + 2 фона. Оригинальные фото, логотип и цифры не перерисовываются.':
             'Выберите бесплатный шаблон.');
       }else{
         setStatus(checked('use-openai')?'Шаблон с AI-фоном':'Без AI · бесплатно',
@@ -442,6 +451,7 @@
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
       if(/файл|фото|ракурс|материал/i.test(error.message||'')){
+        $('pro-workspace').open=true;
         $('asset-review-details').open=true;
         $('asset-files-details').open=true;
       }
@@ -465,7 +475,9 @@
       const pairsFound=ai&&Array.isArray(ai.specs)?ai.specs.map(v=>[v.label,v.value]).filter(p=>p[0]&&p[1]):result.suggested_specs||[];
       $('extract-result').value=asLines(pairsFound);
       $('extract-summary').textContent=`Обработано: ${(result.files||[]).map(v=>v.file).join(', ')}. ${[...(result.warnings||[]),...(ai?.warnings||[])].join(' ')}`;
+      $('pro-workspace').open=true;
       $('advanced-settings').open=true;
+      $('data-facts').open=true;
       $('extract-box').hidden=false;
       $('extract-box').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){showError(error.message||'Ошибка при извлечении данных.');}
@@ -496,8 +508,9 @@
     $('advanced-settings').open=false;
     $('color-label').textContent='#E31B26';
     hasDemo=false;
-    $('brief-data-hint').textContent='Характеристики, цена и телефоны — в разделе «Данные для рекламы». По эталону ZubrTrail 500 они заполняются автоматически.';
-    $('reset-btn').textContent='Заполнить пример';
+    $('brief-data-hint').hidden=true;
+    $('brief-data-hint').textContent='Данные для рекламы можно проверить в дополнительных настройках.';
+    $('reset-btn').textContent='Старый тестовый пример (не для публикации)';
     latest=null;$('download-panel').hidden=true;
     ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=true);
     clearError();updateRoi();refreshStyle();updateFileLabels();updateAi();
@@ -522,7 +535,8 @@
       $('mode-template').checked=!apiReady;
       $('mode-ai-pro').checked=false;
       $('advanced-settings').open=false;
-      $('brief-data-hint').textContent='Эталон загружен: 10 характеристик, 7 размеров, цена 6 527 000 ₽, телефоны и расчёт выгоды. Для проверки откройте «Данные для рекламы».';
+      $('brief-data-hint').hidden=false;
+      $('brief-data-hint').textContent='Эталон загружен: 10 ТТХ, 7 размеров, 6 527 000 ₽ и телефоны. Остальные поля — в «Дополнительно».';
       hasDemo=false;
       latest=null;$('download-panel').hidden=true;
       markPromptStale();
@@ -560,7 +574,8 @@
       $('mode-ai-pro').checked=false;
       $('use-openai').checked=false;$('use-demo').checked=true;$('parse-ai').checked=false;
       $('advanced-settings').open=false;
-      $('brief-data-hint').textContent='Загружен тестовый пример. Его значения не являются подтверждёнными сведениями о вашем товаре.';
+      $('brief-data-hint').hidden=false;
+      $('brief-data-hint').textContent='ТЕСТОВЫЕ НЕАКТУАЛЬНЫЕ ДАННЫЕ. Не публикуйте без проверки цены и контактов.';
       $('extract-box').hidden=true;
       hasDemo=true;
       latest=null;$('download-panel').hidden=true;
@@ -664,6 +679,7 @@
       }
     }
     set('specs',asLines(combined));
+    $('pro-workspace').open=true;
     $('advanced-settings').open=true;
     $('data-facts').open=true;
     markPromptStale();invalidateResult();
@@ -687,6 +703,7 @@
     if(Array.isArray(facts.dimensions)&&facts.dimensions.length&&!get('dimensions').trim()){
       set('dimensions',asLines(facts.dimensions.map(row=>[row.label,row.value])));count++;
     }
+    $('pro-workspace').open=true;
     $('advanced-settings').open=true;
     $('data-facts').open=true;
     $('data-contacts').open=true;
@@ -712,6 +729,15 @@
     $('promo-prompt-status').textContent='Промпт изменён вручную. Он будет отправлен для AI-сцены и сохранён в ZIP.';
     invalidateResult();
   });
+  $('quick-ai-toggle').addEventListener('change',()=>{
+    if(!apiReady){
+      $('quick-ai-toggle').checked=false;
+      return;
+    }
+    if(checked('quick-ai-toggle'))$('mode-hybrid').checked=true;
+    else $('mode-template').checked=true;
+    refreshGenerationMode();invalidateResult();clearError();
+  });
   $('approved-preset-btn').addEventListener('click',loadApprovedPreset);
   $('reset-btn').addEventListener('click',resetDemo);
   $('generate-concepts-btn').addEventListener('click',generateAiConcepts);
@@ -727,7 +753,7 @@
   $('apply-extracted').addEventListener('click',()=>{
     const values=$('extract-result').value.trim();
     if(!values){showError('Нет характеристик для переноса.');return;}
-    set('specs',values);$('advanced-settings').open=true;$('data-facts').open=true;$('extract-box').hidden=true;
+    set('specs',values);$('pro-workspace').open=true;$('advanced-settings').open=true;$('data-facts').open=true;$('extract-box').hidden=true;
     markPromptStale();invalidateResult();setStatus('ТТХ перенесены','Проверьте каждую характеристику до публикации.');
     $('specs').scrollIntoView({behavior:'smooth',block:'center'});
   });
