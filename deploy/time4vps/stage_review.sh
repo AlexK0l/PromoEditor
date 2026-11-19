@@ -130,7 +130,7 @@ for service in promoeditor regionalresearch caddy; do
     die "Service $service became inactive; investigate immediately."
 done
 info "SUCCESS: $MODE preview on 127.0.0.1:$PORT ONLY."
-info "Windows PowerShell: ssh -N -L 18081:127.0.0.1:18081 root@89.40.7.126"
+info "Windows PowerShell: ssh -N -L 18081:127.0.0.1:18081 root@YOUR_VPS_IP"
 info "Browser: http://127.0.0.1:18081"
 info "Stop: systemctl stop promoeditor-preview (or automatic stop in one hour)."
 if [[ "$MODE" == "paid" ]]; then
