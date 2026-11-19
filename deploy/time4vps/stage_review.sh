@@ -25,6 +25,9 @@ UNIT=promoeditor-preview
 BRANCH=feat/art-directed-one-screen-20261119
 PORT=18081
 
+for binary in ss git curl systemd-run runuser; do
+  command -v "$binary" >/dev/null || die "Missing host utility $binary."
+done
 id -u promoeditor >/dev/null || die "Missing promoeditor Unix user."
 [[ -x /opt/promoeditor/.venv/bin/python ]] ||
   die "Production Python venv missing; stage uses it READ-ONLY."
