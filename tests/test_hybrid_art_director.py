@@ -176,6 +176,10 @@ def test_hybrid_exact_svg_from_ai_geometry_and_original_asset_bytes(
         assert not any(i.startswith("ai-product-bitmap") for i in image_ids)
         assert any(el.get("id", "").startswith("hybrid-header-slash")
                    for el in root.iter())
+        assert any(el.get("id", "").startswith("hybrid-benefits-rail")
+                   for el in root.iter()), "Approved benefits need cinematic rail"
+        assert any(el.get("id", "").startswith("hybrid-economy-red-rail")
+                   for el in root.iter()), "Approved ROI needs high-contrast red rail"
     with ZipFile(folder / "promo_kit.zip") as archive:
         contents = archive.namelist()
         assert "corel_4x3.svg" in contents
