@@ -150,7 +150,7 @@ chmod 600 /etc/promoeditor/promoeditor.env
 systemctl restart promoeditor
 ```
 
-Set `OPENAI_API_KEY` locally when ready. You can leave it blank for a free, deterministic preview. Paid image generation is not run by installer or tests. Before using paid features, set usage alerts/budget controls in your OpenAI Platform account and make an explicit low-cost smoke test. The application now applies **persistent daily call quotas** for OpenAI Images and Responses (see [quota setup](../../docs/OPENAI_QUOTAS.md)), but these are **not monetary limits**. The separate general per-IP request throttle remains process-local.
+Set `OPENAI_API_KEY` locally when ready. You can leave it blank for a free, deterministic preview. Paid image generation is not run by installer or tests. Before using paid features, set usage alerts/budget controls in your OpenAI Platform account and make an explicit low-cost smoke test. The application now allows **unlimited paid OpenAI calls by default**. Optional per-day call quotas can be enabled manually (see [quota setup](../../docs/OPENAI_QUOTAS.md)); they are **not monetary billing limits**. Zero means unlimited in new versions; use `disabled` to explicitly block paid calls. The separate general per-IP request throttle remains process-local.
 
 ## 4. Add a SECOND HTTPS hostname to the EXISTING Caddy
 
