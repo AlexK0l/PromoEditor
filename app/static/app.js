@@ -41,9 +41,22 @@
       show_roi:checked('show-roi'),roi:{extra_payload:get('extra-payload'),distance:get('distance'),rate:get('rate'),trips:get('trips'),years:get('years'),baseline_price:get('baseline-price')}
     };
   }
+  const roiRequired=['price','extra-payload','distance','rate','trips','years','baseline-price'];
+  function missingRoiInputs(){
+    return roiRequired.some(id=>{
+      const value=get(id).trim();
+      if(!value)return true;
+      const amount=Number(value.replace(/\s/g,'').replace(',','.'));
+      return !Number.isFinite(amount)||amount<=0;
+    });
+  }
   function updateRoi(){
     $('roi-fields').hidden=!checked('show-roi');
     if(!checked('show-roi'))return;
+    if(missingRoiInputs()){
+      $('roi-preview').textContent='Для публикации расчёта заполните цену, цену аналога, массу, маршрут, ставку, число рейсов и срок. Неподтверждённые цифры не показываем.';
+      return;
+    }
     const value=number('extra-payload')*number('distance')*number('rate')*number('trips');
     const years=number('years');
     const delta=number('price')-number('baseline-price');
@@ -134,13 +147,18 @@
     $('use-openai').disabled=hybrid || !apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
     const simple=$('quick-ai-toggle');
-    simple.checked=hybrid;
-    simple.disabled=!apiReady;
-    simple.closest('.one-ai-choice').classList.toggle('is-disabled',!apiReady);
+    const paidInTemplate=!hybrid&&!ai&&checked('use-openai');
+    simple.checked=hybrid||paidInTemplate;
+    simple.disabled=!apiReady||ai;
+    simple.closest('.one-ai-choice').classList.toggle('is-disabled',!apiReady||ai);
     $('quick-ai-description').textContent=apiReady
-      ?(hybrid
-        ?'AI создаёт композицию и два художественных фона. 3 платных запроса; оригинальные фото и цифры сохраняются.'
-        :'Без AI: бесплатная сборка по локальному шаблону.')
+      ?(ai
+        ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
+        :hybrid
+          ?'AI создаёт композицию и два художественных фона. 3 платных запроса; фото и цифры сохраняются.'
+          :paidInTemplate
+            ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
+            :'Без AI: бесплатная сборка по локальному шаблону.')
       :'OpenAI не подключён. Бесплатный макет можно создать без AI.';
     $('ai-creative-settings').hidden=!ai;
     $('ai-concepts-workflow').hidden=!ai;
@@ -392,6 +410,13 @@
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
     }
     const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(checked('show-roi')&&missingRoiInputs()){
+      $('pro-workspace').open=true;
+      $('advanced-settings').open=true;
+      $('data-roi').open=true;
+      showError('Экономика включена, но не заполнены все исходные параметры. Введите подтверждённые числа или отключите экономический расчёт.','price');
+      return;
+    }
     if(isHybrid()&&!apiReady){showError('Для гибридного режима требуется OpenAI API. Выберите бесплатный шаблон.');return;}
     if(isHybrid()&&!window.PromoAssets?.hasFiles()&&!$('hero').files.length&&!$('detail').files.length){
       showError('Для гибридного режима загрузите исходное фото товара.');return;
@@ -512,6 +537,7 @@
     markPromptStale();
     set('currency','₽');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
+    for(const id of ['extra-payload','distance','rate','trips','years','baseline-price'])set(id,'');
     for(const id of fileIds)$(id).value='';
     window.PromoAssets?.reset();
     $('extract-box').hidden=true;
