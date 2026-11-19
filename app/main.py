@@ -328,11 +328,16 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                               json.dumps({k:v['hero'] for k,v in regions.items()},
                                          sort_keys=True))
         if use_openai:
+            # A style reference can contain a different product. The hybrid
+            # art director may inspect it for graphic style, but the paid
+            # scene generator must NEVER edit that image: generate a clean
+            # independent background to avoid copying/duplicating the vehicle.
+            scene_references=[] if generation_mode=='hybrid' else references
             paid_cache=_default_visual_cache(
-                brief,hero is not None,references,model,quality,
+                brief,hero is not None,scene_references,model,quality,
                 design_prompt,scene_direction)
             visuals=generate_visuals(
-                brief,hero_present=(hero is not None),references=references,
+                brief,hero_present=(hero is not None),references=scene_references,
                 model=model,quality=quality,design_prompt=design_prompt,
                 scene_direction=scene_direction,cache_dir=paid_cache,
                 consume_cache=False,hero_regions={
