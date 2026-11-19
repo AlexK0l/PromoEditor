@@ -167,13 +167,27 @@ def test_approved_reference_preset_does_not_modify_legacy_demo():
 
 
 def test_completed_hybrid_response_reports_actual_mode(monkeypatch, tmp_path):
+    from app.ai_layout import _safe_layout
     monkeypatch.setattr(main, "STORAGE", tmp_path)
     monkeypatch.setattr(main, "rasterize_svg", lambda svg: (b"png", b"jpeg"))
+    monkeypatch.setattr(main, "art_directed_layout", lambda *args, **kwargs: {
+        "id": "hybrid_sales", "name": "Точный рекламный макет",
+        "rationale": "Крупная техника и проверенные числа.",
+        "scene_prompt": "Industrial scenery only, no trailer or text",
+        "palette": {"background": "#FFFFFF", "foreground": "#172235",
+                    "accent": "#E31B26"},
+        "layouts": {fmt: _safe_layout(fmt, 0) for fmt in ("4x3", "9x16")},
+    })
+    monkeypatch.setattr(main, "generate_visuals", lambda *args, **kwargs: {
+        "4x3": Image.new("RGB", (128, 96)),
+        "9x16": Image.new("RGB", (96, 128)),
+    })
     out = main._generate_sync(
-        default_brief(), _png(), None, None, None, [], False, False,
-        "gpt-image-2.5-flare", "medium", "demo no paid image",
+        default_brief(), _png(), None, None, None, [], False, True,
+        "gpt-image-2.5-flare", "medium", "validated mock background",
         generation_mode="hybrid")
     assert out["generation_mode"] == "hybrid"
     brief_file = tmp_path / out["job_id"] / "brief.json"
     metadata = json.loads(brief_file.read_text(encoding="utf-8"))["_metadata"]
     assert metadata["generation_mode"] == "hybrid"
+    assert metadata["art_director"].startswith("OpenAI Responses")
