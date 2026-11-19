@@ -65,6 +65,7 @@ jobs:
           bash -n deploy/time4vps/update.sh
           bash -n deploy/time4vps/configure_caddy.sh
           bash -n deploy/time4vps/switch_to_password_login.sh
+          bash -n deploy/time4vps/stage_review.sh
           python -m py_compile deploy/time4vps/provision_auth.py app/auth.py
       - name: Validate deployment compose syntax
         run: |
