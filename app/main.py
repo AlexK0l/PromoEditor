@@ -34,6 +34,7 @@ from .editable_export import build_promo_prompt, create_editable_svg, rasterize_
 from .ai_layout import generate_concepts, STYLES, GOALS
 from .ai_concept_renderer import render_ai_concept_svg
 from .approved_presets import approved_zubrtrail_500
+from .hybrid_art_director import art_directed_layout
 from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
@@ -307,6 +308,15 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         user_backdrop=load_image(background_raw)
         if hero is None and use_demo and not use_openai:
             hero=_demo_hero()
+        if generation_mode == 'hybrid':
+            # OpenAI plans the placement and graphic hierarchy for BOTH
+            # formats. Technical facts are never accepted from the model.
+            if not hero_raw or not use_openai:
+                raise ValueError('Для AI-дизайна необходимо фото товара и OpenAI.')
+            if concept is not None:
+                raise ValueError('Гибридный арт-директор не принимает внешний концепт.')
+            concept=art_directed_layout(
+                brief, hero_raw, reference=reference_example_raw)
         visuals={}
         ai_product=False
         paid_cache=None
@@ -349,16 +359,20 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             jpeg_paths[key]=f'/files/{job_id}/{jpg_name}'
             corel_paths[key]=f'/files/{job_id}/{svg_name}'
         (folder/'promo_prompt.txt').write_text(design_prompt,encoding='utf-8')
+        effective_mode=('hybrid' if generation_mode == 'hybrid'
+                        else 'ai_pro' if concept is not None else generation_mode)
         if concept is not None:
             (folder/'layout_spec.json').write_text(
-                json.dumps({'generation_mode':'ai_pro','concept_set_id':concept_set_id,
+                json.dumps({'generation_mode':effective_mode,
+                            'concept_set_id':concept_set_id,
                             'selected_concept':concept},ensure_ascii=False,indent=2),
                 encoding='utf-8')
         (folder/'asset_selection.json').write_text(json.dumps(asset_report or {},ensure_ascii=False,indent=2),encoding='utf-8')
         briefing=dict(brief)
         briefing['_metadata']={
             'generator':'AI-directed editable SVG' if concept else 'PromoEditor SVG template',
-            'generation_mode':'ai_pro' if concept else generation_mode,
+            'generation_mode':effective_mode,
+            'art_director':'OpenAI Responses: geometry, palette and scene only' if generation_mode=='hybrid' else None,
             'concept_set_id':concept_set_id,
             'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
             'ai_product_visualization':ai_product,
@@ -435,8 +449,11 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             warnings.append('Габариты отсутствуют в форме: векторная схема размеров без данных не создавалась.')
         if not brief.get('price'):
             warnings.append('Цена не указана: вместо числа используется общий призыв запросить предложение.')
-        if len(brief.get('specs') or [])>7:
-            warnings.append('Горизонтальный макет содержит первые 7 подтверждённых ТТХ; весь список сохранён в JSON-брифе.')
+        visible_specs=8 if concept is not None else 7
+        if len(brief.get('specs') or [])>visible_specs:
+            warnings.append(
+                f'В плакате показаны первые {visible_specs} подтверждённых ТТХ из '
+                f'{len(brief.get("specs") or [])}; остальные сохранены в JSON-брифе.')
         if len(brief.get('dimensions') or [])>4:
             warnings.append('В макете используются первые 4 габарита; остальные сохранены в JSON-брифе.')
         if len(brief.get('benefits') or [])>5:
@@ -449,7 +466,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
             'asset_selection':f'/files/{job_id}/asset_selection.json',
             'layout_spec':f'/files/{job_id}/layout_spec.json',
-            'generation_mode':'ai_pro' if concept else generation_mode,
+            'generation_mode':effective_mode,
             'selected_assets':(asset_report or {}).get('selected_assets',{}),
             'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
         }
