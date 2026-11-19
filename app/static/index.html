@@ -201,9 +201,10 @@
             <div class="data-group-body">
               <label class="check-field"><input id="show-roi" type="checkbox"><span>Показать расчёт на промоматериале</span></label>
           <div id="roi-fields" class="roi-fields" hidden>
-            <div class="two-fields"><label class="field" for="extra-payload"><span>Доп. загрузка, т</span><input id="extra-payload" value="2.5" inputmode="decimal"></label><label class="field" for="distance"><span>Плечо, км</span><input id="distance" value="300" inputmode="decimal"></label></div>
-            <div class="two-fields"><label class="field" for="rate"><span>Ставка за т/км</span><input id="rate" value="0.19" inputmode="decimal"></label><label class="field" for="trips"><span>Рейсов в год</span><input id="trips" value="240" inputmode="decimal"></label></div>
-            <div class="two-fields"><label class="field" for="years"><span>Горизонт, лет</span><input id="years" value="5" inputmode="decimal"></label><label class="field" for="baseline-price"><span>Цена аналога</span><input id="baseline-price" value="149499" inputmode="decimal"></label></div>
+            <p class="field-tip">Укажите реальные условия перевозок. Старая демонстрационная экономика не подставляется автоматически. Для ZubrTrail 500 значения заполняются утверждённым эталоном.</p>
+            <div class="two-fields"><label class="field" for="extra-payload"><span>Доп. загрузка, т</span><input id="extra-payload" placeholder="Например, 2.5" inputmode="decimal"></label><label class="field" for="distance"><span>Плечо, км</span><input id="distance" placeholder="Например, 300" inputmode="decimal"></label></div>
+            <div class="two-fields"><label class="field" for="rate"><span>Ставка за т/км</span><input id="rate" placeholder="Укажите ставку" inputmode="decimal"></label><label class="field" for="trips"><span>Рейсов в год</span><input id="trips" placeholder="Например, 240" inputmode="decimal"></label></div>
+            <div class="two-fields"><label class="field" for="years"><span>Горизонт, лет</span><input id="years" placeholder="Например, 5" inputmode="decimal"></label><label class="field" for="baseline-price"><span>Цена аналога</span><input id="baseline-price" placeholder="Укажите подтверждённую цену" inputmode="decimal"></label></div>
             <div id="roi-preview" class="roi-preview">Заполните параметры для расчёта.</div>
           </div>
             </div>
@@ -434,7 +435,7 @@
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261119-art-directed-1" defer></script>
+  <script src="/static/app.js?v=20261119-art-directed-2" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>
