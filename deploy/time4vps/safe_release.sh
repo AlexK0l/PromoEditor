@@ -138,56 +138,12 @@ printf '%s\n' "$TARGET" > "$backup/target-head"
 install -o root -g root -m 0600 "$ENV_FILE" "$backup/promoeditor.env"
 cp -a "$ROOT/.venv" "$backup/venv"
 note "Private rollback backup created: $backup"
-# The reviewed code treats 0 as unlimited. Earlier releases used 0 to
-# DISABLE paid calls; this intentional semantic change must be visible.
-if grep -Eq '^[[:space:]]*PROMO_AI_IMAGE_CALLS_PER_DAY=0([[:space:]]*(#.*)?)?
-
-# Once mutation starts, any failure restores Git HEAD, virtualenv and env.
-switched=1
-# Never serve requests using a mixture of old and newly installed packages.
-systemctl stop promoeditor
-as_app git -C "$ROOT" merge --ff-only "$TARGET"
-as_app "$ROOT/.venv/bin/python" -m pip install --disable-pip-version-check \
-  --no-cache-dir -r "$ROOT/requirements.txt"
-systemctl start promoeditor
-check_endpoints || die "New version failed HTTP smoke test."
-[[ "$(as_app git -C "$ROOT" rev-parse HEAD)" == "$TARGET" ]] ||
-  die "Deployed checkout differs from pinned target."
-for service in regionalresearch caddy; do
-  systemctl is-active --quiet "$service" ||
-    die "$service became inactive; investigate application rollback."
-done
-switched=0
-note "SUCCESS: PromoEditor is now at $TARGET."
-note "Private rollback snapshot retained: $backup."
-note "RegionalResearch and Caddy were not restarted or reconfigured."
-note "Next: authenticated 4:3 / 9:16 SVG-PNG-ZIP and memory acceptance tests."
- "$ENV_FILE"; then
-  note "NOTICE: image quota = 0 will now permit UNLIMITED paid OpenAI calls. Review your OpenAI billing."
-elif ! grep -Eqi '^[[:space:]]*PROMO_AI_IMAGE_CALLS_PER_DAY=(disabled|off)([[:space:]]*(#.*)?)?
-
-# Once mutation starts, any failure restores Git HEAD, virtualenv and env.
-switched=1
-# Never serve requests using a mixture of old and newly installed packages.
-systemctl stop promoeditor
-as_app git -C "$ROOT" merge --ff-only "$TARGET"
-as_app "$ROOT/.venv/bin/python" -m pip install --disable-pip-version-check \
-  --no-cache-dir -r "$ROOT/requirements.txt"
-systemctl start promoeditor
-check_endpoints || die "New version failed HTTP smoke test."
-[[ "$(as_app git -C "$ROOT" rev-parse HEAD)" == "$TARGET" ]] ||
-  die "Deployed checkout differs from pinned target."
-for service in regionalresearch caddy; do
-  systemctl is-active --quiet "$service" ||
-    die "$service became inactive; investigate application rollback."
-done
-switched=0
-note "SUCCESS: PromoEditor is now at $TARGET."
-note "Private rollback snapshot retained: $backup."
-note "RegionalResearch and Caddy were not restarted or reconfigured."
-note "Next: authenticated 4:3 / 9:16 SVG-PNG-ZIP and memory acceptance tests."
- "$ENV_FILE"; then
-  note "NOTICE: OpenAI Images may be chargeable; no app cost ceiling is guaranteed."
+# The reviewed code treats 0 as unlimited. Earlier releases used 0
+# to block paid calls; warn before making this intentional change.
+if grep -Eq '^[[:space:]]*PROMO_AI_IMAGE_CALLS_PER_DAY=0([[:space:]]*(#.*)?)?$' "$ENV_FILE"; then
+  note "NOTICE: image quota 0 will now permit unlimited paid OpenAI calls. Review your OpenAI billing."
+elif ! grep -Eqi '^[[:space:]]*PROMO_AI_IMAGE_CALLS_PER_DAY=(disabled|off)([[:space:]]*(#.*)?)?$' "$ENV_FILE"; then
+  note "NOTICE: OpenAI Images may be chargeable with no application cost ceiling."
 fi
 
 # Once mutation starts, any failure restores Git HEAD, virtualenv and env.
