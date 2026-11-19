@@ -144,6 +144,16 @@ def test_hybrid_exact_svg_from_ai_geometry_and_original_asset_bytes(
         image_ids = [el.get("id", "") for el in root.iter()
                      if el.tag.endswith("image")]
         assert any(i.startswith("original-product-photo") for i in image_ids)
+        product_images=[el for el in root.iter()
+                        if (el.get("id") or "").startswith("original-product-photo")]
+        assert len(product_images)==1
+        assert float(product_images[0].get("height"))>320, (
+            "The real product must dominate the art rather than be shrunk "
+            "by repeated marketing claims"
+        )
+        assert not any((el.get("id") or "").startswith("ai-hero-claims-panel")
+                       for el in root.iter()), "Claims belong in benefits, not over wheels"
+        assert "Легче на 2,5 т" in all_text
         assert any(i.startswith("original-logo") for i in image_ids)
         assert any(i.startswith("original-drawing") for i in image_ids)
         assert any(i.startswith("ai-scene") for i in image_ids)
