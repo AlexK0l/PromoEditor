@@ -537,8 +537,10 @@
       if(!brief?.model)throw new Error('Утверждённый эталон недоступен.');
       fillBrief(brief);
       invalidateAiConcepts();
-      for(const id of fileIds)$(id).value='';
-      window.PromoAssets?.reset();
+      // Selecting the approved data must NEVER delete photographs, logo,
+      // drawing or reference files that the customer uploaded first.
+      // Recheck selected roles against the updated approved brief instead.
+      window.PromoAssets?.invalidateSelection();
       $('use-demo').checked=false;
       $('use-openai').checked=apiReady;
       $('mode-hybrid').checked=apiReady;
@@ -552,7 +554,7 @@
       markPromptStale();
       updateAi();updateFileLabels();updateRoi();refreshStyle();
       setStatus('Эталон ZubrTrail 500 загружен',
-        'Цена, ТТХ, экономика и телефоны заполнены. Добавьте оригинальные изображения, логотип и чертёж.');
+        'Цена, ТТХ и контакты заполнены; ранее загруженные фото и чертёж сохранены.');
       $('model').scrollIntoView({behavior:'smooth',block:'center'});
     }catch(error){showError(error.message||'Не удалось загрузить утверждённый эталон.');}
     finally{button.disabled=false;}
