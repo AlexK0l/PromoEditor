@@ -4,6 +4,8 @@ These tests never call the real paid OpenAI API.
 """
 import io
 import json
+import os
+import time
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
@@ -52,7 +54,13 @@ def test_art_directed_plan_caches_without_second_paid_text_call(monkeypatch, tmp
     assert calls[0]["style"] == "bold"
     assert calls[0]["goal"] == "sales"
 
+    stale = tmp_path / ".hybrid_art_plans" / ("f" * 64)
+    stale.mkdir()
+    (stale / "plan.json").write_text("old plan", encoding="utf-8")
+    expiry = time.time()-9000
+    os.utime(stale, (expiry, expiry))
     again = hybrid_art_director.art_directed_layout(brief, _png())
+    assert not stale.exists(), "Expired AI design plans must not accumulate forever"
     assert again == first
     assert len(calls) == 1, "identical retry must reuse paid art direction"
 
