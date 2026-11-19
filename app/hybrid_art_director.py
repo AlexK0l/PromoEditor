@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import secrets
+import shutil
 import time
 from pathlib import Path
 
@@ -76,6 +77,21 @@ def _pick_sales_concept(concepts: list[dict], brief: dict) -> dict:
     return _check(chosen, brief)
 
 
+def _prune_expired(root: Path, ttl: int) -> None:
+    """Remove stale, hashed private plans; never touch jobs or source uploads."""
+    if not root.is_dir():
+        return
+    cutoff=time.time()-ttl
+    for entry in root.iterdir():
+        try:
+            if (entry.is_dir() and len(entry.name)==64 and
+                    all(ch in "0123456789abcdef" for ch in entry.name) and
+                    entry.stat().st_mtime<cutoff):
+                shutil.rmtree(entry,ignore_errors=True)
+        except OSError:
+            pass
+
+
 def art_directed_layout(brief: dict, hero: bytes, reference: bytes | None = None) -> dict:
     """Return a single OpenAI-designed layout for both dimensions.
 
@@ -86,6 +102,7 @@ def art_directed_layout(brief: dict, hero: bytes, reference: bytes | None = None
         raise ValueError("Для AI-дизайна необходимо оригинальное фото товара.")
     folder = _folder(brief, hero, reference)
     ttl = max(300, int(os.getenv("PROMO_JOB_TTL_SECONDS", "7200")))
+    _prune_expired(folder.parent,ttl)
     with _visual_lock(folder):
         path = folder / "plan.json"
         if path.is_file():
