@@ -62,6 +62,7 @@ def main():
         assert page.locator("#use-openai").is_disabled()
         assert page.locator("#openai-posters-workflow").is_hidden()
         # The previous AI-concept and raster-experiment workflow is still available.
+        page.locator("#pro-workspace > summary").click()
         page.locator("#expert-modes > summary").click()
         page.locator("#mode-ai-pro").check()
         assert page.locator("#mode-ai-pro").is_checked()
