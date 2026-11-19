@@ -74,6 +74,7 @@ def test_pr_preview_is_isolated_rate_limited_and_rollback_free():
     assert "PROMO_AUTH_ENABLED=0" in script
     assert "OPENAI_API_KEY=" in script
     assert '"ReadWritePaths=$JOBS"' in script
+    assert "InaccessiblePaths=/var/lib/promoeditor/jobs" in script
     assert '--host 127.0.0.1 --port "$PORT"' in script
     assert "ssh -N -L 18081:127.0.0.1:18081" in script
     assert "root@YOUR_VPS_IP" in script
