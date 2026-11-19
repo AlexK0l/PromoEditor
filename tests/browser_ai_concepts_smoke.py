@@ -129,6 +129,25 @@ def main():
         assert not page.locator("#use-openai").is_checked()
         assert page.locator("#ai-concepts-workflow").is_hidden()
         assert not page.locator("#generate-btn").is_disabled()
+        # A paid background in the legacy template must never look "free"
+        # in the new primary switch.
+        page.locator("#design-options > summary").click()
+        page.locator("#use-openai").check()
+        assert page.locator("#quick-ai-toggle").is_checked()
+        assert "2 платных запроса" in page.locator("#quick-ai-description").inner_text()
+        page.locator("#use-openai").uncheck()
+        assert not page.locator("#quick-ai-toggle").is_checked()
+
+        # Old Br ROI figures are not silently reused for a new project.
+        page.locator("#advanced-settings > summary").click()
+        page.locator("#data-roi > summary").click()
+        assert page.locator("#rate").input_value() == ""
+        assert page.locator("#baseline-price").input_value() == ""
+        page.locator("#show-roi").check()
+        page.locator("#generate-btn").click()
+        assert "Экономика включена" in page.locator("#error-box").inner_text()
+        assert page.locator("#download-panel").is_hidden()
+        page.locator("#show-roi").uncheck()
         page.set_viewport_size({"width":390,"height":820})
         assert page.evaluate("document.documentElement.scrollWidth<=window.innerWidth+2")
         assert not errors,errors
