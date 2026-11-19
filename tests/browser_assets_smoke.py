@@ -188,6 +188,25 @@ def main():
         assert quick.locator('#download-all').is_enabled()
         assert not errors,errors
         quick.close()
+
+        # Applying the approved ZubrTrail brief AFTER uploading source photos
+        # must not erase the user's artwork or make them re-upload it.
+        preset=browser.new_page(viewport={'width':1024,'height':780})
+        preset.goto(BASE,wait_until='domcontentloaded')
+        upload(preset,'hero','owned-product.png',png('yellow',(780,430),13),'image/png')
+        upload(preset,'logo','owned-logo.png',png('black',(280,160),9),'image/png')
+        preset.locator('#approved-preset-btn').click()
+        preset.wait_for_function(
+            'document.getElementById("model").value==="ZubrTrail 500"')
+        assert preset.locator('#hero').evaluate('(el)=>el.files.length')==1
+        assert preset.locator('#hero').evaluate('(el)=>el.files[0].name')=='owned-product.png'
+        assert preset.locator('#logo').evaluate('(el)=>el.files[0].name')=='owned-logo.png'
+        assert preset.locator('#price').input_value()=='6527000'
+        assert preset.locator('#phones').input_value().startswith('+7 (951)')
+        assert preset.evaluate('window.PromoAssets.hasFiles()')
+        assert not preset.evaluate('window.PromoAssets.isReady()')
+        assert not errors,errors
+        preset.close()
         browser.close()
     print('Browser multi-asset review: add, analyze, override, prompt, ZIP, remove, mobile — PASS')
 
