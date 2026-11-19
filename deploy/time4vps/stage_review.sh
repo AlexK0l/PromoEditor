@@ -113,6 +113,7 @@ systemd-run --quiet --collect --unit="$UNIT" \
   -p NoNewPrivileges=yes -p PrivateTmp=yes \
   -p ProtectHome=yes -p ProtectSystem=strict \
   -p "ReadWritePaths=$JOBS" \
+  -p InaccessiblePaths=/var/lib/promoeditor/jobs \
   /opt/promoeditor/.venv/bin/python -m uvicorn app.main:app \
     --host 127.0.0.1 --port "$PORT" --workers 1 \
     --limit-concurrency 6 --timeout-keep-alive 5
