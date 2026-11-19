@@ -345,9 +345,11 @@
     if(dirty){announce('Сначала пересоберите выбор после изменений.',true);return;}
     accepted=true;
     $('asset-approve').classList.add('is-accepted');
-    announce('Выбор принят. Теперь можно проверить промпт и создать промо.');
+    announce('Выбор принят. Можно создавать два рекламных макета.');
   });
   $('asset-manual').addEventListener('click',()=>{
+    // The simplified UI keeps detailed file-role controls collapsed.
+    $('asset-files-details').open=true;
     $('asset-files-list').scrollIntoView({behavior:'smooth',block:'center'});
     const first=$('asset-files-list').querySelector('select');
     if(first)first.focus({preventScroll:true});

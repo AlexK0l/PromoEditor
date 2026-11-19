@@ -20,12 +20,13 @@ def test_new_actions_are_normalized_with_bound_and_kept_separate():
     assert _normalize({'design_actions':'x'*3000})['design_actions']=='x'*1200
     assert _normalize({})['design_actions']==''
 
-def test_field_is_visible_in_compact_html_and_submitted_by_browser():
+def test_field_is_accessible_in_disclosed_expert_controls_and_submitted_by_browser():
     html=client.get('/').text
     script=client.get('/static/app.js').text
     assert 'id="design-actions"' in html
     assert 'maxlength="1200"' in html
-    assert 'Дополнительные действия над дизайном' in html
+    assert 'id="creative-notes"' in html
+    assert 'Дополнительные инструкции для AI-фона' in html
     assert "design_actions:get('design-actions').trim()" in script
     assert "set('design-actions',data.design_actions)" in script
     assert "'design-actions','claims'" in script
