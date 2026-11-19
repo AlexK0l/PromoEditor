@@ -112,7 +112,7 @@ systemd-run --quiet --collect --unit="$UNIT" \
   -p "ReadWritePaths=$JOBS" \
   /opt/promoeditor/.venv/bin/python -m uvicorn app.main:app \
     --host 127.0.0.1 --port "$PORT" --workers 1 \
-    --limit-concurrency 2 --timeout-keep-alive 5
+    --limit-concurrency 6 --timeout-keep-alive 5
 
 http=""
 for _ in $(seq 1 25); do
