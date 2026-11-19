@@ -91,6 +91,7 @@ def main():
         assert data["type"]=="PromoEditor-editable-v1"
         assert len(data["layers"])>=2
         page.reload(wait_until="domcontentloaded")
+        page.locator("#editing-suite > summary").click()
         page.locator("#edit-toggle").click()
         page.locator("#edit-project-file").set_input_files(
             {"name":"saved.promo.json","mimeType":"application/json","buffer":project_file.read_bytes()})
