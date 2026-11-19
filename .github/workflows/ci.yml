@@ -110,6 +110,15 @@ jobs:
           name: ai-first-editable-previews
           path: /tmp/promo-ai-concepts/
           if-no-files-found: error
+      - name: Generate simulated cinematic hybrid SVG and PNG for design QA
+        run: PYTHONPATH=. python tests/generate_hybrid_art_preview.py
+      - name: Publish cinematic hybrid 4:3 + 9:16 review samples
+        uses: actions/upload-artifact@v4
+        with:
+          name: cinematic-hybrid-exact-svg-previews
+          path: /tmp/promo-hybrid-art-preview/
+          if-no-files-found: error
+          retention-days: 30
       - name: Container diagnostics
         if: always()
         run: docker logs promo-ci || true
