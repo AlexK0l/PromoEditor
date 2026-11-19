@@ -58,7 +58,7 @@ def main():
         assert 'Пример заполнен' in page.locator('#modebanner').inner_text()
         page.locator('#reset-btn').click()
         assert page.locator('#model').input_value()==''
-        assert page.locator('#reset-btn').inner_text()=='Заполнить пример'
+        assert page.locator('#reset-btn').inner_text()=='Старый тестовый пример (не для публикации)'
         assert not errors,errors
         # Reset stays in safe free mode without API credentials.
         assert page.locator('#quick-ai-toggle').is_disabled()
