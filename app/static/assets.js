@@ -349,6 +349,7 @@
   });
   $('asset-manual').addEventListener('click',()=>{
     // The simplified UI keeps detailed file-role controls collapsed.
+    $('pro-workspace').open=true;
     $('asset-files-details').open=true;
     $('asset-files-list').scrollIntoView({behavior:'smooth',block:'center'});
     const first=$('asset-files-list').querySelector('select');
