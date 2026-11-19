@@ -1,11 +1,10 @@
-"""Persistent server-side ceilings for paid OpenAI API attempts.
+"""Optional, opt-in daily call ceilings for paid OpenAI API attempts.
 
-Counters are process-safe and survive Uvicorn/Docker restarts because the
-SQLite database lives on PROMO_DATA_DIR (the existing persistent VPS volume).
-No API keys, prompts, user addresses or image bytes are stored.
-
-These are limits on *calls*, not monetary billing limits. Actual spending
-still requires a separate budget in the OpenAI account.
+Default is unlimited: PromoEditor does not restrict paid calls by UTC day.
+Set a positive daily value to enable the old persistent SQLite counter.
+Set "disabled" to explicitly block paid calls. Neither mode controls
+provider billing: use an OpenAI account budget for cost management.
+No API keys, prompts, addresses or image bytes are stored in counters.
 """
 from __future__ import annotations
 
@@ -16,8 +15,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _ENV = {
-    "image": ("PROMO_AI_IMAGE_CALLS_PER_DAY", 24, "генерации изображений"),
-    "text": ("PROMO_AI_TEXT_CALLS_PER_DAY", 80, "текстовых/визуальных запросов"),
+    "image": ("PROMO_AI_IMAGE_CALLS_PER_DAY", 0, "генерации изображений"),
+    "text": ("PROMO_AI_TEXT_CALLS_PER_DAY", 0, "текстовых/визуальных запросов"),
 }
 
 
@@ -41,7 +40,12 @@ def _data_dir() -> Path:
 
 def _limit(kind: str) -> int:
     env, default, _ = _ENV[kind]
-    value = os.getenv(env, str(default))
+    value = os.getenv(env, str(default)).strip()
+    # Explicit emergency stop; zero is deliberately UNLIMITED.
+    if value.lower() in ("disabled", "off"):
+        raise QuotaExceeded(
+            f"Платные вызовы OpenAI ({_ENV[kind][2]}) отключены настройкой {env}=disabled."
+        )
     try:
         result = int(value)
     except (ValueError, TypeError) as exc:
@@ -61,11 +65,10 @@ def reserve_paid_call(kind: str) -> None:
     if kind not in _ENV:
         raise ValueError("Неизвестная категория платного запроса.")
     limit = _limit(kind)
-    env, _, label = _ENV[kind]
     if limit == 0:
-        raise QuotaExceeded(
-            f"Платные вызовы OpenAI ({label}) отключены лимитом {env}=0."
-        )
+        # No application-imposed daily quota; OpenAI provider limits remain.
+        return
+    env, _, label = _ENV[kind]
     day = _utc_day()
     folder = _data_dir()
     path = folder / "openai_call_quota.sqlite3"
@@ -127,10 +130,10 @@ def check_paid_capacity(kind: str, needed: int) -> None:
     if needed == 0:
         return
     limit = _limit(kind)
-    env, _, label = _ENV[kind]
     if limit == 0:
-        raise QuotaExceeded(
-            f"Платные вызовы OpenAI ({label}) отключены лимитом {env}=0.")
+        # No preflight daily cap, including multi-image workflows.
+        return
+    env, _, label = _ENV[kind]
     path = _data_dir() / "openai_call_quota.sqlite3"
     used = 0
     if path.is_file():
