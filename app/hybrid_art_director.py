@@ -20,7 +20,7 @@ from pathlib import Path
 from .ai_layout import generate_concepts, validate_concept, validate_renderability
 from .openai_service import _visual_lock
 
-VERSION = "hybrid-art-director-v2"
+VERSION = "hybrid-art-director-v3"
 
 
 def _folder(brief: dict, hero: bytes, reference: bytes | None) -> Path:
@@ -113,7 +113,7 @@ def art_directed_layout(brief: dict, hero: bytes, reference: bytes | None = None
                 pass
         proposals = generate_concepts(
             brief, hero=hero, reference=reference,
-            style="bold", goal="sales",
+            style="bold", goal="sales", cinematic_hybrid=True,
         )
         chosen = _pick_sales_concept(proposals, brief)
         folder.mkdir(parents=True, exist_ok=True, mode=0o700)
