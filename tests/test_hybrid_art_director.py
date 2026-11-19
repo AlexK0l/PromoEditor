@@ -139,6 +139,11 @@ def test_hybrid_exact_svg_from_ai_geometry_and_original_asset_bytes(
         assert "44 т" in all_text
         assert "6 527 000" in all_text
         assert "+7 (951) 704-30-42" in all_text
+        for name,value in brief["specs"][:8]:
+            assert name in all_text and value in all_text, (
+                "All 8 published technical facts must appear in full; "
+                "never silently shorten a spec", fmt, name, value
+            )
         assert "229 998" not in all_text
         assert "Br" not in all_text
         image_ids = [el.get("id", "") for el in root.iter()
