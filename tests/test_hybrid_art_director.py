@@ -53,6 +53,9 @@ def test_art_directed_plan_caches_without_second_paid_text_call(monkeypatch, tmp
     assert first["layouts"]["4x3"]["hero"]["w"] >= 350
     assert calls[0]["style"] == "bold"
     assert calls[0]["goal"] == "sales"
+    assert calls[0]["cinematic_hybrid"] is True, (
+        "Primary AI mode must reserve a large unobstructed original-product stage"
+    )
 
     stale = tmp_path / ".hybrid_art_plans" / ("f" * 64)
     stale.mkdir()
