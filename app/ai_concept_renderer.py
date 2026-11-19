@@ -380,8 +380,17 @@ def _benefits(scene, brief, rect, colors, system="sales", cinematic=False):
             if str(t).strip()][:3]
     if not claims and not proofs:return
     x,y,w,h=rect
-    a,ink=colors["accent"],colors["foreground"]
-    _panel(scene,"benefits",x,y,w,h,"benefits")
+    a,ink=colors["accent"],("#FFFFFF" if cinematic else colors["foreground"])
+    _panel(scene,"benefits",x,y,w,h,"benefits",
+           "#1B2430" if cinematic else "#FFFFFF")
+    if cinematic:
+        # A full-width black/red B2B benefits rail, not small white
+        # instruction cards. Red ornaments are separate SVG vectors.
+        scene.rect("benefits",x,y,5,h,a,ident="hybrid-benefits-rail")
+        scene.polygon("benefits",[
+            (x+w*.91,y),(x+w*.99,y),(x+w*.94,y+h),
+            (x+w*.86,y+h)
+        ],a,ident="hybrid-benefits-slash",opacity=".16")
     band=min(37,h*.21)
     _section_banner(scene,"benefits","ПРЕИМУЩЕСТВА",
                     (x,y,w,band),colors,system,
@@ -414,25 +423,29 @@ def _benefits(scene, brief, rect, colors, system="sales", cinematic=False):
                        f"ai-benefit-text-{i}",3)
     if proofs:
         message="  •  ".join(proofs)
-        value_ink=a if _contrast_ratio(a,"#FFFFFF")>=4.5 else ink
+        value_ink=(ink if cinematic else
+                   a if _contrast_ratio(a,"#FFFFFF")>=4.5 else ink)
         scene.text("benefits",message,x+14,y+h-proof_h-3,w-28,max(17,proof_h),
                    17,10,value_ink,True,"ai-verified-proof",2)
     panel_detail(scene,"benefits",rect,system,a)
 
 
-def _economy(scene, brief, rect, colors, system="sales"):
+def _economy(scene, brief, rect, colors, system="sales", cinematic=False):
     if not brief.get("show_roi"):return
     data=compute_roi(brief)
     if not data:return
     x,y,w,h=rect
     a,ink=colors["accent"],colors["foreground"]
-    background=("#1A3248" if system=="engineering" else
+    background=("#1B2430" if cinematic else
+                "#1A3248" if system=="engineering" else
                 "#F8F7F3" if system=="editorial" else "#FFF3F4")
-    text_ink="#FFFFFF" if system=="engineering" else ink
-    value_ink=("#FFFFFF" if system=="engineering" else
+    text_ink="#FFFFFF" if (cinematic or system=="engineering") else ink
+    value_ink=("#FFFFFF" if (cinematic or system=="engineering") else
                a if system!="editorial" and
                _contrast_ratio(a,background)>=4.5 else ink)
     _panel(scene,"roi",x,y,w,h,"roi",background)
+    if cinematic:
+        scene.rect("roi",x,y,6,h,a,ident="hybrid-economy-red-rail")
     if system=="engineering":
         scene.rect("roi",x,y,5,h,a,ident="ai-engineering-roi-spine")
     band=min(32,h*.23)
@@ -451,7 +464,7 @@ def _economy(scene, brief, rect, colors, system="sales"):
         col,row=i%columns,i//columns
         bx=x+6+col*cw
         by=y+band+5+row*ch
-        separator="#597084" if system=="engineering" else "#DAD8D4"
+        separator="#556270" if cinematic else "#597084" if system=="engineering" else "#DAD8D4"
         if col:
             scene.rect("roi",bx,by+3,1.5,ch-6,separator,
                        ident=f"ai-roi-divider-{i}")
@@ -566,6 +579,7 @@ def render_ai_concept_svg(brief, key, concept, *,
                 colors,system)
     _benefits(scene,brief,_rect(layout,"benefits",scene),colors,system,
               cinematic=cinematic)
-    _economy(scene,brief,_rect(layout,"roi",scene),colors,system)
+    _economy(scene,brief,_rect(layout,"roi",scene),colors,system,
+             cinematic=cinematic)
     _footer(scene,brief,_rect(layout,"footer",scene),colors,system)
     return scene.export()
