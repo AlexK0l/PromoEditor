@@ -123,3 +123,22 @@ def test_design_css_supports_keyboard_focus_small_screen_and_dark_theme():
         assert fragment in css, fragment
     assert ":focus-visible" in css
     assert "prefers-reduced-motion:reduce" in css
+
+
+def test_unverified_old_roi_never_seeds_a_new_campaign():
+    html, _ = parse_page()
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert 'id="rate" value="0.19"' not in html
+    assert 'id="baseline-price" value="149499"' not in html
+    for ident in ("rate", "baseline-price", "extra-payload"):
+        assert f'id="{ident}" placeholder=' in html
+    assert "function missingRoiInputs()" in js
+    assert "if(checked('show-roi')&&missingRoiInputs())" in js
+    assert "set(id,'')" in js
+
+
+def test_advanced_paid_background_switch_must_agree_with_primary_ai_switch():
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "const paidInTemplate=!hybrid&&!ai&&checked('use-openai')" in js
+    assert "simple.checked=hybrid||paidInTemplate" in js
+    assert "2 платных запроса, без AI-арт-директора" in js
