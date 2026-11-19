@@ -42,25 +42,27 @@ def parse_page():
     return page, parser
 
 
-def test_essential_first_view_is_only_three_steps_and_two_modes():
+def test_essential_first_view_is_one_form_one_switch_one_button():
     html, parser = parse_page()
     assert len(parser.all_ids) == len(set(parser.all_ids)), "Duplicate DOM IDs"
     for ident in (
         "approved-preset-btn", "hero", "model", "slogan",
-        "mode-hybrid", "mode-template", "generate-btn",
+        "price", "currency", "phones", "quick-ai-toggle", "generate-btn",
     ):
         assert ident in parser.parents
         assert not parser.parents[ident], (ident, parser.parents[ident])
-    assert "ШАГ 1 ИЗ 3" in html
-    assert "ШАГ 2 ИЗ 3" in html
-    assert "ШАГ 3 ИЗ 3" in html
-    assert "Создать два макета" in html
-    assert "Без AI · бесплатно" in html
-    assert "С AI-фоном" in html
-    assert "Два платных запроса" in html
+    assert "Создать рекламный макет" in html
+    assert "Оформить с помощью OpenAI" in html
+    assert "Создать промо" in html
+    assert "1 платный запрос на план + 2 на изображения" in html
+    assert "pro-workspace" in parser.closed_by_default
+    assert "mode-hybrid" in parser.parents
+    assert "pro-workspace" in parser.parents["mode-hybrid"]
+    assert "pro-workspace" in parser.parents["mode-template"]
+    assert "pro-workspace" in parser.parents["mode-ai-pro"]
 
 
-def test_all_advanced_controls_remain_available_but_closed_at_launch():
+def test_technical_controls_remain_under_single_closed_workspace():
     _, parser = parse_page()
     mapping = {
         "mode-ai-pro": "expert-modes",
@@ -72,28 +74,26 @@ def test_all_advanced_controls_remain_available_but_closed_at_launch():
         "design-actions": "creative-notes",
         "promo-prompt": "expert-prompt",
         "asset-approve": "asset-review-details",
-        "price": "advanced-settings",
         "specs": "advanced-settings",
         "dimensions": "advanced-settings",
-        "phones": "advanced-settings",
         "show-roi": "advanced-settings",
     }
     for ident, detail in mapping.items():
         assert detail in parser.parents.get(ident, ()), (ident, parser.parents.get(ident))
         assert detail in parser.closed_by_default, detail
+        assert "pro-workspace" in parser.parents[ident]
     for ident, subgroup in {
         "specs": "data-facts", "dimensions": "data-facts",
-        "price": "data-contacts", "phones": "data-contacts",
         "show-roi": "data-roi", "image-quality": "data-design",
     }.items():
         assert subgroup in parser.parents[ident]
         assert subgroup in parser.closed_by_default
-    assert "logo" in parser.parents and "drawing" in parser.parents
-    assert not parser.parents["logo"] and not parser.parents["drawing"]
-    # The brief must still precede the prominent creation button.
+    for ident in ("hero", "logo", "drawing", "price", "phones", "generate-btn"):
+        assert ident in parser.parents and not parser.parents[ident]
+    assert "editing-suite" in parser.closed_by_default
+    # Action is the primary experience; fine settings come afterwards.
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    assert html.index('id="advanced-settings"') < html.index('id="generate-btn"')
-
+    assert html.index('id="generate-btn"') < html.index('id="advanced-settings"')
 
 def test_one_click_free_asset_selection_precedes_any_potentially_paid_generation():
     script = (ROOT / "app.js").read_text(encoding="utf-8")
@@ -111,6 +111,7 @@ def test_design_css_supports_keyboard_focus_small_screen_and_dark_theme():
     css = (ROOT / "app.css").read_text(encoding="utf-8")
     for fragment in (
         ".quiet-details>summary", ".preset-shortcut", ".topbar-menu",
+        ".one-ai-choice", ".pro-workspace",
         ".mode-choice label:has(input:checked)", ".individual-downloads",
         "@media (max-width:460px)", ':root[data-theme="dark"] .quiet-details',
     ):
