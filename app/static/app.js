@@ -443,6 +443,16 @@
         $('result-warning-items').appendChild(item);
       }
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
+      // Show the exact PNGs rasterized from the same editable SVG files.
+      // No separate AI preview call, no extra charge or guessed rendering.
+      for(const fmt of ['4x3','9x16']){
+        const path=latest.images?.[fmt];
+        if(path){
+          $('generated-preview-'+fmt).src=path;
+          $('generated-preview-link-'+fmt).href=path;
+        }
+      }
+      $('generated-previews').hidden=false;
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
       setStatus('Готово',(isAiPro()?'Выбранный AI-дизайн':isHybrid()?'Гибридный PRO':'Шаблон')+
