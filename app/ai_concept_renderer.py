@@ -74,11 +74,12 @@ def _contrast_text(hex_color):
     return "#172235" if light>.183 else "#FFFFFF"
 
 
-def _header(scene, brief, logo, rect, colors, system='sales'):
+def _header(scene, brief, logo, rect, colors, system='sales', cinematic=False):
     x,y,w,h=rect
     accent, ink=colors["accent"], colors["foreground"]
-    paper="#1A3044" if system=="engineering" else (
-        "#FCFBF8" if system=="editorial" else "#F9FAFC")
+    paper=("#171D28" if cinematic else
+           "#1A3044" if system=="engineering" else
+           "#FCFBF8" if system=="editorial" else "#F9FAFC")
     _panel(scene,"heading",x,y,w,h,"header",paper,0)
     if system=="engineering":
         scene.rect("heading",x,y,w,5,accent,ident="ai-header-line")
@@ -95,6 +96,17 @@ def _header(scene, brief, logo, rect, colors, system='sales'):
         scene.rect("heading",x,y,w,max(9,h*.09),accent,
                    ident="ai-header-line")
         model_color=accent
+        if cinematic:
+            # Cinematic industrial branding; these SVG shapes are editable.
+            scene.polygon("heading",[
+                (x+w*.79,y),(x+w*.90,y),
+                (x+w*.81,y+h),(x+w*.70,y+h)
+            ],accent,ident="hybrid-header-slash",opacity=".25")
+            scene.polygon("heading",[
+                (x+w*.92,y),(x+w,y),(x+w*.91,y+h),(x+w*.83,y+h)
+            ],accent,ident="hybrid-header-edge",opacity=".43")
+            model_color="#FFFFFF"
+            ink="#FFFFFF"
     logo_w=min(w*.19, max(100,h*1.2))
     if logo is not None:
         scene.bitmap("logo",logo,x+11,y+16,logo_w-19,h-29,"original-logo")
@@ -536,9 +548,12 @@ def render_ai_concept_svg(brief, key, concept, *,
                ident="ai-art-directed-paper")
     layout=concept["layouts"][key]
     system=direction_of(concept)
+    cinematic=concept.get("id")=="hybrid_sales"
     direction_mark(scene,system,colors["accent"])
-    # Geometry and factual content remain validated and separately editable.
-    _header(scene,brief,logo,_rect(layout,"header",scene),colors,system)
+    # Exactly the same approved facts and original product: only the artistic
+    # header changes for the automatic hybrid director.
+    _header(scene,brief,logo,_rect(layout,"header",scene),colors,system,
+            cinematic=cinematic)
     hero_rect=_rect(layout,"hero",scene)
     _hero(scene,hero,detail,backdrop,hero_rect,colors,ai_product,system,
           _claim_band_height(brief,hero_rect))
