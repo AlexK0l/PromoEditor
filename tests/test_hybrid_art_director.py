@@ -103,6 +103,10 @@ def test_hybrid_exact_svg_from_ai_geometry_and_original_asset_bytes(
 
     def backdrops(*args, **kwargs):
         calls.append("backdrops")
+        assert kwargs["references"] == [], (
+            "Hybrid paid backdrop must not edit or copy a product-bearing reference"
+        )
+        assert kwargs["hero_regions"]["4x3"] == _safe_layout("4x3", 0)["hero"]
         return {
             fmt: Image.new("RGB", (640, 480), "lightgray")
             for fmt in ("4x3", "9x16")
@@ -112,7 +116,7 @@ def test_hybrid_exact_svg_from_ai_geometry_and_original_asset_bytes(
     monkeypatch.setattr(main, "generate_visuals", backdrops)
     monkeypatch.setattr(main, "rasterize_svg", lambda svg: (b"png", b"jpg"))
     output = main._generate_sync(
-        brief, original, None, logo, drawing, [],
+        brief, original, None, logo, drawing, [_png("red")],
         False, True, "gpt-image-2.5-flare", "medium",
         "Photorealistic industrial scenery", generation_mode="hybrid",
     )
