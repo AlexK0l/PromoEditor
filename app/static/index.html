@@ -7,7 +7,7 @@
   <script src="/static/theme.js?v=20261113-smooth-1"></script>
   <meta name="description" content="PromoEditor — фото товара, описание и один клик до двух редактируемых рекламных макетов.">
   <title>PromoEditor — новый промо-материал</title>
-  <link rel="stylesheet" href="/static/app.css?v=20261118-calm-ui-1">
+  <link rel="stylesheet" href="/static/app.css?v=20261119-art-directed-1">
   <link rel="stylesheet" href="/static/editor.css?v=20261113-v1">
   <link rel="stylesheet" href="/static/theme.css?v=20261113-smooth-1">
   <link rel="stylesheet" href="/static/assets.css?v=20261113-multifiles-1">
@@ -25,7 +25,7 @@
         <details class="topbar-menu" id="topbar-menu">
           <summary aria-label="Дополнительное меню">Ещё</summary>
           <div class="topbar-menu-panel">
-            <button type="button" id="reset-btn" class="quiet-button">Заполнить пример</button>
+            <button type="button" id="reset-btn" class="quiet-button">Старый тестовый пример (не для публикации)</button>
           </div>
         </details>
         <form action="/logout" method="post" id="logout-form" hidden><input type="hidden" id="logout-csrf" name="csrf_token"><button type="submit" class="quiet-button">Выйти</button></form>
@@ -35,9 +35,8 @@
 
   <main class="page">
     <section class="heading" aria-labelledby="page-title">
-      <span class="section-tag">ПРОСТОЙ РЕЖИМ</span>
-      <h1 id="page-title">Сделайте рекламу своего товара</h1>
-      <p>Добавьте фотографию, название и главное преимущество. Получите два готовых макета — горизонтальный 4:3 и вертикальный 9:16. Текст и исходные изображения останутся редактируемыми.</p>
+      <h1 id="page-title">Создать рекламный макет</h1>
+      <p>Загрузите реальную фотографию товара. OpenAI разработает оформление, а PromoEditor разместит ваши данные и сохранит редактируемые SVG.</p>
       <div class="preset-shortcut">
         <button type="button" id="approved-preset-btn" class="preset-button">Заполнить по эталону ZubrTrail 500</button>
         <span>ТТХ, размеры, цена и контакты подставятся автоматически. Фотографии загрузите свои.</span>
@@ -48,8 +47,8 @@
 
     <section class="composer" aria-label="Создать промо-материал">
       <div class="composer-top">
-        <div><span class="step-label">ШАГ 1 ИЗ 3</span><h2>Товар и его фотографии</h2></div>
-        <span class="optional-note">Только главное</span>
+        <div><h2>Ваш товар</h2></div>
+        <span class="optional-note">4:3 и 9:16</span>
       </div>
 
       <div class="composer-grid">
@@ -66,7 +65,45 @@
             <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотип</strong><small id="file-logo">Необязательно, исходное изображение</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Логотипы и бренд-материалы, можно выбрать несколько"></label>
             <label class="mini-upload" for="drawing"><span class="mini-icon" aria-hidden="true">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">Необязательно, PNG, JPG или PDF</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf" aria-label="Загрузить технический чертёж"></label>
           </div>
-          <details class="quiet-details" id="optional-materials">
+          
+          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="background" hidden>Убрать фон-сцену</button><button type="button" data-clear="reference_example" hidden>Убрать эталон</button></div>
+          <button type="button" id="inspect-btn" class="quick-extract" hidden>Извлечь характеристики из документов <span aria-hidden="true">→</span></button>
+          <p class="asset-intro">Фото и логотип останутся исходными. При нескольких ракурсах программа выберет главный автоматически.</p>
+          <p id="file-feedback" class="file-feedback" role="status" aria-live="polite">Файлы не загружены.</p>
+          
+        </div>
+
+        <div class="brief-column">
+          <label class="field" for="model"><span>Название продукта <span class="required">*</span></span><input id="model" maxlength="80" autocomplete="off" placeholder="Например, ZubrTrail 500"></label>
+          <label class="field" for="slogan"><span>Главное преимущество <span class="field-hint">для рекламного заголовка</span></span><textarea id="slogan" rows="2" maxlength="250" placeholder="Например: Перевозит на 2,5 т больше за каждый рейс"></textarea></label>
+          <div class="essential-commercial">
+              <div class="price-grid"><label class="field" for="price"><span>Цена</span><input id="price" placeholder="Например, 6527000" inputmode="decimal"></label><label class="field" for="currency"><span>Валюта</span><select id="currency"><option value="Br">Br</option><option value="BYN">BYN</option><option value="₽" selected>₽</option><option value="€">€</option><option value="$">$</option></select></label></div>
+              <label class="field" for="phones"><span>Телефоны <span class="field-hint">до двух, каждый с новой строки</span></span><textarea id="phones" rows="2" placeholder="+7 (951) 704-30-42"></textarea></label>
+          </div>
+          <div class="brief-hint" id="brief-data-hint" hidden>Характеристики, цена и телефоны подставлены из утверждённого эталона.</div>
+          
+        </div>
+      </div>
+
+      <div class="composer-bottom">
+        <div class="one-action-mode">
+          <label for="quick-ai-toggle" class="one-ai-choice">
+            <input id="quick-ai-toggle" type="checkbox" checked role="switch">
+            <span class="one-ai-text"><strong>Оформить с помощью OpenAI</strong>
+              <small id="quick-ai-description">AI разработает композицию и создаст два фона. Техника, тексты и цифры останутся точными. 1 платный запрос на план + 2 на изображения.</small>
+            </span>
+          </label>
+        </div>
+        <div class="generate-row">
+          <div class="generate-description">
+            <span class="step-label">ДВА ФОРМАТА · SVG / PNG / JPEG</span>
+            <span id="modebanner" class="modebanner" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span><strong>Без расходов на API</strong><small>Обычная сборка изображений</small></span></span>
+          </div>
+          <button type="button" id="generate-btn" class="primary-button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Создать промо <span aria-hidden="true">→</span></button>
+        </div>        <details id="pro-workspace" class="quiet-details pro-workspace">
+          <summary>Дополнительно: характеристики, материалы и тонкая настройка <span aria-hidden="true">⌄</span></summary>
+          <div class="pro-workspace-body">
+            <details class="quiet-details" id="optional-materials">
             <summary>Добавить документы, фон или пример оформления <span aria-hidden="true">⌄</span></summary>
             <div class="mini-uploads optional-uploads">
               <label for="documents" class="mini-upload"><span class="mini-icon" aria-hidden="true">▤</span><span><strong>Документы с ТТХ</strong><small id="file-documents">PDF, Excel, Word, CSV</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Документы с характеристиками"></label>
@@ -74,21 +111,11 @@
               <label class="mini-upload" for="reference_example"><span class="mini-icon" aria-hidden="true">✦</span><span><strong>Рекламный эталон · необязательно</strong><small id="file-reference_example">Пример оформления</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="reference_example" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Необязательный пример рекламного дизайна"></label>
             </div>
           </details>
-          <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="background" hidden>Убрать фон-сцену</button><button type="button" data-clear="reference_example" hidden>Убрать эталон</button></div>
-          <button type="button" id="inspect-btn" class="quick-extract" hidden>Извлечь характеристики из документов <span aria-hidden="true">→</span></button>
-          <p class="asset-intro">Оригинальные фото и чертёж сохраняются. При нескольких файлах лучший ракурс программа выберет автоматически — при желании его можно изменить.</p>
-          <p id="file-feedback" class="file-feedback" role="status" aria-live="polite">Файлы не загружены.</p>
-          <details class="quiet-details asset-file-details" id="asset-files-details">
+            <details class="quiet-details asset-file-details" id="asset-files-details">
             <summary>Проверить файлы и выбрать главный ракурс <span aria-hidden="true">⌄</span></summary>
             <div id="asset-files-list" class="asset-files-list" role="list" aria-label="Загруженные материалы и приоритеты"></div>
           </details>
-        </div>
-
-        <div class="brief-column">
-          <label class="field" for="model"><span>Название продукта <span class="required">*</span></span><input id="model" maxlength="80" autocomplete="off" placeholder="Например, ZubrTrail 500"></label>
-          <label class="field" for="slogan"><span>Главное преимущество <span class="field-hint">для рекламного заголовка</span></span><textarea id="slogan" rows="2" maxlength="250" placeholder="Например: Перевозит на 2,5 т больше за каждый рейс"></textarea></label>
-          <div class="brief-hint" id="brief-data-hint">Характеристики, цена и телефоны — в разделе «Данные для рекламы». По эталону ZubrTrail 500 они заполняются автоматически.</div>
-          <details class="quiet-details" id="creative-notes">
+            <details class="quiet-details" id="creative-notes">
             <summary>Бренд и дополнительные пожелания <span aria-hidden="true">⌄</span></summary>
             <div class="quiet-details-body">
               <div class="two-fields">
@@ -99,13 +126,9 @@
               <label class="field" for="design-actions"><span>Дополнительные инструкции для AI-фона</span><textarea id="design-actions" rows="2" maxlength="1200" placeholder="Например: мягкий свет, свободное пространство справа"></textarea><small class="field-tip">AI не меняет подтверждённые ТТХ, цену или изображение товара.</small></label>
             </div>
           </details>
-        </div>
-      </div>
-
-      <div class="composer-bottom">
-        <fieldset class="mode-choice" id="generation-mode">
-          <legend>ШАГ 2 ИЗ 3 · Как оформить макет</legend>
-          <label class="mode-main"><input type="radio" name="generation_mode" id="mode-hybrid" value="hybrid" checked><span><strong>С AI-фоном</strong><small id="hybrid-mode-hint">Красивое окружение, точные оригиналы и редактируемый SVG. Два платных запроса.</small></span></label>
+                    <fieldset class="mode-choice" id="generation-mode">
+          <legend>Дополнительные режимы</legend>
+          <label class="mode-main"><input type="radio" name="generation_mode" id="mode-hybrid" value="hybrid" checked><span><strong>С AI-фоном</strong><small id="hybrid-mode-hint">OpenAI планирует композицию и создаёт два фона. Фото и точные данные остаются отдельными SVG-объектами.</small></span></label>
           <label class="mode-main"><input type="radio" name="generation_mode" id="mode-template" value="template"><span><strong>Без AI · бесплатно</strong><small>Рекламный макет из ваших файлов без расходов на OpenAI.</small></span></label>
           <details class="quiet-details expert-mode" id="expert-modes">
             <summary>Экспериментальные режимы для специалистов <span aria-hidden="true">⌄</span></summary>
@@ -168,9 +191,9 @@
         <details id="data-contacts" class="data-group">
             <summary><span><strong>Цена и контакты</strong><small>Цена, валюта и телефоны</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
             <div class="data-group-body">
-              <div class="price-grid"><label class="field" for="price"><span>Цена</span><input id="price" placeholder="229998" inputmode="decimal"></label><label class="field" for="currency"><span>Валюта</span><select id="currency"><option value="Br">Br</option><option value="BYN">BYN</option><option value="₽">₽</option><option value="€">€</option><option value="$">$</option></select></label></div>
+    
           <label class="check-field"><input id="vat" type="checkbox" checked><span>Указывать «с НДС»</span></label>
-          <label class="field" for="phones"><span>Телефоны <span class="field-hint">до двух, каждый с новой строки</span></span><textarea id="phones" rows="2" placeholder="+375 (29) 000-00-00"></textarea></label>
+
             </div>
           </details>
         <details id="data-roi" class="data-group">
@@ -259,7 +282,7 @@
             <h3 id="openai-posters-title">Рекламный AI-постер без эталона</h3>
             <p>Эксперимент: модель нарисует готовые растровые постеры 4:3 и 9:16. Этот результат не заменяет точную гибридную SVG-версию и требует проверки перед публикацией.</p>
           </div><button type="button" id="generate-ai-posters-btn" class="primary-button">Создать 2 AI-постера · 2 платных вызова</button></div>
-          <p class="field-tip">Фото товара обязательно, рекламный эталон — нет. Это художественные растровые постеры, а не технически проверенный вектор: OpenAI может ошибиться в кириллице, цифрах и деталях техники. Перед публикацией сверьте факты с оригиналами. Дневной лимит Images API и бюджет OpenAI должны позволять два вызова.</p>
+          <p class="field-tip">Фото товара обязательно, рекламный эталон — нет. Это художественные растровые постеры, а не технически проверенный вектор: OpenAI может ошибиться в кириллице, цифрах и деталях техники. Перед публикацией сверьте факты с оригиналами. Генерация оплачивается по тарифу OpenAI, включая два вызова Images.</p>
           <p id="openai-posters-status" role="status" aria-live="polite">По умолчанию применяется профессиональная рекламная арт-дирекция для промышленной техники. Выберите качество OpenAI в дополнительных настройках.</p>
           <div id="openai-poster-results" class="ai-poster-results" hidden>
             <a id="openai-poster-link-4x3" target="_blank" rel="noopener"><img id="openai-poster-img-4x3" alt="Горизонтальный AI-постер 4:3"><span>Горизонтальный · 4:3</span></a>
@@ -276,13 +299,10 @@
           <p id="ai-concepts-status" role="status" aria-live="polite">Сначала проанализируйте материалы, затем создайте концепции. Это отдельный платный запрос к OpenAI.</p>
           <div id="ai-concept-cards" class="ai-concept-grid" role="group" aria-label="Варианты рекламного дизайна" hidden></div>
         </section>
-        <div class="generate-row">
-          <div class="generate-description">
-            <span class="step-label">ШАГ 3 ИЗ 3 · ГОТОВО К СОЗДАНИЮ</span>
-            <span id="modebanner" class="modebanner" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span><strong>Без расходов на API</strong><small>Обычная сборка изображений</small></span></span>
+
           </div>
-          <button type="button" id="generate-btn" class="primary-button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Создать два макета <span aria-hidden="true">→</span></button>
-        </div>
+        </details>
+
       </div>
     </section>
 
@@ -308,7 +328,9 @@
     </section>
 
 
-    <section id="edit-section" class="edit-section" aria-labelledby="edit-title">
+    <details id="editing-suite" class="quiet-details editor-suite">
+      <summary>Редактировать готовый постер <span aria-hidden="true">⌄</span></summary>
+          <section id="edit-section" class="edit-section" aria-labelledby="edit-title">
       <div class="edit-heading">
         <div>
           <span class="step-label">ПОСЛЕ ГЕНЕРАЦИИ · РЕДАКТОР</span>
@@ -397,10 +419,12 @@
       </div>
     </section>
 
+
+    </details>
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261118-calm-ui-1" defer></script>
+  <script src="/static/app.js?v=20261119-art-directed-1" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>
