@@ -158,3 +158,23 @@ def test_paid_progress_is_explicit_and_cancelling_confirmation_sends_nothing():
     assert "OpenAI всё ещё выполняет запросы" in js
     assert "Возможна нехватка оперативной памяти" in js
     assert 'class="asset-intro"' not in html, "Keep initial screen uncluttered"
+
+
+def test_production_screen_hides_all_retired_demo_and_experimental_controls():
+    html, parser = parse_page()
+    required_hidden = [
+        '<div class="preset-shortcut" hidden>',
+        '<details class="topbar-menu" id="topbar-menu" hidden>',
+        '<fieldset class="mode-choice" id="generation-mode" hidden>',
+        '<details class="quiet-details design-options" id="design-options" hidden>',
+        '<details id="expert-prompt" class="quiet-details workflow-details" hidden>',
+        '<section id="openai-posters-workflow" class="ai-concepts-workflow" hidden',
+        '<section id="ai-concepts-workflow" class="ai-concepts-workflow" hidden',
+        '<label class="check-field" hidden><input id="use-demo"',
+    ]
+    for marker in required_hidden:
+        assert marker in html, f"Legacy UI unexpectedly exposed: {marker}"
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "'openai-posters-workflow','prompt-workflow','expert-prompt'" in js
+    assert "for(const id of ['ai-creative-settings','ai-concepts-workflow'" in js
+    assert "Проверяем режим" in html
