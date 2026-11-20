@@ -20,7 +20,7 @@ from pathlib import Path
 from PIL import Image
 
 from .ai_exact_copy_render import (
-    ALL_SLOTS, DEFAULT_STYLE, FONTS, FORMATS, verified_copy,
+    ALL_SLOTS, DEFAULT_STYLE, FONTS, FORMATS, verified_copy, poster_copy,
     validate_slots, validate_style, render_exact_svg,
 )
 from .ai_slot_repair import repair_ai_slots
@@ -32,7 +32,7 @@ from .openai_service import (
     _save_visual, _visual_lock, as_image, client,
 )
 
-VERSION = "ai-full-design-verified-text-ai-typography-v1"
+VERSION = "ai-full-design-verified-text-ai-typography-v2-editorial"
 IMAGE_SIZES = {"4x3": "1536x1024", "9x16": "1024x1536"}
 AI_WARNING = (
     "Художественный фон и прицеп созданы/отредактированы AI. "
@@ -232,7 +232,7 @@ def generate_templates(brief: dict, rebranded: bytes, *,
 def _layout_plan(brief: dict, art: dict, *,
                  has_logo: bool, has_drawing: bool,
                  folder: Path | None = None) -> dict:
-    copy = verified_copy(brief)
+    copy = poster_copy(brief)
     # A completed vision layout can be geometrically inconsistent. Cache
     # the original PAID JSON first, then reconcile its regions locally.
     # A retry after a category/benefits collision should pay ZERO extra
@@ -382,7 +382,7 @@ def generate_exact_typography_posters(
         art = generate_templates(brief,rebranded,reference=reference,
                                  model=model,quality=quality,folder=cache,
                                  progress=progress)
-        copy = verified_copy(brief)
+        copy = poster_copy(brief)
         if layout is None:
             if progress: progress('AI анализирует оба макета и ищет свободные зоны текста')
             layout = _layout_plan(brief,art,has_logo=bool(logo),
@@ -551,7 +551,7 @@ def _generate_file_backed_posters(
         api = None
         gc.collect()
 
-        copy = verified_copy(brief)
+        copy = poster_copy(brief)
         if layout is None:
             if progress:
                 progress("AI определяет свободные текстовые области двух макетов")
