@@ -37,17 +37,19 @@ def main():
         assert page.locator('#ai-concepts-workflow').is_hidden()
         assert page.locator('.media-column label[for="drawing"]').count()==1
         assert page.locator('#advanced-settings label[for="drawing"]').count()==0
-        # Regression: after the PRO style rollout, filling a demo must remain
-        # clickable and must NOT silently change the chosen layout to industrial.
-        page.locator('#design-options > summary').click()
-        page.locator('[data-style="reference_pro"]').click()
+        # Retired controls are NOT exposed to customers, but the legacy
+        # in-memory reset path remains testable without making it visible.
+        assert page.locator('#design-options').is_hidden()
+        assert page.locator('#topbar-menu').is_hidden()
+        page.evaluate("document.getElementById('design-options').open=true")
+        page.evaluate("document.querySelector('[data-style=reference_pro]').click()")
         assert page.locator('#style').input_value()=='reference_pro'
         page.locator('#advanced-settings > summary').click()
         assert page.locator('#advanced-settings').evaluate('(el)=>el.open')
         page.locator('#data-facts > summary').click()
         page.locator('#proof-points').fill('Старый факт из другого проекта')
-        page.locator('#topbar-menu > summary').click()
-        page.locator('#reset-btn').click()
+        page.evaluate("document.getElementById('topbar-menu').open=true")
+        page.evaluate("document.getElementById('reset-btn').click()")
         page.wait_for_function(
             "document.getElementById('reset-btn').textContent==='Очистить форму'")
         assert page.locator('#model').input_value()=='ZubrTrail 500'
@@ -56,7 +58,7 @@ def main():
         assert page.locator('#use-demo').is_checked()
         assert not page.locator('#reset-btn').is_disabled()
         assert 'Пример заполнен' in page.locator('#modebanner').inner_text()
-        page.locator('#reset-btn').click()
+        page.evaluate("document.getElementById('reset-btn').click()")
         assert page.locator('#model').input_value()==''
         assert page.locator('#reset-btn').inner_text()=='Старый тестовый пример (не для публикации)'
         assert not errors,errors
@@ -90,8 +92,9 @@ def main():
         assert 'small.png' in page.locator('#asset-picked').inner_text()
         assert 'large.png' in page.locator('#asset-unused').inner_text()
         # Prompt now includes chosen and excluded filenames without inventing specs.
-        page.locator('#expert-prompt > summary').click()
-        page.locator('#build-prompt-btn').click()
+        assert page.locator('#expert-prompt').is_hidden()
+        page.evaluate("document.getElementById('expert-prompt').open=true")
+        page.evaluate("document.getElementById('build-prompt-btn').click()")
         page.wait_for_function('document.getElementById("promo-prompt").value.includes("small.png")')
         prompt=page.locator('#promo-prompt').input_value()
         assert 'НЕ ИСПОЛЬЗОВАТЬ' in prompt and 'large.png' in prompt
@@ -195,7 +198,8 @@ def main():
         preset.goto(BASE,wait_until='domcontentloaded')
         upload(preset,'hero','owned-product.png',png('yellow',(780,430),13),'image/png')
         upload(preset,'logo','owned-logo.png',png('black',(280,160),9),'image/png')
-        preset.locator('#approved-preset-btn').click()
+        assert preset.locator('.preset-shortcut').is_hidden()
+        preset.evaluate("document.getElementById('approved-preset-btn').click()")
         preset.wait_for_function(
             'document.getElementById("model").value==="ZubrTrail 500"')
         assert preset.locator('#hero').evaluate('(el)=>el.files.length')==1
