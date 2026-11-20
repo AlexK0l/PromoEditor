@@ -32,6 +32,10 @@ from .product_rebrand_service import (
     rebrand_selected_photo, cache_dir as rebrand_cache_dir,
     cached_photo as cached_rebrand_photo, REBRAND_WARNING,
 )
+from .ai_exact_copy_template import (
+    generate_exact_typography_posters, consume_paid_template_cache,
+    AI_WARNING as EXACT_COPY_WARNING,
+)
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -71,7 +75,10 @@ FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
        'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','layout_spec.json','edit.png'}
 FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16')})
 FILES.update({f'ai_poster_{fmt}.{ext}' for fmt in ('4x3','9x16') for ext in ('png','jpg')})
-FILES.update({'ai_posters.zip','rebranded_product.png'})
+FILES.update({'ai_posters.zip','rebranded_product.png',
+              'ai_typographic_posters.zip','typography_layout.json',
+              'typography_style.json','verified_copy.json','selected_photo.json'})
+FILES.update({f'ai_template_{fmt}.png' for fmt in ('4x3','9x16')})
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
@@ -686,6 +693,115 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
         raise
 
 
+def _exact_typography_posters_sync(brief, product_raw, logo_raw,
+                                   drawing_raw, reference_raw, model, quality,
+                                   selected_source=None):
+    """New PRIMARY mode: full AI design -> exact SVG copy -> AI typography.
+
+    Rebrand only the selected original trailer. The AI text finisher selects
+    font/color/scale from a visual preview; it never gets to rewrite the facts.
+    Old pure raster /api/ai-posters remains available for compatibility.
+    """
+    # Proactively check funding for all THREE Images requests and two text
+    # vision requests, BEFORE the first paid Images call, unless rebrand
+    # was already cached from an interrupted attempt.
+    check_paid_capacity('text',2)
+    rebrand_dir=rebrand_cache_dir(brief,product_raw,logo_raw,model,quality)
+    chosen=cached_rebrand_photo(rebrand_dir)
+    if chosen is None:
+        check_paid_capacity('image',3)
+        chosen=rebrand_selected_photo(
+            brief,product_raw,logo=logo_raw,model=model,quality=quality,
+            folder=rebrand_dir)
+    else:
+        check_paid_capacity('image',2)
+    rendered=generate_exact_typography_posters(
+        brief,chosen,logo=logo_raw,drawing=drawing_raw,
+        reference=reference_raw,model=model,quality=quality)
+    _clean_jobs()
+    job_id=secrets.token_hex(16)
+    folder=STORAGE/job_id
+    folder.mkdir(mode=0o700)
+    try:
+        (folder/'rebranded_product.png').write_bytes(chosen)
+        images={};jpegs={};corel={}
+        for fmt in ('4x3','9x16'):
+            for name,payload in (
+                (f'ai_poster_{fmt}.png',rendered['png'][fmt]),
+                (f'ai_poster_{fmt}.jpg',rendered['jpeg'][fmt]),
+                (f'corel_{fmt}.svg',rendered['svg'][fmt]),
+            ):
+                (folder/name).write_bytes(payload)
+            rendered['artwork'][fmt].save(
+                folder/f'ai_template_{fmt}.png',format='PNG')
+            images[fmt]=f'/files/{job_id}/ai_poster_{fmt}.png'
+            jpegs[fmt]=f'/files/{job_id}/ai_poster_{fmt}.jpg'
+            corel[fmt]=f'/files/{job_id}/corel_{fmt}.svg'
+        metadata={
+            'selected_primary':selected_source or {},
+            'rebranded_only_this_photo':True,
+            'other_uploaded_photos_untouched':True,
+        }
+        for name,obj in (
+            ('typography_layout.json',rendered['layout']),
+            ('typography_style.json',rendered['typography']),
+            ('verified_copy.json',rendered['verified_copy']),
+            ('selected_photo.json',metadata),
+        ):
+            (folder/name).write_text(
+                json.dumps(obj,ensure_ascii=False,indent=2),encoding='utf8')
+        with zipfile.ZipFile(
+            folder/'ai_typographic_posters.zip','w',
+            compression=zipfile.ZIP_DEFLATED,compresslevel=6,
+        ) as archive:
+            for fmt in ('4x3','9x16'):
+                for name in (
+                    f'ai_poster_{fmt}.png',f'ai_poster_{fmt}.jpg',
+                    f'corel_{fmt}.svg',f'ai_template_{fmt}.png',
+                ):
+                    archive.write(folder/name,arcname=name)
+            archive.write(folder/'rebranded_product.png',
+                          arcname='rebranded_product.png')
+            for name in ('typography_layout.json','typography_style.json',
+                         'verified_copy.json','selected_photo.json'):
+                archive.write(folder/name,arcname=name)
+            archive.writestr('brief.json',
+                json.dumps(brief,ensure_ascii=False,indent=2))
+            archive.writestr('REVIEW_BEFORE_PUBLICATION.txt',
+                EXACT_COPY_WARNING+'\\n'+REBRAND_WARNING+'\\n'
+                'SVG содержит редактируемые текстовые слои. '
+                'AI не исправляет содержание текстов; он выбирает '
+                'лишь гарнитуру и цвет. Перепроверьте визуально макеты.\\n')
+            for name,raw in (
+                ('product_photo',product_raw),('customer_logo',logo_raw),
+                ('drawing_preview',drawing_raw),
+                ('style_reference',reference_raw),
+            ):
+                if not raw:
+                    continue
+                with Image.open(io.BytesIO(raw)) as im:
+                    suffix={'JPEG':'.jpg','PNG':'.png','WEBP':'.webp'}.get(
+                        im.format,'.bin')
+                archive.writestr(f'originals/{name}{suffix}',raw,
+                                 compress_type=zipfile.ZIP_STORED)
+        consume_paid_template_cache(rendered['cache_dir'])
+        return {
+            'job_id':job_id,'images':images,'jpeg':jpegs,'corel':corel,
+            'zip':f'/files/{job_id}/ai_typographic_posters.zip',
+            'generation_mode':'ai_template_exact_copy',
+            'ai_used':True,'raster_only':False,
+            'reference_used':reference_raw is not None,
+            'selected_photo':selected_source or {},
+            'rebranded_photo':f'/files/{job_id}/rebranded_product.png',
+            'rebranding_applied':True,
+            'verified_typography':True,
+            'warnings':[EXACT_COPY_WARNING,REBRAND_WARNING],
+        }
+    except Exception:
+        shutil.rmtree(folder,ignore_errors=True)
+        raise
+
+
 @app.post('/api/ai-posters')
 async def create_full_ai_posters(request:Request):
     """One selected-photo rebrand edit plus two AI-poster edits.
@@ -918,13 +1034,12 @@ async def generate(request:Request):
         except ValueError as exc:raise HTTPException(400,detail=str(exc))
     try:
         if mode=='hybrid':
-            # The UI's primary OpenAI action is deliberately identical to the
-            # full-raster creative endpoint that produces ai_posters.zip.
-            # Do not call art_directed_layout() / generate_complete_artworks()
-            # here: those produce text-zone designs and can fall back to a
-            # procedural layout, unlike the customer's requested output.
+            # Main mode is genuine AI-designed textless artwork, not a
+            # procedural template or old full-raster lettering attempt.
+            # Verified facts are drawn as editable SVG AFTER the art and
+            # stylistic finish only chooses typography parameters.
             result=await asyncio.to_thread(
-                _full_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
+                _exact_typography_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
                 reference_example_raw,
                 str(form.get('model','gpt-image-2.5-flare')),
                 str(form.get('quality','medium')),
