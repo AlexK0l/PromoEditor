@@ -959,6 +959,13 @@ def _run_generation_task(task_id: str):
         form,opened=ai_job_queue.reopen_form(folder)
         stage('Проверяем исходные данные проекта')
         result=asyncio.run(_generate_from_form(form,progress=stage))
+        # A completed task must have NO uploaded private sources left.
+        # Clean them BEFORE reporting completion; the browser can download
+        # its generated ZIP without the original form inputs remaining here.
+        for handle in opened:
+            handle.close()
+        opened.clear()
+        ai_job_queue.erase_uploads(folder)
         ai_job_queue.set_status(
             folder,'complete',stage='Оба макета и редактируемые SVG готовы',
             result=result)
