@@ -1,4 +1,4 @@
-"""Automatic hybrid art direction: one text plan + two AI-only backdrops.
+"""Automatic AI art direction: one plan + two full artwork images.
 
 These tests never call the real paid OpenAI API.
 """
@@ -85,7 +85,7 @@ def test_invalid_ai_layout_does_not_trigger_visual_api(monkeypatch, tmp_path):
         raise ValueError("AI-схема не прошла проверку читаемости")
 
     monkeypatch.setattr(main, "art_directed_layout", broken)
-    monkeypatch.setattr(main, "generate_visuals",
+    monkeypatch.setattr(main, "generate_complete_artworks",
                         lambda *args, **kwargs: calls.append("images"))
     with pytest.raises(ValueError, match="читаемости"):
         main._generate_sync(
@@ -112,26 +112,23 @@ def test_hybrid_exact_svg_from_ai_geometry_and_original_asset_bytes(
         return {**_concept(), "id": "hybrid_sales",
                 "palette": {**_concept()["palette"], "accent": "#E31B26"}}
 
-    def backdrops(*args, **kwargs):
-        calls.append("backdrops")
-        assert kwargs["references"] == [], (
-            "Hybrid paid backdrop must not edit or copy a product-bearing reference"
-        )
-        assert kwargs["hero_regions"]["4x3"] == _safe_layout("4x3", 0)["hero"]
+    def artwork(*args, **kwargs):
+        calls.append("full_artwork")
+        assert args[1]["id"] == "hybrid_sales"
         return {
             fmt: Image.new("RGB", (640, 480), "lightgray")
             for fmt in ("4x3", "9x16")
         }
 
     monkeypatch.setattr(main, "art_directed_layout", art)
-    monkeypatch.setattr(main, "generate_visuals", backdrops)
+    monkeypatch.setattr(main, "generate_complete_artworks", artwork)
     monkeypatch.setattr(main, "rasterize_svg", lambda svg: (b"png", b"jpg"))
     output = main._generate_sync(
         brief, original, None, logo, drawing, [_png("red")],
         False, True, "gpt-image-2.5-flare", "medium",
         "Photorealistic industrial scenery", generation_mode="hybrid",
     )
-    assert calls == ["art", "backdrops"]
+    assert calls == ["art", "full_artwork"]
     assert output["generation_mode"] == "hybrid"
     assert output["ai_used"] is True
     assert output["visualization"] is False
@@ -172,14 +169,15 @@ def test_hybrid_exact_svg_from_ai_geometry_and_original_asset_bytes(
         assert "Легче на 2,5 т" in all_text
         assert any(i.startswith("original-logo") for i in image_ids)
         assert any(i.startswith("original-drawing") for i in image_ids)
-        assert any(i.startswith("ai-scene") for i in image_ids)
+        assert any(i.startswith("ai-complete-poster-artwork") for i in image_ids)
+        # Image model authored all design pixels; no old fixed decorations.
+        assert not any(el.get("id","").startswith("hybrid-header-slash")
+                       for el in root.iter())
         assert not any(i.startswith("ai-product-bitmap") for i in image_ids)
-        assert any(el.get("id", "").startswith("hybrid-header-slash")
-                   for el in root.iter())
-        assert any(el.get("id", "").startswith("hybrid-benefits-rail")
-                   for el in root.iter()), "Approved benefits need cinematic rail"
-        assert any(el.get("id", "").startswith("hybrid-economy-red-rail")
-                   for el in root.iter()), "Approved ROI needs high-contrast red rail"
+        assert not any(el.get("id", "").startswith("hybrid-benefits-rail")
+                       for el in root.iter()), "Procedural graphic rails are forbidden"
+        assert not any(el.get("id", "").startswith("hybrid-economy-red-rail")
+                       for el in root.iter()), "AI paints economy panel decoration"
     with ZipFile(folder / "promo_kit.zip") as archive:
         contents = archive.namelist()
         assert "corel_4x3.svg" in contents
