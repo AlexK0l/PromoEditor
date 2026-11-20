@@ -54,7 +54,7 @@ def test_essential_first_view_is_one_form_one_switch_one_button():
     assert "Создать рекламный макет" in html
     assert "Оформить с помощью OpenAI" in html
     assert "Создать промо" in html
-    assert "1 запрос на арт-план + 2 на полный дизайн" in html
+    assert "2 платных вызова" in html
     assert "pro-workspace" in parser.closed_by_default
     assert "generated-previews" in parser.parents
     assert "editing-suite" in parser.closed_by_default
@@ -151,10 +151,10 @@ def test_paid_progress_is_explicit_and_cancelling_confirmation_sends_nothing():
     js = (ROOT / "app.js").read_text(encoding="utf-8")
     assert "generate-elapsed" in parser.parents
     assert "if(isHybrid()&&!window.confirm(" in js
-    assert "3 платных запроса" in js
+    assert "2 платных вызова" in js
     assert "window.setInterval(updateElapsed,1000)" in js
     assert "window.clearInterval(elapsedClock)" in js
     assert "elapsed.hidden=true" in js
     assert "OpenAI всё ещё выполняет запросы" in js
-    assert "проверьте нагрузку тестовой службы" in js
+    assert "Возможна нехватка оперативной памяти" in js
     assert 'class="asset-intro"' not in html, "Keep initial screen uncluttered"
