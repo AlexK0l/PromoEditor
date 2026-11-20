@@ -40,6 +40,14 @@ def main() -> int:
     if len(sys.argv) != 4:
         return 2
     try:
+        # If the 800 MiB cgroup is exhausted during native Cairo render,
+        # prefer killing THIS disposable renderer instead of Uvicorn.
+        # This affects only the short-lived subprocess, not PromoEditor,
+        # Caddy, RegionalResearch or systemd memory limits. Best effort.
+        try:
+            Path("/proc/self/oom_score_adj").write_text("500")
+        except (OSError, PermissionError):
+            pass
         render_files(*[Path(arg) for arg in sys.argv[1:]])
     except Exception as exc:
         # Never echo SVG contents, environment secrets or customer originals.
