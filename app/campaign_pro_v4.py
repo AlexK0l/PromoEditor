@@ -244,9 +244,11 @@ def _drawing_dimensions_four(scene,brief,detail,drawing,x,y,w,h,accent):
             _rule(scene,"dimensions",divider_x,cy+7,
                   divider_x,cy+rh-7,"#E4CCD0",1,
                   f"pro6-dimension-separator-{i}")
+            # Long verified labels (e.g. "Высота задней части") must
+            # wrap onto two short lines, never be silently ellipsized.
             v3._type(scene,"dimensions",str(label).upper(),
-                     column_x+9,cy+5,divider_x-column_x-17,rh-9,
-                     16,11,INK,True,f"pro-dimension-name-{i}",1)
+                     column_x+9,cy+4,divider_x-column_x-17,rh-7,
+                     15,10,INK,True,f"pro-dimension-name-{i}",2)
             v3._type(scene,"dimensions",str(value),
                      divider_x+8,cy+3,
                      column_x+column_w-divider_x-14,rh-6,
