@@ -56,13 +56,13 @@
           <label for="hero" id="hero-drop" class="dropzone">
             <span class="drop-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4 18V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="9" cy="9" r="1.5"/><path d="m5 17 5-5 3 3 3-3 3 3"/></svg></span>
             <strong id="hero-label">Загрузите фото товара</strong>
-            <span id="hero-hint">Выберите основной ракурс. Можно добавить несколько фотографий.</span>
+            <span id="hero-hint">Добавьте несколько ракурсов: OpenAI выберет главный для рекламы.</span>
             <small>PNG / JPG / WEBP · до 20 МБ</small>
             <input type="file" id="hero" multiple accept="image/png,image/jpeg,image/webp" aria-label="Фотографии товара, можно выбрать несколько">
           </label>
           <button type="button" id="clear-hero" class="remove-link" hidden>Убрать фотографию</button>
           <div class="mini-uploads core-uploads">
-            <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотип</strong><small id="file-logo">Необязательно, исходное изображение</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Логотипы и бренд-материалы, можно выбрать несколько"></label>
+            <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотип</strong><small id="file-logo">Логотип для нанесения на выбранный прицеп</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Логотипы и бренд-материалы, можно выбрать несколько"></label>
             <label class="mini-upload" for="drawing"><span class="mini-icon" aria-hidden="true">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">Необязательно, PNG, JPG или PDF</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf" aria-label="Загрузить технический чертёж"></label>
           </div>
           
@@ -74,6 +74,7 @@
 
         <div class="brief-column">
           <label class="field" for="model"><span>Название продукта <span class="required">*</span></span><input id="model" maxlength="80" autocomplete="off" placeholder="Например, ZubrTrail 500"></label>
+          <label class="field" for="brand"><span>Бренд для нанесения на прицеп</span><input id="brand" maxlength="70" placeholder="Например, ZUBR TRAIL"><small class="field-tip">AI удалит старые маркировки только с выбранного прицепа и нанесёт ваш логотип, бренд и модель. Без названия бренд не выдумывается.</small></label>
           <label class="field" for="slogan"><span>Главное преимущество <span class="field-hint">для рекламного заголовка</span></span><textarea id="slogan" rows="2" maxlength="250" placeholder="Например: Перевозит на 2,5 т больше за каждый рейс"></textarea></label>
           <div class="essential-commercial">
               <div class="price-grid"><label class="field" for="price"><span>Цена</span><input id="price" placeholder="Например, 6527000" inputmode="decimal"></label><label class="field" for="currency"><span>Валюта</span><select id="currency"><option value="Br">Br</option><option value="BYN">BYN</option><option value="₽" selected>₽</option><option value="€">€</option><option value="$">$</option></select></label></div>
@@ -89,7 +90,7 @@
           <label for="quick-ai-toggle" class="one-ai-choice">
             <input id="quick-ai-toggle" type="checkbox" checked role="switch">
             <span class="one-ai-text"><strong>Оформить с помощью OpenAI</strong>
-              <small id="quick-ai-description">OpenAI Images создаст два полных рекламных постера 4:3 и 9:16. 2 платных вызова. Это полноценная AI-графика, не шаблон; текст, цену и технические данные нужно проверить.</small>
+              <small id="quick-ai-description">AI выберет главный ракурс из нескольких фото, удалит с выбранного прицепа прежние маркировки, нанесёт ваш логотип, бренд и модель, затем создаст два постера 4:3 и 9:16. 3 платных вызова Images и, при нескольких ракурсах, до 1 дополнительного платного запроса AI для выбора фото. Проверьте надписи и технику.</small>
             </span>
           </label>
         </div>
@@ -115,12 +116,9 @@
             <div id="asset-files-list" class="asset-files-list" role="list" aria-label="Загруженные материалы и приоритеты"></div>
           </details>
             <details class="quiet-details" id="creative-notes">
-            <summary>Бренд и дополнительные пожелания <span aria-hidden="true">⌄</span></summary>
+            <summary>Дополнительные сведения и пожелания <span aria-hidden="true">⌄</span></summary>
             <div class="quiet-details-body">
-              <div class="two-fields">
-                <label class="field" for="brand"><span>Бренд</span><input id="brand" maxlength="70" placeholder="Например, ZUBR TRAIL"></label>
-                <label class="field" for="category"><span>Тип товара</span><input id="category" maxlength="100" placeholder="Например, самосвальный полуприцеп"></label>
-              </div>
+              <label class="field" for="category"><span>Тип товара</span><input id="category" maxlength="100" placeholder="Например, самосвальный полуприцеп"></label>
               <label class="field" for="design-notes"><span>Пожелания к оформлению</span><textarea id="design-notes" rows="2" maxlength="1800" placeholder="Например: светлый фон, крупная техника, красные акценты"></textarea></label>
               <label class="field" for="design-actions"><span>Дополнительные инструкции для AI-дизайна</span><textarea id="design-actions" rows="2" maxlength="1200" placeholder="Например: мягкий свет, свободное пространство справа"></textarea><small class="field-tip">AI не меняет подтверждённые ТТХ, цену или изображение товара.</small></label>
             </div>
@@ -281,7 +279,7 @@
             <span class="step-label">ШАГ 3 · НАСТОЯЩАЯ ГЕНЕРАЦИЯ OPENAI IMAGES</span>
             <h3 id="openai-posters-title">Рекламный AI-постер без эталона</h3>
             <p>Эксперимент: модель нарисует готовые растровые постеры 4:3 и 9:16. Этот результат не заменяет точную гибридную SVG-версию и требует проверки перед публикацией.</p>
-          </div><button type="button" id="generate-ai-posters-btn" class="primary-button">Создать 2 AI-постера · 2 платных вызова</button></div>
+          </div><button type="button" id="generate-ai-posters-btn" class="primary-button">Создать 2 AI-постера · 3 платных вызова Images</button></div>
           <p class="field-tip">Фото товара обязательно, рекламный эталон — нет. Это художественные растровые постеры, а не технически проверенный вектор: OpenAI может ошибиться в кириллице, цифрах и деталях техники. Перед публикацией сверьте факты с оригиналами. Генерация оплачивается по тарифу OpenAI, включая два вызова Images.</p>
           <p id="openai-posters-status" role="status" aria-live="polite">По умолчанию применяется профессиональная рекламная арт-дирекция для промышленной техники. Выберите качество OpenAI в дополнительных настройках.</p>
           <div id="openai-poster-results" class="ai-poster-results" hidden>
@@ -431,10 +429,10 @@
 
 
     </details>
-    <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
+    <footer class="footer">PromoEditor · ZIP содержит два AI-постера и исходное выбранное фото; AI-ребрендинг требует проверки · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261120-no-crop-production-ui-1" defer></script>
+  <script src="/static/app.js?v=20261120-selected-photo-rebrand-1" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>
