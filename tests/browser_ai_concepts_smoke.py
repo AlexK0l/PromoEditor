@@ -86,7 +86,7 @@ def main():
         assert page.locator("#generate-btn").is_visible()
         assert page.locator("#quick-ai-toggle").is_checked()
         assert page.locator("#use-openai").is_checked()
-        assert "3 платных Images" in page.locator("#quick-ai-description").inner_text()
+        assert "3 платных вызова Images" in page.locator("#quick-ai-description").inner_text()
         assert "SVG нет" in page.locator("#quick-ai-description").inner_text()
 
         # The single public switch may still explicitly choose free creation.
