@@ -232,3 +232,45 @@ def test_transparent_vehicle_png_gets_a_clean_light_model_reference():
         assert img.getpixel((0,0))==(245,247,250)
         red=img.getpixel((60,40))
         assert red[0]>200 and red[1]<70
+
+
+@pytest.mark.parametrize(
+    "format_key,native_size,target",
+    [
+        ("4x3", (1536, 1024), (1440, 1080)),
+        ("9x16", (1024, 1536), (1080, 1920)),
+    ],
+)
+def test_full_ai_poster_never_crops_left_right_or_distorts(
+        format_key, native_size, target):
+    """Model draws content near native edges; nothing may be cut off.
+
+    Old ImageOps.fit cut 11.1%/15.6% of horizontal artwork. This
+    deterministically checks the exact edges of both native API ratios.
+    """
+    from PIL import ImageDraw
+    src = Image.new("RGB", native_size, (235, 235, 235))
+    draw = ImageDraw.Draw(src)
+    W, H = native_size
+    draw.rectangle((0, 0, 45, H), fill=(245, 0, 0))
+    draw.rectangle((W-46, 0, W-1, H), fill=(0, 0, 245))
+    draw.rectangle((46, 0, W-47, 44), fill=(0, 230, 0))
+    draw.rectangle((46, H-46, W-47, H-1), fill=(240, 210, 10))
+    output = ai_poster_service.preserve_artwork_without_crop(src, target)
+    assert output.size == target
+    mid = target[1] // 2
+    assert output.getpixel((8, mid))[0] > 200, "Left logo/label was cropped"
+    assert output.getpixel((target[0]-9, mid))[2] > 200, "Right price/headline was cropped"
+    assert output.getpixel((target[0]//2, 3))[1] > 160, "Top bleed lost poster colors"
+    assert output.getpixel((target[0]//2, target[1]-4))[0] > 170, "Bottom bleed lost poster colors"
+    assert target[0]/target[1] in (4/3, 9/16)
+
+
+def test_image_prompt_never_requests_aspect_ratio_crop():
+    brief = default_brief()
+    for fmt in ("4x3", "9x16"):
+        prompt = ai_poster_service._prompt(
+            brief, fmt, logo=False, drawing=False, reference=False)
+        assert "WITHOUT CROPPING OR STRETCHING" in prompt
+        assert "central 78%" not in prompt
+        assert "central 88%" not in prompt
