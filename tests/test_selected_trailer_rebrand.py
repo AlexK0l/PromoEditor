@@ -71,7 +71,8 @@ def stub_exact_ai_renderer(monkeypatch, tmp_path):
     """New main route: verify it gets the ONE selected and rebranded photo."""
     observed = []
 
-    def render(brief, rebranded, *, logo, drawing, reference, model, quality):
+    def render(brief, rebranded, *, logo, drawing, reference, model, quality,
+               output_dir=None):
         with Image.open(io.BytesIO(rebranded)) as image:
             pixel = image.getpixel((12, 12))
         observed.append({
