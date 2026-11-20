@@ -68,7 +68,7 @@ def test_pr_preview_is_isolated_rate_limited_and_rollback_free():
     assert "needed=1400" in script
     assert "rr_bytes < 640*1024*1024" in script
     assert "MemoryMax=480M" in script
-    assert "MemoryHigh=340M" in script
+    assert "MemoryHigh=420M" in script
     assert "RuntimeMaxSec=3600" in script
     assert "Restart=no" in script
     assert "PROMO_AUTH_ENABLED=0" in script
