@@ -89,13 +89,13 @@
           <label for="quick-ai-toggle" class="one-ai-choice">
             <input id="quick-ai-toggle" type="checkbox" checked role="switch">
             <span class="one-ai-text"><strong>Оформить с помощью OpenAI</strong>
-              <small id="quick-ai-description">AI полностью создаст рекламный дизайн 4:3 и 9:16. Алгоритм лишь подставит оригинальные фото, логотип и точные данные в AI-зоны. 1 запрос на арт-план + 2 на полный дизайн.</small>
+              <small id="quick-ai-description">OpenAI Images создаст два полных рекламных постера 4:3 и 9:16. 2 платных вызова. Это полноценная AI-графика, не шаблон; текст, цену и технические данные нужно проверить.</small>
             </span>
           </label>
         </div>
         <div class="generate-row">
           <div class="generate-description">
-            <span class="step-label">ДВА ФОРМАТА · SVG / PNG / JPEG</span>
+            <span class="step-label">ДВА ФОРМАТА · 4:3 / 9:16</span>
             <span id="modebanner" class="modebanner" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span><strong>Без расходов на API</strong><small>Обычная сборка изображений</small></span></span>
           </div>
           <button type="button" id="generate-btn" class="primary-button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 6L20 11l-6.5 2L12 20l-1.5-7L4 11l6.5-2L12 3Z"/></svg> Создать промо <span aria-hidden="true">→</span></button>
@@ -127,11 +127,11 @@
           </details>
                     <fieldset class="mode-choice" id="generation-mode">
           <legend>Дополнительные режимы</legend>
-          <label class="mode-main"><input type="radio" name="generation_mode" id="mode-hybrid" value="hybrid" checked><span><strong>Полный AI-дизайн</strong><small id="hybrid-mode-hint">OpenAI создаёт всю графику двух макетов. Ваши оригинальные фото, логотип и факты накладываются в AI-зоны без подмены.</small></span></label>
+          <label class="mode-main"><input type="radio" name="generation_mode" id="mode-hybrid" value="hybrid" checked><span><strong>Полный AI-постер — основной режим</strong><small id="hybrid-mode-hint">Тот же генератор, что раньше находился в экспериментальных функциях: два цельных рекламных изображения OpenAI, без алгоритмической сетки. Проверяйте данные и товар; редактируемого SVG нет.</small></span></label>
           <label class="mode-main"><input type="radio" name="generation_mode" id="mode-template" value="template"><span><strong>Без AI · бесплатно</strong><small>Рекламный макет из ваших файлов без расходов на OpenAI.</small></span></label>
           <details class="quiet-details expert-mode" id="expert-modes">
             <summary>Экспериментальные режимы для специалистов <span aria-hidden="true">⌄</span></summary>
-            <label><input type="radio" name="generation_mode" id="mode-ai-pro" value="ai_pro"><span><strong>Три AI-концепции / растровые AI-постеры</strong><small>Отдельные платные инструменты. Полностью AI-постеры не содержат редактируемых технически точных слоёв.</small></span></label>
+            <label><input type="radio" name="generation_mode" id="mode-ai-pro" value="ai_pro"><span><strong>Три векторные AI-концепции</strong><small>Отдельный экспериментальный инструмент для редактируемых вариантов. Полная AI-генерация теперь доступна основной кнопкой.</small></span></label>
           </details>
         </fieldset>
         <div class="ai-creative-settings" id="ai-creative-settings">
@@ -306,7 +306,7 @@
       </div>
     </section>
 
-    <div id="loading" class="loading" hidden role="status" aria-live="polite"><span class="loader" aria-hidden="true"></span><div class="loading-copy"><strong>Создаём промоматериалы…</strong><small>Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.</small><span id="generate-elapsed" class="loading-elapsed" aria-label="Время генерации" hidden></span></div></div>
+    <div id="loading" class="loading" hidden role="status" aria-live="polite"><span class="loader" aria-hidden="true"></span><div class="loading-copy"><strong>Создаём промоматериалы…</strong><small>OpenAI рисует оба плаката. Не закрывайте вкладку и не запускайте повторно.</small><span id="generate-elapsed" class="loading-elapsed" aria-label="Время генерации" hidden></span></div></div>
 
     <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
       <span class="success-icon" aria-hidden="true">✓</span>
