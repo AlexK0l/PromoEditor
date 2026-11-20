@@ -28,6 +28,7 @@ from .openai_service import (analyze_documents, generate_visuals,
                              _finish_visual_cache)
 from .ai_poster_service import (generate_full_posters, WARNING as AI_POSTER_WARNING,
                                 VERSION as AI_POSTER_VERSION)
+from . import ai_job_queue
 from .product_rebrand_service import (
     rebrand_selected_photo, cache_dir as rebrand_cache_dir,
     cached_photo as cached_rebrand_photo, REBRAND_WARNING,
@@ -70,6 +71,8 @@ LOCK=threading.Lock()
 RENDER_LOG=logging.getLogger('uvicorn.error')
 # Bound 6-preview renders inside a worker, especially on the 2-GB VPS.
 CONCEPT_RENDER_SLOTS=threading.BoundedSemaphore(1)
+# One expensive paid image workflow at a time on an 800 MiB VPS.
+MAIN_AI_GENERATION_SLOT=threading.BoundedSemaphore(1)
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
 FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
        'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','layout_spec.json','edit.png'}
@@ -695,7 +698,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
 
 def _exact_typography_posters_sync(brief, product_raw, logo_raw,
                                    drawing_raw, reference_raw, model, quality,
-                                   selected_source=None):
+                                   selected_source=None, progress=None):
     """New PRIMARY mode: full AI design -> exact SVG copy -> AI typography.
 
     Rebrand only the selected original trailer. The AI text finisher selects
@@ -706,17 +709,23 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
     # both Responses stages. On a partial-failure retry, the already paid
     # rebrand image is reused and the template module checks ONLY its truly
     # missing art/layout/typography calls, so a completed cache costs zero.
+    if progress: progress('Проверяем лимиты OpenAI и кэш ранее выполненных этапов')
     rebrand_dir=rebrand_cache_dir(brief,product_raw,logo_raw,model,quality)
     chosen=cached_rebrand_photo(rebrand_dir)
     if chosen is None:
         check_paid_capacity('text',2)
         check_paid_capacity('image',3)
+        if progress: progress('Наносим ваш логотип и модель только на выбранный прицеп')
         chosen=rebrand_selected_photo(
             brief,product_raw,logo=logo_raw,model=model,quality=quality,
             folder=rebrand_dir)
-    rendered=generate_exact_typography_posters(
-        brief,chosen,logo=logo_raw,drawing=drawing_raw,
-        reference=reference_raw,model=model,quality=quality)
+    if progress: progress('Подготавливаем два AI-макета и точные текстовые зоны')
+    render_options={'logo':logo_raw,'drawing':drawing_raw,
+                    'reference':reference_raw,'model':model,'quality':quality}
+    if progress is not None:
+        render_options['progress']=progress
+    rendered=generate_exact_typography_posters(brief,chosen,**render_options)
+    if progress: progress('Сохраняем SVG, PNG, JPEG и исходники в ZIP')
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
@@ -938,10 +947,25 @@ async def preview_promo_prompt(request:Request):
 
 @app.post('/api/generate')
 async def generate(request:Request):
+    """Compatibility endpoint, including immediate/free SVG generation."""
     _guard_rate(request)
     if int(request.headers.get('content-length') or 0)>MAX_ALL:
         raise HTTPException(413,detail='Превышен общий лимит загрузки 68 МБ')
     form=await request.form()
+    if str(form.get('generation_mode','template'))=='hybrid':
+        if not MAIN_AI_GENERATION_SLOT.acquire(blocking=False):
+            raise HTTPException(409,detail=(
+                'На VPS уже выполняется одна AI-генерация. Дождитесь её '
+                'результата; повторный платный запрос не отправлен.'))
+        try:
+            return await _generate_from_form(form)
+        finally:
+            MAIN_AI_GENERATION_SLOT.release()
+    return await _generate_from_form(form)
+
+
+async def _generate_from_form(form, progress=None):
+    """Same validated pipeline for direct and disconnect-safe queued requests."""
     raw=form.get('payload','{}')
     if not isinstance(raw,str) or len(raw)>48000:raise HTTPException(400,detail='Некорректные данные формы')
     try:brief=_normalize(json.loads(raw))
@@ -964,6 +988,7 @@ async def generate(request:Request):
     if not isinstance(supplied_prompt,str) or len(supplied_prompt)>8000:
         raise HTTPException(400,detail='Промпт не должен превышать 8000 символов.')
     try:
+        if progress: progress('Проверяем загруженные фотографии и выбираем главный ракурс')
         report,records=await asyncio.to_thread(
             analyze_project,groups,prefs,cached_report=cached,use_ai=False,
             rank_photos_with_ai=(mode=='hybrid'),
@@ -1046,7 +1071,7 @@ async def generate(request:Request):
                     'id':report['selected_assets']['primary_photo'],
                     'name':records[report['selected_assets']['primary_photo']]['name'],
                     'sha256':records[report['selected_assets']['primary_photo']]['sha256'],
-                })
+                }, **({'progress':progress} if progress else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references
             result=await asyncio.to_thread(
