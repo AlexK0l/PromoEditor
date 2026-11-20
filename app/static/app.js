@@ -78,8 +78,60 @@
   }
   function clearError(){$('error-box').hidden=true;$('error-box').textContent='';}
   async function readError(response){
-    try {const json=await response.json();return typeof json.detail==='string'?json.detail:`Ошибка HTTP ${response.status}`;}
-    catch {return `Ошибка HTTP ${response.status}. Проверьте соединение.`;}
+    try {
+      const json=await response.json();
+      return typeof json.detail==='string'?json.detail:`Ошибка HTTP ${response.status}.`;
+    }catch{
+      if(response.status===502||response.status===503||response.status===504)
+        return `Сервер PromoEditor не ответил (HTTP ${response.status}). Это может быть перезапуск приложения, нехватка памяти или проблема обратного прокси. Проверьте systemctl status promoeditor и journalctl -u promoeditor. Не запускайте платную генерацию повторно до проверки.`;
+      return `Ошибка HTTP ${response.status}. Проверьте доступность сервера PromoEditor.`;
+    }
+  }
+
+  async function pollAiGeneration(taskId){
+    if(!/^[a-f0-9]{32}$/.test(taskId||''))
+      throw new Error('Сервер не вернул корректный номер AI-задачи.');
+    const endpoint='/api/generate/status/'+taskId;
+    let temporaryFailures=0;
+    for(;;){
+      await new Promise(resolve=>window.setTimeout(resolve,2400));
+      let response;
+      try{response=await fetch(endpoint,{cache:'no-store'});}
+      catch{
+        temporaryFailures++;
+        if(temporaryFailures<7){
+          setStatus('Сервер временно недоступен',
+            'Генерация могла продолжиться на VPS. Проверяем статус, не создавая повторный платный запрос.','working');
+          continue;
+        }
+        throw new Error('Связь с сервером потеряна. Номер AI-задачи: '+taskId+'. Проверьте журнал promoeditor; повторную генерацию не запускайте.');
+      }
+      if(!response.ok){
+        if([502,503,504].includes(response.status)&&temporaryFailures++<6){
+          setStatus('Соединение с VPS прервалось',
+            'Пытаемся получить статус уже созданной задачи, не оплачивая повторный запрос.','working');
+          continue;
+        }
+        throw new Error((await readError(response))+' Номер задачи: '+taskId);
+      }
+      temporaryFailures=0;
+      const state=await response.json();
+      if(state.status==='complete'){
+        window.sessionStorage.removeItem('promoeditor-ai-task');
+        if(!state.result||!state.result.images)
+          throw new Error('Задача завершена без файлов. Номер: '+taskId);
+        return state.result;
+      }
+      if(state.status==='failed'){
+        window.sessionStorage.removeItem('promoeditor-ai-task');
+        throw new Error((state.error||'Не удалось создать AI-макет.')+
+          ' (задача '+taskId+'). Повторный запрос не запускался.');
+      }
+      if(state.status!=='running')
+        throw new Error('Неизвестное состояние AI-задачи: '+taskId);
+      setStatus('AI-генерация выполняется',state.stage||
+        'OpenAI обрабатывает выбранный прицеп и два рекламных макета.','working');
+    }
   }
   function invalidateResult(){
     if(isBusy||!latest)return;
@@ -490,9 +542,17 @@
       }
       form.append('model',get('image-model'));
       form.append('quality',get('image-quality'));
-      const response=await fetch('/api/generate',{method:'POST',body:form});
+      // A paid 3-Images + 2-vision workflow must NEVER depend on a single
+      // long HTTP request. The server accepts one private task immediately,
+      // and this page polls its status without repeating any paid API call.
+      const endpoint=isHybrid()?'/api/generate/start':'/api/generate';
+      const response=await fetch(endpoint,{method:'POST',body:form});
       if(!response.ok)throw new Error(await readError(response));
-      latest=await response.json();
+      const result=await response.json();
+      if(isHybrid()){
+        window.sessionStorage.setItem('promoeditor-ai-task',result.task_id);
+        latest=await pollAiGeneration(result.task_id);
+      }else latest=result;
       const gaps=(latest.warnings||[]).filter(w=>/ТТХ|Габариты|Цена не указана/.test(w)).slice(0,4);
       $('result-warnings').hidden=!gaps.length;
       $('result-warning-items').replaceChildren();
