@@ -141,4 +141,6 @@ def test_advanced_paid_background_switch_must_agree_with_primary_ai_switch():
     js = (ROOT / "app.js").read_text(encoding="utf-8")
     assert "const paidInTemplate=!hybrid&&!ai&&checked('use-openai')" in js
     assert "simple.checked=hybrid||paidInTemplate" in js
+    assert "Бесплатная сборка затянулась" in js
+    assert "window.clearTimeout(slowWarning)" in js
     assert "2 платных запроса, без AI-арт-директора" in js
