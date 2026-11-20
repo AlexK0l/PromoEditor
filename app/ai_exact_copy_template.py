@@ -7,11 +7,14 @@ verified copy is composed. OpenAI never rewrites final customer facts.
 from __future__ import annotations
 
 import base64
+import gc
 import io
 import json
 import os
 import secrets
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 from PIL import Image
@@ -354,8 +357,14 @@ def generate_exact_typography_posters(
     brief: dict, rebranded: bytes, *, logo: bytes | None,
     drawing: bytes | None, reference: bytes | None,
     model: str, quality: str, progress=None,
+    output_dir: Path | None = None,
 ) -> dict:
     """Return render data without deleting any paid cache until ZIP succeeds."""
+    if output_dir is not None:
+        return _generate_file_backed_posters(
+            brief,rebranded,logo=logo,drawing=drawing,
+            reference=reference,model=model,quality=quality,
+            progress=progress,output_dir=Path(output_dir))
     if model not in IMAGE_MODELS or quality not in IMAGE_QUALITIES:
         raise ValueError("Недопустимая модель или качество OpenAI.")
     if not rebranded:
@@ -415,3 +424,200 @@ def generate_exact_typography_posters(
 def consume_paid_template_cache(cache: Path) -> None:
     """Remove paid-cache only AFTER all final outputs are archived."""
     shutil.rmtree(cache,ignore_errors=True)
+
+
+def _valid_paid_image(path: Path) -> bool:
+    """Use the existing paid-cache file without decoding TWO huge RGB frames."""
+    try:
+        with Image.open(path) as frame:
+            frame.verify()
+        return True
+    except (OSError, ValueError):
+        path.unlink(missing_ok=True)
+        return False
+
+
+def _open_thumb(path: Path) -> Image.Image:
+    """Vision only needs pixels of a bounded preview, not a print-size image."""
+    with Image.open(path) as frame:
+        thumb = frame.convert("RGB")
+    thumb.thumbnail((768, 768), Image.Resampling.LANCZOS)
+    return thumb
+
+
+def _rasterize_in_worker(svg: Path, png: Path, jpeg: Path) -> None:
+    """Release Cairo's native allocations after EACH poster and cap failures."""
+    env = os.environ.copy()
+    # The raster worker must never need to know the OpenAI API secret.
+    env.pop("OPENAI_API_KEY", None)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "app.ai_raster_worker",
+             str(svg), str(png), str(jpeg)],
+            check=False, capture_output=True, timeout=180, env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            "Превышено время безопасного рендеринга SVG. "
+            "Ранее оплаченные AI-изображения сохранены в кэше."
+        ) from exc
+    if result.returncode != 0:
+        reason = ("Операционная система прервала рендеринг (возможна "
+                  "нехватка памяти)."
+                  if result.returncode in (-9, 137) else
+                  "Ошибка изолированного рендеринга SVG.")
+        raise RuntimeError(
+            reason+" Исходный AI-макет и текст сохранены; "
+            "повторных платных вызовов не было."
+        )
+    if not png.is_file() or not jpeg.is_file():
+        raise RuntimeError("Рендеринг не сохранил PNG и JPEG.")
+
+
+def _generate_file_backed_posters(
+    brief: dict, rebranded: bytes, *, logo: bytes | None,
+    drawing: bytes | None, reference: bytes | None,
+    model: str, quality: str, progress, output_dir: Path,
+) -> dict:
+    """Low-RAM production path; never retain both print posters in memory.
+
+    Paid native AI images remain in the original private content-addressed
+    cache. Only the final result and textless extensions live in the job
+    folder. A transient sub-process rasterizes each finished editable SVG.
+    """
+    if model not in IMAGE_MODELS or quality not in IMAGE_QUALITIES:
+        raise ValueError("Недопустимая модель или качество OpenAI.")
+    if not rebranded:
+        raise ValueError("Не выбран ребрендированный полуприцеп.")
+    output_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    cache = _cache_dir(
+        brief,rebranded,logo,drawing,reference,model,quality)
+    with _visual_lock(cache):
+        layout = _load_json(cache,"layout.json")
+        layout_raw = _load_json(cache,"layout_raw.json")
+        styles = _load_json(cache,"typography.json")
+        # A paid layout answer still counts as cached when geometric
+        # reconciliation previously failed; do not repay the vision call.
+        text_needed = (
+            int(layout is None and layout_raw is None)
+            + int(styles is None))
+        check_paid_capacity("text", text_needed)
+        missing = {
+            fmt:not _valid_paid_image(cache/(fmt+".png"))
+            for fmt in FORMATS
+        }
+        check_paid_capacity("image",sum(missing.values()))
+        api = None
+        template_files = {}
+        for fmt in FORMATS:
+            if progress:
+                progress("Создаём художественный макет "+fmt+
+                         " (оплаченный кэш используется при наличии)")
+            if missing[fmt]:
+                inputs = [_input_png(rebranded,"01_selected_rebranded_trailer")]
+                if reference:
+                    inputs.append(_input_png(reference,"02_style_reference_only"))
+                try:
+                    if api is None:
+                        api = client()
+                    reply = api.images.edit(
+                        model=model,image=inputs,
+                        prompt=_art_prompt(brief,fmt,bool(reference)),
+                        size=IMAGE_SIZES[fmt],
+                        quality=quality,output_format="png",
+                    )
+                    frame = as_image(reply)
+                    try:
+                        _save_visual(cache,fmt,frame)
+                    finally:
+                        frame.close()
+                    del reply
+                finally:
+                    for item in inputs:
+                        item.close()
+            source = cache/(fmt+".png")
+            destination = output_dir/("ai_template_"+fmt+".png")
+            with Image.open(source) as original:
+                frame = preserve_artwork_without_crop(
+                    original,FORMATS[fmt])
+            try:
+                frame.save(destination,format="PNG")
+            finally:
+                frame.close()
+            template_files[fmt] = destination
+            # Release Python and Pillow buffers before the next AI call.
+            gc.collect()
+        # Do not keep an OpenAI SDK client/response alive during typography.
+        api = None
+        gc.collect()
+
+        copy = verified_copy(brief)
+        if layout is None:
+            if progress:
+                progress("AI определяет свободные текстовые области двух макетов")
+            previews = {fmt:_open_thumb(template_files[fmt])
+                        for fmt in FORMATS}
+            try:
+                layout = _layout_plan(
+                    brief,previews,has_logo=bool(logo),
+                    has_drawing=bool(drawing),folder=cache)
+            finally:
+                for frame in previews.values():
+                    frame.close()
+                previews.clear()
+            _save_json(cache,"layout.json",layout)
+        else:
+            layout = repair_ai_slots(
+                layout,copy,has_logo=bool(logo),
+                has_drawing=bool(drawing))
+        if styles is None:
+            if progress:
+                progress("Вставляем точные надписи и готовим эскизы для AI")
+            preview_images={}
+            for fmt in FORMATS:
+                with Image.open(template_files[fmt]) as art:
+                    provisional = render_exact_svg(
+                        brief,fmt,art,layout[fmt],DEFAULT_STYLE,
+                        logo=logo,drawing=drawing)
+                try:
+                    preview_images[fmt] = _preview_image(provisional,fmt)
+                finally:
+                    del provisional
+                gc.collect()
+            try:
+                if progress:
+                    progress("AI подбирает единый шрифт без изменения текста")
+                styles = _finish_typography(preview_images)
+            finally:
+                for preview in preview_images.values():
+                    preview.close()
+                preview_images.clear()
+            _save_json(cache,"typography.json",styles)
+        else:
+            styles = validate_style(styles)
+        files={"svg":{},"png":{},"jpeg":{}}
+        for fmt in FORMATS:
+            if progress:
+                progress("Рендерим "+fmt+
+                         " в отдельном процессе с ограниченной памятью")
+            path = output_dir/("corel_"+fmt+".svg")
+            with Image.open(template_files[fmt]) as art:
+                svg = render_exact_svg(
+                    brief,fmt,art,layout[fmt],styles[fmt],
+                    logo=logo,drawing=drawing)
+            path.write_bytes(svg)
+            del svg
+            gc.collect()
+            png = output_dir/("ai_poster_"+fmt+".png")
+            jpeg = output_dir/("ai_poster_"+fmt+".jpg")
+            _rasterize_in_worker(path,png,jpeg)
+            files["svg"][fmt] = path
+            files["png"][fmt] = png
+            files["jpeg"][fmt] = jpeg
+            gc.collect()
+        return {
+            **files, "artwork_paths":template_files,
+            "layout":layout, "typography":styles,
+            "verified_copy":copy, "cache_dir":cache,
+            "file_backed":True,
+        }
