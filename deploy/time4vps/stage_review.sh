@@ -106,7 +106,7 @@ chmod 0600 "$ENV_FILE"
 systemd-run --quiet --collect --unit="$UNIT" \
   -p Type=simple -p User=promoeditor -p Group=promoeditor \
   -p "WorkingDirectory=$SOURCE" -p "EnvironmentFile=$ENV_FILE" \
-  -p MemoryHigh=340M -p MemoryMax=480M \
+  -p MemoryHigh=420M -p MemoryMax=480M \
   -p TasksMax=48 -p CPUQuota=70% \
   -p LimitNOFILE=2048 -p UMask=0077 \
   -p Restart=no -p RuntimeMaxSec=3600 \
