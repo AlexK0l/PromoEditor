@@ -59,11 +59,13 @@ def main():
         # No demo, sample preset, manual layout switcher, template designer,
         # duplicate paid poster entry or experimental concept creator visible.
         for selector in (
-            ".preset-shortcut", "#topbar-menu", "#generation-mode",
+            "#topbar-menu", "#generation-mode",
             "#design-options", "#expert-prompt", "#ai-creative-settings",
             "#ai-concepts-workflow", "#openai-posters-workflow", "#use-demo",
         ):
             assert page.locator(selector).is_hidden(), selector
+        assert page.locator(".preset-shortcut").is_visible()
+        assert page.locator("#approved-preset-btn").is_visible()
         assert page.locator("#generate-btn").is_visible()
         assert page.locator("#quick-ai-toggle").is_checked()
         assert page.locator("#use-openai").is_checked()
@@ -116,7 +118,7 @@ def main():
         assert "SVG нет" in page.locator(".prompt-download-note").inner_text() or (
             "Редактируемых SVG нет" in page.locator(".prompt-download-note").inner_text()
         )
-        for selector in (".preset-shortcut", "#generation-mode",
+        for selector in ("#generation-mode",
                          "#ai-concepts-workflow", "#openai-posters-workflow"):
             assert page.locator(selector).is_hidden(), selector
 
