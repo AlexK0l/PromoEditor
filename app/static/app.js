@@ -117,13 +117,13 @@
       temporaryFailures=0;
       const state=await response.json();
       if(state.status==='complete'){
-        window.sessionStorage.removeItem('promoeditor-ai-task');
+        try{window.sessionStorage.removeItem('promoeditor-ai-task');}catch{}
         if(!state.result||!state.result.images)
           throw new Error('Задача завершена без файлов. Номер: '+taskId);
         return state.result;
       }
       if(state.status==='failed'){
-        window.sessionStorage.removeItem('promoeditor-ai-task');
+        try{window.sessionStorage.removeItem('promoeditor-ai-task');}catch{}
         throw new Error((state.error||'Не удалось создать AI-макет.')+
           ' (задача '+taskId+'). Повторный запрос не запускался.');
       }
@@ -456,6 +456,52 @@
     return result.prompt;
   }
 
+  // The same UI is used for a freshly completed task or a restored task
+  // after the browser was refreshed mid-generation. Never pay twice.
+  function presentGeneratedResult(){
+    if(!latest?.images)return;
+      const gaps=(latest.warnings||[]).filter(w=>/ТТХ|Габариты|Цена не указана/.test(w)).slice(0,4);
+      $('result-warnings').hidden=!gaps.length;
+      $('result-warning-items').replaceChildren();
+      for(const message of gaps){
+        const item=document.createElement('li');item.textContent=message;
+        $('result-warning-items').appendChild(item);
+      }
+      window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
+      // Show actual paid Image outputs (or SVG-derived previews in non-full-AI modes).
+      // This preview performs NO additional model calls.
+      for(const fmt of ['4x3','9x16']){
+        const path=latest.images?.[fmt];
+        if(path){
+          $('generated-preview-'+fmt).src=path;
+          $('generated-preview-link-'+fmt).href=path;
+        }
+      }
+      $('generated-previews').hidden=false;
+      $('download-panel').hidden=false;
+      const rasterOnly=Boolean(latest.raster_only);
+      for(const id of ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16'])
+        $(id).disabled=false;
+      for(const fmt of ['4x3','9x16']){
+        const svgButton=$('download-svg-'+fmt);
+        svgButton.disabled=rasterOnly||!latest.corel?.[fmt];
+        svgButton.parentElement.hidden=rasterOnly;
+      }
+      $('individual-downloads').querySelector('summary').textContent=rasterOnly
+        ?'Скачать отдельные PNG или JPEG'
+        :'Скачать отдельные PNG, JPEG или SVG';
+      document.querySelector('.prompt-download-note').textContent=rasterOnly
+        ?'ZIP содержит два AI-постера, исходное выбранное фото и отдельно ребрендированный прицеп (rebranded_product.png). Остальные фото не изменяются. SVG нет.'
+        :'ZIP содержит оба AI-дизайна, точные редактируемые SVG, AI-зоны текста, стилевые параметры, ребрендированное и исходное фото.';
+      document.querySelector('.result-disclaimer').textContent=rasterOnly
+        ?'AI изменил фото выбранного прицепа, а не реальную технику. Проверьте точность нового логотипа, бренда, модели, цены, характеристик и геометрии перед публикацией; остальные фото не изменялись. Текст растра не редактируется.'
+        :'Текст и числа вставлены точно из вашей формы; AI лишь подбирал шрифт, цвет и масштаб. Проверьте читаемость, фотографию и логотип. SVG можно исправить в CorelDRAW.';
+      setStatus('Готово',rasterOnly
+        ?('Созданы два постера 4:3 и 9:16; ребрендирован только прицеп на фото «'+(latest.selected_photo?.name||'выбранное главное')+'». Проверьте логотип и ТТХ.')
+        :(isHybrid()?'AI-макет с точным текстом и AI-типографикой':isAiPro()?'Выбранный AI-дизайн':'Шаблон')+': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
+      $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
   async function generate(){
     if(isBusy)return;
     clearError();
@@ -550,49 +596,10 @@
       if(!response.ok)throw new Error(await readError(response));
       const result=await response.json();
       if(isHybrid()){
-        window.sessionStorage.setItem('promoeditor-ai-task',result.task_id);
+        try{window.sessionStorage.setItem('promoeditor-ai-task',result.task_id);}catch{}
         latest=await pollAiGeneration(result.task_id);
       }else latest=result;
-      const gaps=(latest.warnings||[]).filter(w=>/ТТХ|Габариты|Цена не указана/.test(w)).slice(0,4);
-      $('result-warnings').hidden=!gaps.length;
-      $('result-warning-items').replaceChildren();
-      for(const message of gaps){
-        const item=document.createElement('li');item.textContent=message;
-        $('result-warning-items').appendChild(item);
-      }
-      window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
-      // Show actual paid Image outputs (or SVG-derived previews in non-full-AI modes).
-      // This preview performs NO additional model calls.
-      for(const fmt of ['4x3','9x16']){
-        const path=latest.images?.[fmt];
-        if(path){
-          $('generated-preview-'+fmt).src=path;
-          $('generated-preview-link-'+fmt).href=path;
-        }
-      }
-      $('generated-previews').hidden=false;
-      $('download-panel').hidden=false;
-      const rasterOnly=Boolean(latest.raster_only);
-      for(const id of ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16'])
-        $(id).disabled=false;
-      for(const fmt of ['4x3','9x16']){
-        const svgButton=$('download-svg-'+fmt);
-        svgButton.disabled=rasterOnly||!latest.corel?.[fmt];
-        svgButton.parentElement.hidden=rasterOnly;
-      }
-      $('individual-downloads').querySelector('summary').textContent=rasterOnly
-        ?'Скачать отдельные PNG или JPEG'
-        :'Скачать отдельные PNG, JPEG или SVG';
-      document.querySelector('.prompt-download-note').textContent=rasterOnly
-        ?'ZIP содержит два AI-постера, исходное выбранное фото и отдельно ребрендированный прицеп (rebranded_product.png). Остальные фото не изменяются. SVG нет.'
-        :'ZIP содержит оба AI-дизайна, точные редактируемые SVG, AI-зоны текста, стилевые параметры, ребрендированное и исходное фото.';
-      document.querySelector('.result-disclaimer').textContent=rasterOnly
-        ?'AI изменил фото выбранного прицепа, а не реальную технику. Проверьте точность нового логотипа, бренда, модели, цены, характеристик и геометрии перед публикацией; остальные фото не изменялись. Текст растра не редактируется.'
-        :'Текст и числа вставлены точно из вашей формы; AI лишь подбирал шрифт, цвет и масштаб. Проверьте читаемость, фотографию и логотип. SVG можно исправить в CorelDRAW.';
-      setStatus('Готово',rasterOnly
-        ?('Созданы два постера 4:3 и 9:16; ребрендирован только прицеп на фото «'+(latest.selected_photo?.name||'выбранное главное')+'». Проверьте логотип и ТТХ.')
-        :(isHybrid()?'AI-макет с точным текстом и AI-типографикой':isAiPro()?'Выбранный AI-дизайн':'Шаблон')+': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
-      $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
+      presentGeneratedResult();
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
       if(/файл|фото|ракурс|материал/i.test(error.message||'')){
@@ -759,6 +766,23 @@
     }
     if(!apiReady && isHybrid())$('mode-template').checked=true;
     updateAi();refreshStyle();updateFileLabels();updateRoi();
+    // Recover already paid work after a refresh without another Images call.
+    let savedTask=null;
+    try{savedTask=window.sessionStorage.getItem('promoeditor-ai-task');}catch{}
+    if(apiReady&&isHybrid()&&savedTask&&/^[a-f0-9]{32}$/.test(savedTask)){
+      clearError();
+      busy(true);
+      setStatus('Восстанавливаем AI-генерацию',
+        'Получаем статус ранее запущенного платного задания. Новые вызовы не создаём.','working');
+      try{
+        latest=await pollAiGeneration(savedTask);
+        presentGeneratedResult();
+      }catch(error){
+        showError(error.message||'Не удалось восстановить статус AI-задачи.');
+      }finally{
+        busy(false);
+      }
+    }
   }
 
   for(const id of fileIds){
