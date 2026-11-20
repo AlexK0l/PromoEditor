@@ -92,7 +92,8 @@ def _overlapping_category_and_benefits():
     # The landscape artwork has its own already-valid active text regions.
     # Repair must leave those untouched when only 9:16 is defective.
     layouts["4x3"]["category"]={"x":40,"y":145,"w":250,"h":45}
-    layouts["4x3"]["benefits"]={"x":310,"y":140,"w":610,"h":60}
+    layouts["4x3"]["product"]={"x":150,"y":250,"w":760,"h":500}
+    layouts["4x3"]["benefits"]={"x":310,"y":145,"w":610,"h":80}
     portrait=layouts["9x16"]
     # Give AI art a generous empty editorial region between the product
     # and price strip. Only CATEGORY overlaps the longer BENEFITS region.
