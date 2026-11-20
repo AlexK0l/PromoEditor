@@ -165,8 +165,10 @@
     // Expert tools keep a direct full-Images entrypoint for compatibility;
     // the SAME full generator now powers the primary Create button.
     $('openai-posters-workflow').hidden=!ai;
-    $('prompt-workflow').hidden=ai;
-    $('expert-prompt').hidden=ai;
+    // The full Images poster engine consumes validated brief fields and
+    // creative notes; it does not consume a template/SVG prompt textarea.
+    $('prompt-workflow').hidden=ai||hybrid;
+    $('expert-prompt').hidden=ai||hybrid;
     $('generate-btn').textContent=ai
       ?'Собрать выбранную AI-концепцию →':'Создать промо →';
     $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
@@ -476,7 +478,8 @@
         isHybrid()?'OpenAI Images рисует два цельных постера: 4:3 и 9:16. Это 2 платных вызова.':
           paidRendering?'Создаём макеты с OpenAI. Это платные вызовы.':
           'Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
-      const prompt=(promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim();
+      const prompt=isHybrid()?'':
+        ((promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim());
       const form=new FormData();form.append('payload',JSON.stringify(formBrief()));
       form.append('prompt',prompt);
       if(window.PromoAssets)window.PromoAssets.append(form);
