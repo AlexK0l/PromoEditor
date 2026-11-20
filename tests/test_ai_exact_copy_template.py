@@ -12,6 +12,8 @@ from app.ai_exact_copy_render import (
     ALL_SLOTS, DEFAULT_STYLE, FORMATS, render_exact_svg,
     validate_slots, validate_style, verified_copy,
 )
+from app.ai_slot_repair import repair_ai_slots
+
 
 
 def _png(size=(600,400), color="white"):
@@ -80,6 +82,91 @@ def test_ai_zones_must_be_valid_and_not_overlap_trailer_or_each_other():
     geom["9x16"]["model"]={"x":985,"y":60,"w":120,"h":90}
     with pytest.raises(ValueError,match="за границы"):
         validate_slots(geom,copy)
+
+
+
+
+def _overlapping_category_and_benefits():
+    """Real 9:16 regression: both roles active, overlapping on the poster."""
+    layouts=_layouts()
+    portrait=layouts["9x16"]
+    # Give AI art a generous empty editorial region between the product
+    # and price strip. Only CATEGORY overlaps the longer BENEFITS region.
+    portrait["product"]={"x":90,"y":230,"w":820,"h":400}
+    portrait["benefits"]={"x":80,"y":650,"w":630,"h":110}
+    portrait["category"]={"x":470,"y":680,"w":320,"h":68}
+    return layouts
+
+
+def test_ai_overlap_between_category_and_benefits_9x16_is_repaired_without_template():
+    brief=_brief()
+    brief["category"]="Самосвальный полуприцеп"
+    brief["benefits"]=[
+        "Надёжный кузов", "Удобная разгрузка",
+    ]
+    original=_overlapping_category_and_benefits()
+    copy=verified_copy(brief)
+    with pytest.raises(ValueError,match="category и benefits"):
+        validate_slots(original,copy)
+    repaired=repair_ai_slots(original,copy)
+    assert validate_slots(repaired,copy)==repaired
+    assert repaired["4x3"]==original["4x3"]
+    assert repaired["9x16"]["product"]==original["9x16"]["product"]
+    assert repaired["9x16"]["benefits"]==original["9x16"]["benefits"]
+    assert repaired["9x16"]["category"]!=original["9x16"]["category"]
+    assert original["9x16"]["category"]=={
+        "x":470,"y":680,"w":320,"h":68}, "Do not mutate the paid AI response"
+    svg=render_exact_svg(
+        brief,"9x16",Image.new("RGB",FORMATS["9x16"],"white"),
+        repaired["9x16"],DEFAULT_STYLE,
+    )
+    root=ET.fromstring(svg)
+    roles={element.get("data-verified-role"):element.get("data-exact-copy")
+           for element in root.iter() if element.get("data-verified-role")}
+    assert roles["category"]=="Самосвальный полуприцеп"
+    assert roles["benefits"]=="Надёжный кузов\\nУдобная разгрузка"
+    assert roles["model"]=="ZubrTrail 500"
+
+
+def test_slot_repair_does_not_move_any_valid_ai_zones():
+    geom=_layouts()
+    copy=verified_copy(_brief())
+    assert repair_ai_slots(geom,copy)==geom
+
+
+def test_paid_raw_layout_survives_invalid_collision_and_retry_requires_no_vision_call(
+        monkeypatch,tmp_path):
+    """A paid vision answer is cached BEFORE geometric reconciliation."""
+    brief=_brief()
+    brief["category"]="Самосвальный полуприцеп"
+    brief["benefits"]=["Надёжный кузов","Удобная разгрузка"]
+    art={fmt:Image.new("RGB",FORMATS[fmt],"white") for fmt in FORMATS}
+    calls=[]
+    class Responses:
+        def create(self,**kwargs):
+            calls.append(kwargs["text"]["format"]["name"])
+            return type("Result",(),{
+                "output_text":json.dumps({
+                    "layouts":_overlapping_category_and_benefits()
+                }),
+            })()
+    monkeypatch.setattr(
+        workflow,"client",
+        lambda:type("API",(),{"responses":Responses()})())
+    original_repair=workflow.repair_ai_slots
+    def temporary_failure(*args,**kwargs):
+        raise ValueError("Временная ошибка проверки геометрии")
+    monkeypatch.setattr(workflow,"repair_ai_slots",temporary_failure)
+    with pytest.raises(ValueError,match="Временная ошибка"):
+        workflow._layout_plan(
+            brief,art,has_logo=False,has_drawing=False,folder=tmp_path)
+    assert (tmp_path/"layout_raw.json").is_file()
+    assert calls==["poster_blank_slots"]
+    monkeypatch.setattr(workflow,"repair_ai_slots",original_repair)
+    repaired=workflow._layout_plan(
+        brief,art,has_logo=False,has_drawing=False,folder=tmp_path)
+    assert calls==["poster_blank_slots"], "Do not repay for same layout"
+    assert validate_slots(repaired,verified_copy(brief))==repaired
 
 
 def test_svg_keeps_exact_verified_customer_text_as_editable_nodes():
