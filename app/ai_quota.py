@@ -153,8 +153,8 @@ def check_paid_capacity(kind: str, needed: int) -> None:
     available = max(0, limit-used)
     if available < needed:
         raise QuotaExceeded(
-            f"Для создания двух AI-постеров нужно {needed} новых вызова "
-            f"OpenAI Images, а доступно сегодня по UTC: {available} "
+            f"Для выбранной AI-операции требуется новых вызовов "
+            f"OpenAI Images: {needed}; доступно сегодня по UTC: {available} "
             f"(лимит {limit}). Проверьте {env} или дождитесь нового дня. "
             "Ни один новый платный вызов не отправлен."
         )
