@@ -198,8 +198,8 @@ def main():
         preset.goto(BASE,wait_until='domcontentloaded')
         upload(preset,'hero','owned-product.png',png('yellow',(780,430),13),'image/png')
         upload(preset,'logo','owned-logo.png',png('black',(280,160),9),'image/png')
-        assert preset.locator('.preset-shortcut').is_hidden()
-        preset.evaluate("document.getElementById('approved-preset-btn').click()")
+        assert preset.locator('.preset-shortcut').is_visible()
+        preset.locator('#approved-preset-btn').click()
         preset.wait_for_function(
             'document.getElementById("model").value==="ZubrTrail 500"')
         assert preset.locator('#hero').evaluate('(el)=>el.files.length')==1
