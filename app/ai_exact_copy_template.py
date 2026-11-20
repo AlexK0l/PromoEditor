@@ -72,7 +72,7 @@ _STYLE = {
         "ink": {"type":"string"},
         "accent": {"type":"string"},
         "muted": {"type":"string"},
-        "scale_percent": {"type":"integer","minimum":78,"maximum":120},
+        "scale_percent": {"type":"integer","minimum":94,"maximum":112},
     },
     "required": list(DEFAULT_STYLE),
 }
@@ -334,7 +334,7 @@ def _finish_typography(previews: dict[str,Image.Image]) -> dict:
         "from 'DejaVu Sans' or 'DejaVu Sans Condensed' (Cyrillic support). "
         "Choose 'ink', 'accent', 'muted' as exact #RRGGBB colors providing "
         "strong contrast against the visual surfaces under the text. "
-        "Choose integer scale_percent 78..120. Match the actual poster "
+        "Choose integer scale_percent 94..112 so text stays readable. Match the poster "
         "palette and photographic atmosphere with a coherent, expressive "
         "typographic hierarchy; don't invent a new design and don't "
         "modify any content. Your output is styling metadata only."
