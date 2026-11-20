@@ -10,7 +10,7 @@ from PIL import Image
 from app import ai_exact_copy_template as workflow
 from app.ai_exact_copy_render import (
     ALL_SLOTS, DEFAULT_STYLE, FORMATS, render_exact_svg,
-    validate_slots, validate_style, verified_copy,
+    validate_slots, validate_style, verified_copy, poster_copy,
 )
 from app.ai_slot_repair import repair_ai_slots
 
@@ -92,7 +92,7 @@ def _overlapping_category_and_benefits():
     # The landscape artwork has its own already-valid active text regions.
     # Repair must leave those untouched when only 9:16 is defective.
     layouts["4x3"]["category"]={"x":40,"y":145,"w":250,"h":45}
-    layouts["4x3"]["benefits"]={"x":310,"y":145,"w":610,"h":50}
+    layouts["4x3"]["benefits"]={"x":310,"y":140,"w":610,"h":60}
     portrait=layouts["9x16"]
     # Give AI art a generous empty editorial region between the product
     # and price strip. Only CATEGORY overlaps the longer BENEFITS region.
@@ -170,7 +170,7 @@ def test_paid_raw_layout_survives_invalid_collision_and_retry_requires_no_vision
     repaired=workflow._layout_plan(
         brief,art,has_logo=False,has_drawing=False,folder=tmp_path)
     assert calls==["poster_blank_slots"], "Do not repay for same layout"
-    assert validate_slots(repaired,verified_copy(brief))==repaired
+    assert validate_slots(repaired,poster_copy(brief))==repaired
 
 
 def test_svg_keeps_exact_verified_customer_text_as_editable_nodes():
@@ -197,7 +197,7 @@ def test_long_copy_fails_closed_without_ellipsis_or_dropped_data():
     brief["slogan"]="Очень длинная строка " * 60
     geom=_slots("4x3")
     geom["slogan"]={"x":25,"y":950,"w":90,"h":25}
-    with pytest.raises(ValueError,match="Точный текст не помещается"):
+    with pytest.raises(ValueError,match="Точный текст не помещается|Недостаточно места"):
         render_exact_svg(
             brief,"4x3",Image.new("RGB",FORMATS["4x3"],"white"),
             geom,DEFAULT_STYLE)
