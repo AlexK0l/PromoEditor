@@ -116,8 +116,8 @@
   }
   function updateAi(){
     $('ai-description').textContent=apiReady?
-      'Два платных запроса на чистые фоны для 4:3 и 9:16. Исходная техника, логотип и все цифры остаются отдельными.':
-      'Нет API-ключа. Быстрый шаблон доступен без OpenAI.';
+      'OpenAI Images создаёт два цельных рекламных постера. Проверяйте текст, цифры и логотип.':
+      'OpenAI недоступен. Бесплатная сборка по явному выбору.';
     $('use-openai').disabled=!apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
     for(const id of ['mode-hybrid','mode-ai-pro']){
@@ -160,15 +160,12 @@
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
       :'OpenAI не подключён. Бесплатный макет можно создать без AI.';
-    $('ai-creative-settings').hidden=!ai;
-    $('ai-concepts-workflow').hidden=!ai;
-    // Expert tools keep a direct full-Images entrypoint for compatibility;
-    // the SAME full generator now powers the primary Create button.
-    $('openai-posters-workflow').hidden=!ai;
-    // The full Images poster engine consumes validated brief fields and
-    // creative notes; it does not consume a template/SVG prompt textarea.
-    $('prompt-workflow').hidden=ai||hybrid;
-    $('expert-prompt').hidden=ai||hybrid;
+    // Retired expert, demo and duplicate AI actions are not part of the
+    // production flow. Preserve their DOM for existing handlers, but NEVER
+    // reveal additional paid buttons from an old mode switch.
+    for(const id of ['ai-creative-settings','ai-concepts-workflow',
+      'openai-posters-workflow','prompt-workflow','expert-prompt'])
+      $(id).hidden=true;
     $('generate-btn').textContent=ai
       ?'Собрать выбранную AI-концепцию →':'Создать промо →';
     $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
@@ -180,7 +177,7 @@
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
-        setStatus(apiReady?'AI-дизайн · 3 платных запроса':'AI недоступен',
+        setStatus(apiReady?'AI-постеры · 2 платных вызова':'AI недоступен',
           apiReady?'2 полных AI-постера от OpenAI Images. Проверьте текст, цифры, логотип и геометрию техники.':
             'Выберите бесплатный шаблон.');
       }else{
