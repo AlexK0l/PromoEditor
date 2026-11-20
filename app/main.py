@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import secrets
@@ -55,6 +56,7 @@ TTL_SECONDS=int(os.getenv('PROMO_JOB_TTL_SECONDS','7200'))
 LIMIT=int(os.getenv('PROMO_REQUESTS_PER_HOUR','20'))
 RATE=defaultdict(list)
 LOCK=threading.Lock()
+RENDER_LOG=logging.getLogger('promoeditor.render')
 # Bound 6-preview renders inside a worker, especially on the 2-GB VPS.
 CONCEPT_RENDER_SLOTS=threading.BoundedSemaphore(1)
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
@@ -300,12 +302,15 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
+    clock=time.monotonic()
+    RENDER_LOG.info("Render started: mode=%s",generation_mode)
     try:
         hero=load_image(hero_raw)
         detail=load_image(detail_raw)
         logo=load_image(logo_raw)
         drawing=load_image(drawing_raw)
         user_backdrop=load_image(background_raw)
+        RENDER_LOG.info("Input images decoded: %.1fs",time.monotonic()-clock)
         if hero is None and use_demo and not use_openai:
             hero=_demo_hero()
         if generation_mode == 'hybrid':
@@ -361,7 +366,9 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                                           ai_product=ai_product)
             # The SVG is the master. PNG and JPEG are rendered from the SAME
             # vector scene, so opening the SVG in CorelDRAW has matching layout.
+            RENDER_LOG.info("SVG %s composed: %.1fs",key,time.monotonic()-clock)
             png,jpeg=rasterize_svg(svg)
+            RENDER_LOG.info("PNG/JPEG %s rasterized: %.1fs",key,time.monotonic()-clock)
             png_name=f'poster_{key}.png'
             jpg_name=f'poster_{key}.jpg'
             svg_name=f'corel_{key}.svg'
@@ -473,6 +480,7 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             warnings.append('В рекламной полосе показаны первые 5 преимуществ; остальные сохранены в JSON-брифе.')
         if brief.get('design_actions') and not use_openai:
             warnings.append('Дополнительные действия сохранены в промпте, но без OpenAI не применяются к AI-фону и произвольному изменению дизайна.')
+        RENDER_LOG.info("Both formats and ZIP ready: %.1fs",time.monotonic()-clock)
         return {
             'job_id':job_id,'images':paths,'jpeg':jpeg_paths,'corel':corel_paths,
             'prompt_file':f'/files/{job_id}/promo_prompt.txt',
