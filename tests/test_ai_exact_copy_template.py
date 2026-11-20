@@ -264,6 +264,86 @@ def test_paid_raw_layout_survives_invalid_collision_and_retry_requires_no_vision
     assert validate_slots(repaired,poster_copy(brief))==repaired
 
 
+def test_no_room_for_three_specs_reduces_optional_copy_without_paid_calls(
+        monkeypatch,tmp_path):
+    """Actual production error: one oversized specs block must not kill ZIP.
+
+    Deliberately emulate the measured 4x3 geometric failure for three, two
+    and one spec; remaining mandatory facts must never be changed.
+    """
+    brief=_brief()
+    brief["specs"]=[
+        ("Грузоподъёмность","44 т"),
+        ("Объём кузова","55 м³"),
+        ("Собственный вес","8,3 т"),
+    ]
+    approved=poster_copy(brief)
+    assert len(approved["specs"])==3
+    original=_layouts()
+    workflow._save_json(tmp_path,"layout_raw.json",original)
+    monkeypatch.setattr(
+        workflow,"client",
+        lambda:pytest.fail("A cached layout must never trigger paid AI"),
+    )
+    assert workflow._layout_plan(
+        brief,{},has_logo=False,has_drawing=False,folder=tmp_path,
+        return_raw=True,
+    )==original
+    real_repair=workflow.repair_ai_slots
+    attempted=[]
+    def fail_spec_fit(geometry,copy,**kw):
+        attempted.append(len(copy["specs"]))
+        if copy["specs"]:
+            raise ValueError(
+                "AI не оставил достаточно свободного места для «specs» "
+                "(4x3). Текст не обрезан.")
+        return real_repair(geometry,copy,**kw)
+    monkeypatch.setattr(workflow,"repair_ai_slots",fail_spec_fit)
+    layout,selected=workflow._fit_layout_with_adaptive_copy(
+        original,approved)
+    assert attempted==[3,2,1,0]
+    assert selected["specs"]==[]
+    assert selected["model"]==approved["model"]
+    assert selected["brand"]==approved["brand"]
+    assert selected["price"]==approved["price"]
+    assert selected["phones"]==approved["phones"]
+    assert approved["specs"] and len(approved["specs"])==3
+    assert validate_slots(layout,selected)==layout
+
+
+def test_shrinks_failing_role_only_and_keeps_other_optional_copy(monkeypatch):
+    approved=poster_copy(_brief())
+    approved["specs"]=["Грузоподъёмность: 44 т","Объём кузова: 55 м³"]
+    approved["claims"]=["Лёгкий кузов","Прочная рама"]
+    calls=[]
+    def fake_repair(geom,copy,**kwargs):
+        calls.append((len(copy["specs"]),len(copy["claims"])))
+        if len(copy["claims"])>1:
+            raise ValueError(
+                "AI не оставил достаточно свободного места для «claims» (9x16).")
+        return geom
+    monkeypatch.setattr(workflow,"repair_ai_slots",fake_repair)
+    fitted,selected=workflow._fit_layout_with_adaptive_copy(
+        _layouts(),approved,protect_product=True)
+    assert fitted==_layouts()
+    assert calls==[(2,2),(2,1)]
+    assert selected["specs"]==approved["specs"]
+    assert selected["claims"]==approved["claims"][:1]
+    assert selected["price"]==approved["price"]
+
+
+def test_mandatory_text_is_never_dropped_on_layout_failure(monkeypatch):
+    approved=poster_copy(_brief())
+    approved["specs"]=["Грузоподъёмность: 44 т"]*3
+    def fake_repair(*args,**kwargs):
+        raise ValueError(
+            "AI не оставил достаточно свободного места для «price» (4x3).")
+    monkeypatch.setattr(workflow,"repair_ai_slots",fake_repair)
+    with pytest.raises(ValueError,match="Обязательные данные"):
+        workflow._fit_layout_with_adaptive_copy(_layouts(),approved)
+    assert len(approved["specs"])==3
+
+
 def test_svg_keeps_exact_verified_customer_text_as_editable_nodes():
     brief=_brief()
     art=Image.new("RGB",FORMATS["4x3"],"white")
