@@ -46,7 +46,7 @@ def test_essential_first_view_is_one_form_one_switch_one_button():
     html, parser = parse_page()
     assert len(parser.all_ids) == len(set(parser.all_ids)), "Duplicate DOM IDs"
     for ident in (
-        "approved-preset-btn", "hero", "model", "slogan",
+        "approved-preset-btn", "hero", "model", "brand", "slogan",
         "price", "currency", "phones", "quick-ai-toggle", "generate-btn",
     ):
         assert ident in parser.parents
@@ -54,7 +54,7 @@ def test_essential_first_view_is_one_form_one_switch_one_button():
     assert "Создать рекламный макет" in html
     assert "Оформить с помощью OpenAI" in html
     assert "Создать промо" in html
-    assert "2 платных вызова" in html
+    assert "3 платных вызова Images" in html
     assert "pro-workspace" in parser.closed_by_default
     assert "generated-previews" in parser.parents
     assert "editing-suite" in parser.closed_by_default
@@ -75,7 +75,6 @@ def test_technical_controls_remain_under_single_closed_workspace():
         "reference_example": "optional-materials",
         "documents": "optional-materials",
         "background": "optional-materials",
-        "brand": "creative-notes",
         "design-actions": "creative-notes",
         "promo-prompt": "expert-prompt",
         "asset-approve": "asset-review-details",
@@ -151,7 +150,7 @@ def test_paid_progress_is_explicit_and_cancelling_confirmation_sends_nothing():
     js = (ROOT / "app.js").read_text(encoding="utf-8")
     assert "generate-elapsed" in parser.parents
     assert "if(isHybrid()&&!window.confirm(" in js
-    assert "2 платных вызова" in js
+    assert "3 платных вызова OpenAI Images" in js
     assert "window.setInterval(updateElapsed,1000)" in js
     assert "window.clearInterval(elapsedClock)" in js
     assert "elapsed.hidden=true" in js
