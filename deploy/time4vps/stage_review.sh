@@ -75,6 +75,14 @@ install -d -o promoeditor -g promoeditor -m 0700 "$JOBS"
 if [[ -d "$SOURCE/.git" ]]; then
   [[ -z "$(runuser -u promoeditor -- git -C "$SOURCE" status --porcelain)" ]] ||
     die "Staging checkout is not clean."
+  # A previous PR SHA may already be staged; update ONLY this isolated,
+  # disposable checkout, after the preview service is confirmed stopped.
+  runuser -u promoeditor -- git -C "$SOURCE" fetch --quiet --depth 1 \
+    --no-tags origin "$BRANCH"
+  reviewed="$(runuser -u promoeditor -- git -C "$SOURCE" rev-parse FETCH_HEAD)"
+  [[ "$reviewed" == "$TARGET" ]] ||
+    die "PR head moved to $reviewed; review the new commit first."
+  runuser -u promoeditor -- git -C "$SOURCE" reset --quiet --hard "$TARGET"
 else
   runuser -u promoeditor -- git clone --quiet --depth 1 --single-branch \
     --branch "$BRANCH" https://github.com/AlexK0l/PromoEditor.git "$SOURCE"
