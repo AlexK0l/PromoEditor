@@ -19,6 +19,7 @@ if [[ "$#" -eq 2 ]]; then MODE="$2"; fi
 STAGE=/var/lib/promoeditor/pr58-preview
 SOURCE="$STAGE/source"
 JOBS="$STAGE/jobs"
+CACHE="$STAGE/cache"
 ENV_FILE=/run/promoeditor-preview.env
 PROD_ENV=/etc/promoeditor/promoeditor.env
 UNIT=promoeditor-preview
@@ -44,7 +45,7 @@ fi
 if ss -H -ltn "sport = :$PORT" | grep -q .; then
   die "Preview port $PORT is already in use."
 fi
-[[ ! -L "$STAGE" && ! -L "$SOURCE" && ! -L "$JOBS" ]] ||
+[[ ! -L "$STAGE" && ! -L "$SOURCE" && ! -L "$JOBS" && ! -L "$CACHE" ]] ||
   die "Preview path may not be a symlink."
 [[ ! -e "$SOURCE" || -d "$SOURCE/.git" ]] ||
   die "Unexpected staging checkout; no overwrite."
@@ -72,6 +73,10 @@ disk_kib="$(df -Pk /var/lib/promoeditor | awk 'END {print $4}')"
 
 install -d -o promoeditor -g promoeditor -m 0700 "$STAGE"
 install -d -o promoeditor -g promoeditor -m 0700 "$JOBS"
+# CairoSVG/Pango/Fontconfig must be able to write font metadata caches.
+# ProtectHome and ProtectSystem=strict otherwise leave no writable home.
+install -d -o promoeditor -g promoeditor -m 0700 "$CACHE"
+install -d -o promoeditor -g promoeditor -m 0700 "$CACHE/fontconfig"
 if [[ -d "$SOURCE/.git" ]]; then
   [[ -z "$(runuser -u promoeditor -- git -C "$SOURCE" status --porcelain)" ]] ||
     die "Staging checkout is not clean."
@@ -102,6 +107,7 @@ install -o root -g root -m 0600 /dev/null "$ENV_FILE"
   # export; full uploaded originals remain in ZIP. Avoid 3200px RGBA
   # layers and expensive Cairo image copies on the 1.9GiB shared host.
   printf 'PROMO_RENDER_MAX_EDGE=1600\n'
+  printf 'XDG_CACHE_HOME=%s\n' "$CACHE"
   printf 'PYTHONDONTWRITEBYTECODE=1\n'
   printf 'PYTHONUNBUFFERED=1\n'
   if [[ "$MODE" == "paid" ]]; then
@@ -124,7 +130,7 @@ systemd-run --quiet --collect --unit="$UNIT" \
   -p Restart=no -p RuntimeMaxSec=3600 \
   -p NoNewPrivileges=yes -p PrivateTmp=yes \
   -p ProtectHome=yes -p ProtectSystem=strict \
-  -p "ReadWritePaths=$JOBS" \
+  -p "ReadWritePaths=$JOBS $CACHE" \
   -p InaccessiblePaths=/var/lib/promoeditor/jobs \
   /opt/promoeditor/.venv/bin/python -m uvicorn app.main:app \
     --host 127.0.0.1 --port "$PORT" --workers 1 \
