@@ -191,3 +191,56 @@ def test_completed_hybrid_response_reports_actual_mode(monkeypatch, tmp_path):
     metadata = json.loads(brief_file.read_text(encoding="utf-8"))["_metadata"]
     assert metadata["generation_mode"] == "hybrid"
     assert metadata["art_director"].startswith("OpenAI Responses")
+
+
+def test_primary_create_uses_experimental_full_poster_engine_not_template(
+        monkeypatch, tmp_path):
+    """Customer-facing Create must use EXACTLY the /api/ai-posters engine.
+
+    A plan or SVG compositor here would regress to the templated result.
+    No paid OpenAI network call is allowed in this regression test.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "test-no-network")
+    monkeypatch.setenv("PROMO_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "STORAGE", tmp_path)
+    monkeypatch.setattr(main, "_guard_rate", lambda request: None)
+    original = _png("yellow")
+    called = []
+
+    def full_posters(brief, product, logo, drawing, reference, model, quality):
+        called.append(("full_poster", product, model, quality))
+        assert brief["model"]
+        assert product == original
+        return {
+            "images": {"4x3": "/files/test/ai_poster_4x3.png",
+                       "9x16": "/files/test/ai_poster_9x16.png"},
+            "jpeg": {"4x3": "/files/test/ai_poster_4x3.jpg",
+                     "9x16": "/files/test/ai_poster_9x16.jpg"},
+            "zip": "/files/test/ai_posters.zip",
+            "generation_mode": "openai_full_poster",
+            "raster_only": True,
+            "ai_used": True,
+            "warnings": [],
+        }
+
+    def forbidden_old_renderer(*args, **kwargs):
+        raise AssertionError("Primary AI creation called old layout renderer")
+
+    monkeypatch.setattr(main, "_full_posters_sync", full_posters)
+    monkeypatch.setattr(main, "_generate_sync", forbidden_old_renderer)
+    with TestClient(main.app) as browser:
+        result = browser.post("/api/generate",
+            data={
+                "payload": json.dumps(default_brief(), ensure_ascii=False),
+                "generation_mode": "hybrid",
+                "use_openai": "true",
+                "model": "gpt-image-2.5-flare",
+                "quality": "medium",
+            },
+            files={"hero": ("real.png", original, "image/png")})
+    assert result.status_code == 200, result.text
+    assert result.json()["generation_mode"] == "openai_full_poster"
+    assert result.json()["raster_only"] is True
+    assert result.json()["zip"].endswith("ai_posters.zip")
+    assert "corel" not in result.json(), "Do not advertise a fake editable SVG"
+    assert len(called) == 1 and called[0][0] == "full_poster"
