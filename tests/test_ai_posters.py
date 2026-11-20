@@ -274,3 +274,55 @@ def test_image_prompt_never_requests_aspect_ratio_crop():
         assert "WITHOUT CROPPING OR STRETCHING" in prompt
         assert "central 78%" not in prompt
         assert "central 88%" not in prompt
+
+
+def test_4x3_ai_prompt_protects_logo_from_trailer_overlap():
+    """The paid full-Images engine must give a logo its own safe zone."""
+    p = ai_poster_service._prompt(
+        default_brief(), "4x3", logo=True, drawing=False, reference=False
+    ).lower()
+    assert "protected branding zone in the top-left" in p
+    assert "logo must remain fully visible" in p
+    assert "trailer must never overlap the logo area" in p
+    assert "not oversized" in p
+    assert "right-side specifications panel" in p
+    assert "bottom price / cta strip" in p
+    assert "trailer must not enter the top-left protected brand zone" in p
+    assert "not a request for rigid ui boxes or a template" in p
+    assert "first source image is the real product" in p
+
+
+def test_9x16_ai_prompt_protects_header_and_whole_vehicle():
+    p = ai_poster_service._prompt(
+        default_brief(), "9x16", logo=True, drawing=True, reference=False
+    ).lower()
+    assert "protected branding/header zone at the top" in p
+    assert "logo must remain fully visible" in p
+    assert "vehicle must not overlap the brand zone" in p
+    assert "every wheel, axle and extremity" in p
+    assert "bottom price / cta strip" in p
+    assert "outside the right specifications" not in p
+    assert "without cropping or stretching" in p
+
+
+def test_both_paid_image_edit_requests_include_safe_layout_not_old_cache(
+        monkeypatch, tmp_path):
+    """Verify the actual model calls, not merely an unused prompt helper."""
+    images = Images()
+    monkeypatch.setattr(
+        ai_poster_service, "client",
+        lambda: type("API", (), {"images": images})()
+    )
+    ai_poster_service.generate_full_posters(
+        default_brief(), _png(), logo=_png("white"),
+        cache_dir=tmp_path / "safe_brand_test",
+    )
+    assert len(images.calls) == 2
+    assert "v3-safe-brand-zones" in ai_poster_service.VERSION
+    landscape, portrait = [call["prompt"].lower() for call in images.calls]
+    assert "trailer must never overlap the logo area" in landscape
+    assert "protected branding/header zone at the top" in portrait
+    assert "logo must remain fully visible" in landscape
+    assert "logo must remain fully visible" in portrait
+    assert images.calls[0]["size"] == "1536x1024"
+    assert images.calls[1]["size"] == "1024x1536"
