@@ -430,6 +430,17 @@
     }
     invalidateResult();busy(true);
     setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
+    const loadingMessage=$('loading').querySelector('small');
+    loadingMessage.textContent='Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
+    const slowWarning=window.setTimeout(()=>{
+      // A stalled HTTP request may still be rendering on the server. Avoid
+      // pretending it was cancelled or encouraging expensive duplicate jobs.
+      if(!isBusy)return;
+      loadingMessage.textContent='Сервер отвечает необычно долго. Не нажимайте повторно: проверьте нагрузку и журнал тестовой службы.';
+      if(!isHybrid()&&!checked('use-openai'))
+        setStatus('Бесплатная сборка затянулась',
+          'Возможна нехватка оперативной памяти на VPS. Не запускайте второй раз.','working');
+    },90000);
     try {
       if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
         // The basic workflow runs FREE asset analysis automatically.
@@ -491,7 +502,10 @@
         $('asset-files-details').open=true;
       }
       showError(error.message||'Не удалось завершить генерацию.');
-    }finally{busy(false);}
+    }finally{
+      window.clearTimeout(slowWarning);
+      busy(false);
+    }
   }
   async function inspect(){
     clearError();
