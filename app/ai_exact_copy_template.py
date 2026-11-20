@@ -242,7 +242,8 @@ def generate_templates(brief: dict, rebranded: bytes, *,
 
 def _layout_plan(brief: dict, art: dict, *,
                  has_logo: bool, has_drawing: bool,
-                 folder: Path | None = None) -> dict:
+                 folder: Path | None = None,
+                 protect_product: bool = False) -> dict:
     copy = poster_copy(brief)
     # A completed vision layout can be geometrically inconsistent. Cache
     # the original PAID JSON first, then reconcile its regions locally.
@@ -251,7 +252,8 @@ def _layout_plan(brief: dict, art: dict, *,
     original = _load_json(folder,"layout_raw.json") if folder else None
     if original is not None:
         return repair_ai_slots(
-            original,copy,has_logo=has_logo,has_drawing=has_drawing)
+            original,copy,has_logo=has_logo,has_drawing=has_drawing,
+            protect_product=protect_product)
     lengths = {
         role:{"lines":len(values),"characters":[len(s) for s in values]}
         for role,values in copy.items()
@@ -271,13 +273,16 @@ def _layout_plan(brief: dict, art: dict, *,
         "For EACH format, supply EXACT RECTANGLES x/y/w/h on a 0..1000 "
         "normalized canvas for every required role: "
         + ", ".join(ALL_SLOTS) + ". "
-        "PRODUCT is a bounding rectangle of the actual photographed trailer; "
-        "never place logos or copy on top of it. "
-        "LOGO is a reserved open area for the original customer logo. "
-        "DRAWING is a reserved open area for the unchanged technical drawing. "
-        "For ALL non-empty text roles place large empty regions of ACTUAL "
-        "ARTWORK that fit every character count, at high contrast, with "
-        "adequate width and height for Cyrillic. Follow the actual creative "
+        "PRODUCT is the WHOLE photographed trailer including ALL wheels, "
+        "chassis, shadows and mudguards, not just the yellow box. "
+        "No text may overlap this region or touch its undercarriage. "
+        "Uploaded logos are already present ON the product itself. "
+        "LOGO and DRAWING are inactive: reserve no separate panels for them. "
+        "For ALL non-empty text roles reserve only clearly free, calm, flat "
+        "negative-space regions large enough to print text at MINIMUM "
+        "readable size (26 px for supporting text, 44 px for headline "
+        "and price, at actual poster resolution). Do not place copy "
+        "on the vehicle, wheels or textured ground. Follow actual creative "
         "composition: do not force standard cards or a generic template. "
         "Zones with zero lines are inactive and may use any harmless small "
         "in-bounds rectangle. IMPORTANT: CATEGORY and BENEFITS have distinct "
@@ -311,7 +316,8 @@ def _layout_plan(brief: dict, art: dict, *,
     if folder is not None:
         _save_json(folder,"layout_raw.json",original)
     return repair_ai_slots(
-        original,copy,has_logo=has_logo,has_drawing=has_drawing)
+        original,copy,has_logo=has_logo,has_drawing=has_drawing,
+            protect_product=protect_product)
 
 
 def _finish_typography(previews: dict[str,Image.Image]) -> dict:
@@ -571,7 +577,8 @@ def _generate_file_backed_posters(
             try:
                 layout = _layout_plan(
                     brief,previews,has_logo=False,
-                    has_drawing=False,folder=cache)
+                    has_drawing=False,folder=cache,
+                    protect_product=True)
             finally:
                 for frame in previews.values():
                     frame.close()
@@ -580,7 +587,7 @@ def _generate_file_backed_posters(
         else:
             layout = repair_ai_slots(
                 layout,copy,has_logo=False,
-                has_drawing=False)
+                has_drawing=False,protect_product=True)
         if styles is None:
             if progress:
                 progress("Вставляем точные надписи и готовим эскизы для AI")
