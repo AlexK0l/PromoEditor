@@ -137,3 +137,46 @@ def test_process_restart_is_visible_without_automatically_repeating_ai(
     assert recovered["http_status"]==503
     assert "перезапустился" in recovered["error"]
     assert "НЕ повторялся" in recovered["error"]
+
+
+def test_main_async_job_uses_full_ai_posters_not_text_zone(
+        monkeypatch,tmp_path):
+    """The user's MAIN paid button must use the actual full Images pipeline.
+
+    Verify the deferred route end-to-end, not just direct legacy
+    /api/generate. No real paid OpenAI network requests run in CI.
+    """
+    _ready(monkeypatch,tmp_path)
+    calls=[]
+    def full(brief,product,logo,drawing,reference,model,quality,
+             selected_source=None,progress=None):
+        assert product==_png()
+        assert selected_source["name"]=="real-trailer.png"
+        calls.append("full-ai")
+        if progress:
+            progress("AI сам рисует надписи и всю композицию 4:3 и 9:16")
+        return {
+            "generation_mode":"openai_full_poster",
+            "raster_only":True,
+            "ai_used":True,
+            "images":{"4x3":"/files/test/ai_poster_4x3.png",
+                      "9x16":"/files/test/ai_poster_9x16.png"},
+            "jpeg":{"4x3":"/files/test/ai_poster_4x3.jpg",
+                    "9x16":"/files/test/ai_poster_9x16.jpg"},
+            "zip":"/files/test/ai_posters.zip",
+        }
+    def fail(*args,**kw):
+        raise AssertionError("Text-zone SVG engine must never run from main")
+    monkeypatch.setattr(main,"_full_posters_sync",full)
+    monkeypatch.setattr(main,"_exact_typography_posters_sync",fail)
+    monkeypatch.setattr(main,"generate_exact_typography_posters",fail)
+    with TestClient(main.app) as client:
+        accepted=_post(client)
+        assert accepted.status_code==202,accepted.text
+        task=_poll(client,accepted.json()["task_id"])
+    assert task["status"]=="complete"
+    assert task["result"]["generation_mode"]=="openai_full_poster"
+    assert task["result"]["raster_only"] is True
+    assert task["result"]["zip"].endswith("/ai_posters.zip")
+    assert "corel" not in task["result"]
+    assert calls==["full-ai"]
