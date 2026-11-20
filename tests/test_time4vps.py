@@ -86,3 +86,6 @@ def test_pr_preview_is_isolated_rate_limited_and_rollback_free():
     assert "docker compose" not in script
     assert "/opt/promoeditor/.venv/bin/python" in script
     assert "git -C /opt/promoeditor reset" not in script
+    assert 'git -C "$SOURCE" reset --quiet --hard "$TARGET"' in script
+    assert 'git -C "$SOURCE" status --porcelain' in script
+    assert '[[ "$reviewed" == "$TARGET" ]]' in script
