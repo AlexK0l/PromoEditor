@@ -945,6 +945,122 @@ async def preview_promo_prompt(request:Request):
             'notice':'Промпт сформирован из формы без платного вызова. При включённом OpenAI он передаётся для генерации сцены, а тексты и векторные элементы компонуются программно.'}
 
 
+def _run_generation_task(task_id: str):
+    """Detached single paid workflow; no public HTTP connection held open."""
+    folder=ai_job_queue.task_folder(STORAGE,task_id)
+    opened=[]
+    def stage(message):
+        ai_job_queue.set_status(folder,'running',stage=message)
+        RENDER_LOG.info('PromoEditor AI task %s: %s',task_id,message)
+    try:
+        form,opened=ai_job_queue.reopen_form(folder)
+        stage('Проверяем исходные данные проекта')
+        result=asyncio.run(_generate_from_form(form,progress=stage))
+        ai_job_queue.set_status(
+            folder,'complete',stage='Оба макета и редактируемые SVG готовы',
+            result=result)
+    except Exception as exc:
+        if isinstance(exc,HTTPException):
+            code=int(exc.status_code)
+            detail=str(exc.detail)
+        elif isinstance(exc,QuotaExceeded):
+            code,detail=429,str(exc)
+        elif isinstance(exc,QuotaStoreUnavailable):
+            code,detail=503,str(exc)
+        elif isinstance(exc,ValueError):
+            code,detail=400,str(exc)
+        else:
+            code=502
+            # Do NOT expose original SDK error text (may contain
+            # private customer brief, source paths or response headers).
+            detail=(
+                'AI-генерация завершилась ошибкой на сервере '
+                f'({type(exc).__name__}). Дальнейших платных '
+                'повторных запросов не отправлялось. '
+                'Проверьте журнал promoeditor.'
+            )
+            RENDER_LOG.exception(
+                'PromoEditor AI task %s failed at server stage',task_id)
+        try:
+            ai_job_queue.set_status(
+                folder,'failed',error=detail,http_status=code)
+        except OSError:
+            RENDER_LOG.exception(
+                'PromoEditor AI task %s failed writing status',task_id)
+    finally:
+        for handle in opened:
+            try: handle.close()
+            except OSError: pass
+        ai_job_queue.erase_uploads(folder)
+        MAIN_AI_GENERATION_SLOT.release()
+
+
+@app.post('/api/generate/start',status_code=202)
+async def start_ai_generation(request:Request):
+    """Immediate 202, followed by authenticated progress polling.
+
+    The five paid API operations may outlive a normal reverse-proxy timeout.
+    One active task per 800 MiB worker, no concurrent paid duplicate.
+    """
+    _guard_rate(request)
+    if int(request.headers.get('content-length') or 0)>MAX_ALL:
+        raise HTTPException(413,detail='Превышен лимит загрузки 68 МБ.')
+    if not MAIN_AI_GENERATION_SLOT.acquire(blocking=False):
+        raise HTTPException(409,detail=(
+            'Уже выполняется AI-генерация. Не запускайте её повторно: '
+            'дополнительные платные вызовы не отправлены.'))
+    folder=None
+    try:
+        form=await request.form()
+        if str(form.get('generation_mode',''))!='hybrid':
+            raise HTTPException(
+                400,detail='Фоновый запуск предусмотрен только для основного AI-режима.')
+        if not os.getenv('OPENAI_API_KEY'):
+            raise HTTPException(
+                400,detail='На сервере не настроен OPENAI_API_KEY.')
+        ai_job_queue.cleanup(STORAGE)
+        task_id,folder=ai_job_queue.new_task(STORAGE)
+        await ai_job_queue.snapshot_form(form,folder)
+        ai_job_queue.set_status(
+            folder,'running',stage='Задача принята; подготавливаем материалы')
+        thread=threading.Thread(
+            target=_run_generation_task,args=(task_id,),
+            name='promoeditor-ai-generation',daemon=True)
+        thread.start()
+        return {'task_id':task_id,'status':'running',
+                'status_url':f'/api/generate/status/{task_id}'}
+    except (QuotaExceeded,QuotaStoreUnavailable):
+        if folder: shutil.rmtree(folder,ignore_errors=True)
+        MAIN_AI_GENERATION_SLOT.release()
+        raise
+    except HTTPException:
+        if folder: shutil.rmtree(folder,ignore_errors=True)
+        MAIN_AI_GENERATION_SLOT.release()
+        raise
+    except ValueError as exc:
+        if folder: shutil.rmtree(folder,ignore_errors=True)
+        MAIN_AI_GENERATION_SLOT.release()
+        raise HTTPException(400,detail=str(exc)) from exc
+    except Exception as exc:
+        if folder: shutil.rmtree(folder,ignore_errors=True)
+        MAIN_AI_GENERATION_SLOT.release()
+        RENDER_LOG.exception('Unable to queue PromoEditor AI generation')
+        raise HTTPException(503,detail=(
+            'Не удалось сохранить файлы задачи генерации '
+            f'({type(exc).__name__}). Проверьте место на диске.')) from exc
+
+
+@app.get('/api/generate/status/{task_id}')
+def status_ai_generation(task_id: str):
+    if not JOB_ID.fullmatch(task_id):
+        raise HTTPException(400,detail='Некорректный номер генерации.')
+    state=ai_job_queue.read_status(STORAGE,task_id)
+    if state is None:
+        raise HTTPException(404,detail=(
+            'Задача не найдена либо срок хранения результата истёк.'))
+    return state
+
+
 @app.post('/api/generate')
 async def generate(request:Request):
     """Compatibility endpoint, including immediate/free SVG generation."""
