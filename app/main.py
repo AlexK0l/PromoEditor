@@ -709,11 +709,12 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
 def _exact_typography_posters_sync(brief, product_raw, logo_raw,
                                    drawing_raw, reference_raw, model, quality,
                                    selected_source=None, progress=None):
-    """New PRIMARY mode: full AI design -> exact SVG copy -> AI typography.
+    """ARCHIVED implementation: AI textless artwork -> editable SVG typography.
 
-    Rebrand only the selected original trailer. The AI text finisher selects
-    font/color/scale from a visual preview; it never gets to rewrite the facts.
-    Old pure raster /api/ai-posters remains available for compatibility.
+    Preserved only for historical regression tests and recovery if needed.
+    DO NOT route the current primary Create button here: /api/generate with
+    generation_mode='hybrid' uses _full_posters_sync and full OpenAI Images.
+    The original version is backed up in archive/ai-template-exact-copy-2026-11-20.
     """
     # Before the FIRST paid edit, preflight all three Images requests and
     # both Responses stages. On a partial-failure retry, the already paid
@@ -1056,7 +1057,8 @@ def _run_generation_task(task_id: str):
 async def start_ai_generation(request:Request):
     """Immediate 202, followed by authenticated progress polling.
 
-    The five paid API operations may outlive a normal reverse-proxy timeout.
+    The paid rebrand and two complete-poster Images calls may outlive a
+    normal reverse-proxy timeout; use status polling for the full operation.
     One active task per 800 MiB worker, no concurrent paid duplicate.
     """
     _guard_rate(request)
