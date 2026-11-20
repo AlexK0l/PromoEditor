@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app import ai_poster_service, main, openai_service
+from app import ai_poster_service, main, openai_service, product_rebrand_service
 from app.render import default_brief
 
 
@@ -120,6 +120,7 @@ def test_full_raster_poster_outputs_survive_zip_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "STORAGE", tmp_path)
     api, calls = _api()
     monkeypatch.setattr(ai_poster_service, "client", lambda: api)
+    monkeypatch.setattr(product_rebrand_service, "client", lambda: api)
     brief = default_brief()
     raw = _png()
     kwargs = (brief, raw, None, None, None,
@@ -128,17 +129,24 @@ def test_full_raster_poster_outputs_survive_zip_failure(monkeypatch, tmp_path):
         patch.setattr(main.zipfile, "ZipFile", _fail_zip)
         with pytest.raises(OSError, match="ZIP failure"):
             main._full_posters_sync(*kwargs)
+    rebrand_cache = product_rebrand_service.cache_dir(
+        brief, raw, None, "gpt-image-2.5-flare", "medium")
+    edited = product_rebrand_service.cached_photo(rebrand_cache)
+    assert edited is not None
     cache = openai_service._default_visual_cache(
-        brief, True, [raw], "gpt-image-2.5-flare", "medium",
+        brief, True, [edited], "gpt-image-2.5-flare", "medium",
         ai_poster_service.VERSION, "complete-poster")
     assert (cache / "4x3.png").is_file()
     assert (cache / "9x16.png").is_file()
-    assert len(calls) == 2
+    assert len(calls) == 3
     output = main._full_posters_sync(*kwargs)
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert not (cache / "4x3.png").exists()
     assert output["raster_only"] is True
     assert (tmp_path / output["job_id"] / "ai_posters.zip").is_file()
+    with zipfile.ZipFile(tmp_path / output["job_id"] / "ai_posters.zip") as z:
+        assert z.read("originals/product_photo.png") == raw
+        assert "rebranded_product.png" in z.namelist()
 
 
 def test_approved_reference_preset_does_not_modify_legacy_demo():
@@ -207,8 +215,11 @@ def test_primary_create_uses_experimental_full_poster_engine_not_template(
     original = _png("yellow")
     called = []
 
-    def full_posters(brief, product, logo, drawing, reference, model, quality):
+    def full_posters(brief, product, logo, drawing, reference, model, quality,
+                     selected_source=None):
         called.append(("full_poster", product, model, quality))
+        assert selected_source["id"] == "photo_1"
+        assert selected_source["name"] == "real.png"
         assert brief["model"]
         assert product == original
         return {
