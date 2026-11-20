@@ -949,7 +949,10 @@ def _run_generation_task(task_id: str):
     """Detached single paid workflow; no public HTTP connection held open."""
     folder=ai_job_queue.task_folder(STORAGE,task_id)
     opened=[]
+    last_stage='Проверяем исходные данные проекта'
     def stage(message):
+        nonlocal last_stage
+        last_stage=message
         ai_job_queue.set_status(folder,'running',stage=message)
         RENDER_LOG.info('PromoEditor AI task %s: %s',task_id,message)
     try:
@@ -979,11 +982,15 @@ def _run_generation_task(task_id: str):
                 'повторных запросов не отправлялось. '
                 'Проверьте журнал promoeditor.'
             )
-            RENDER_LOG.exception(
-                'PromoEditor AI task %s failed at server stage',task_id)
+            # SDK exception strings may contain customer details. Keep
+            # durable logs limited to the known stage and exception TYPE.
+            RENDER_LOG.error(
+                'PromoEditor AI task %s failed at %s (%s)',
+                task_id,last_stage,type(exc).__name__)
         try:
             ai_job_queue.set_status(
-                folder,'failed',error=detail,http_status=code)
+                folder,'failed',error='Этап: '+last_stage+'. '+detail,
+                http_status=code)
         except OSError:
             RENDER_LOG.exception(
                 'PromoEditor AI task %s failed writing status',task_id)
