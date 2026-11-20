@@ -24,10 +24,15 @@ from PIL import Image, ImageDraw
 
 from .documents import ALLOWED_DOCS, extract_text, heuristics, pdf_first_page_png
 from .openai_service import (analyze_documents, generate_visuals,
-                             _default_visual_cache, _finish_visual_cache)
+                             _cached_visual, _default_visual_cache,
+                             _finish_visual_cache)
 from .ai_poster_service import (generate_full_posters, WARNING as AI_POSTER_WARNING,
                                 VERSION as AI_POSTER_VERSION)
-from .ai_quota import QuotaExceeded, QuotaStoreUnavailable
+from .product_rebrand_service import (
+    rebrand_selected_photo, cache_dir as rebrand_cache_dir,
+    cached_photo as cached_rebrand_photo, REBRAND_WARNING,
+)
+from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
 from .image_analysis import validate_image_dimensions
@@ -66,7 +71,7 @@ FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
        'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','layout_spec.json','edit.png'}
 FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16')})
 FILES.update({f'ai_poster_{fmt}.{ext}' for fmt in ('4x3','9x16') for ext in ('png','jpg')})
-FILES.add('ai_posters.zip')
+FILES.update({'ai_posters.zip','rebranded_product.png'})
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
 app=FastAPI(title='Promo Studio',description='Генератор рекламной инфографики 4:3 и 9:16 на основе OpenAI API',version='1.0.0')
@@ -577,23 +582,49 @@ def _build_concept_previews_sync(brief, report, records, concepts,
 
 
 def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
-                       reference_raw, model, quality):
-    """Store model-authored artwork separate from the validated SVG output."""
-    # These calls spend from the persistent daily Images API budget.
-    poster_sources=[product_raw]+[raw for raw in
+                       reference_raw, model, quality, selected_source=None):
+    """Rebrand ONLY the selected photo before authoring both full AI posters.
+
+    The original photo is immutable. The one paid rebranding edit is cached
+    by original bytes/logo/brand/model. Partial paid outputs survive ZIP
+    failures. Other uploaded photos never enter either model call.
+    """
+    rebrand_dir = rebrand_cache_dir(brief, product_raw, logo_raw, model, quality)
+    rebranded_raw = cached_rebrand_photo(rebrand_dir)
+    if rebranded_raw is None:
+        # Fail BEFORE ANY paid Images call if capacity cannot fund all three.
+        check_paid_capacity('image', 3)
+    else:
+        previous_sources=[rebranded_raw]+[raw for raw in
+                            (logo_raw,drawing_raw,reference_raw) if raw]
+        previous_posters=_default_visual_cache(
+            brief,True,previous_sources,model,quality,
+            AI_POSTER_VERSION,'complete-poster')
+        missing=sum(_cached_visual(previous_posters,fmt) is None
+                    for fmt in ('4x3','9x16'))
+        check_paid_capacity('image',missing)
+    if rebranded_raw is None:
+        rebranded_raw = rebrand_selected_photo(
+            brief, product_raw, logo=logo_raw, model=model, quality=quality,
+            folder=rebrand_dir)
+    # NEVER send secondary or unselected uploaded trailer photos to the
+    # rebranding endpoint or to the complete poster artwork generator.
+    poster_sources=[rebranded_raw]+[raw for raw in
                                   (logo_raw,drawing_raw,reference_raw) if raw]
     paid_cache=_default_visual_cache(
         brief,True,poster_sources,model,quality,
         AI_POSTER_VERSION,"complete-poster")
     posters = generate_full_posters(
-        brief, product_raw, logo=logo_raw, drawing=drawing_raw,
+        brief, rebranded_raw, logo=logo_raw, drawing=drawing_raw,
         reference=reference_raw, model=model, quality=quality,
-        cache_dir=paid_cache, consume_cache=False)
+        cache_dir=paid_cache, consume_cache=False,
+        product_is_rebranded=True)
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
     folder.mkdir(mode=0o700)
     try:
+        (folder/'rebranded_product.png').write_bytes(rebranded_raw)
         images={};jpegs={}
         for fmt in ('4x3','9x16'):
             png=f'ai_poster_{fmt}.png'
@@ -611,11 +642,21 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                         arcname=f'ai_poster_{fmt}.png')
                 z.write(folder/f'ai_poster_{fmt}.jpg',
                         arcname=f'ai_poster_{fmt}.jpg')
+            z.write(folder/'rebranded_product.png',
+                    arcname='rebranded_product.png')
             z.writestr('brief.json',
                        json.dumps(brief,ensure_ascii=False,indent=2))
+            z.writestr('selected_photo.json',json.dumps({
+                'selected_primary':selected_source or {},
+                'rebranded_only_this_photo':True,
+                'other_uploaded_photos_untouched':True,
+            },ensure_ascii=False,indent=2))
             z.writestr('REVIEW_BEFORE_PUBLICATION.txt',
-                       AI_POSTER_WARNING+'\nРедактируемые SVG создаются '
-                       'отдельно в режиме векторных концепций.\n')
+                       AI_POSTER_WARNING+'\n'+REBRAND_WARNING+'\n'
+                       'Изменённый кадр: rebranded_product.png. '
+                       'Оригинал: originals/product_photo.*. '
+                       'Только выбранный главный ракурс редактировался; '
+                       'проверяйте логотип и надписи. В этом режиме SVG нет.\n')
             for name,raw in (('product_photo',product_raw),
                              ('customer_logo',logo_raw),
                              ('drawing_preview',drawing_raw),
@@ -636,7 +677,10 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'generation_mode':'openai_full_poster',
                 'ai_used':True,'raster_only':True,
                 'reference_used':reference_raw is not None,
-                'warnings':[AI_POSTER_WARNING]}
+                'selected_photo':selected_source or {},
+                'rebranded_photo':f'/files/{job_id}/rebranded_product.png',
+                'rebranding_applied':True,
+                'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]}
     except Exception:
         shutil.rmtree(folder,ignore_errors=True)
         raise
