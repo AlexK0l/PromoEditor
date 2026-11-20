@@ -976,7 +976,16 @@ def _run_generation_task(task_id: str):
         nonlocal last_stage
         last_stage=message
         ai_job_queue.set_status(folder,'running',stage=message)
-        RENDER_LOG.info('PromoEditor AI task %s: %s',task_id,message)
+        # Record the native process memory high-watermark at each stage,
+        # without leaking file names, customer data or OpenAI responses.
+        try:
+            import resource
+            peak_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024
+            RENDER_LOG.info(
+                'PromoEditor AI task %s: %s (RSS peak %.1f MiB)',
+                task_id,message,peak_mib)
+        except (OSError,ImportError):
+            RENDER_LOG.info('PromoEditor AI task %s: %s',task_id,message)
     try:
         form,opened=ai_job_queue.reopen_form(folder)
         stage('Проверяем исходные данные проекта')
