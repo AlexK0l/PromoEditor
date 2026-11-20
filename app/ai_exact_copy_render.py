@@ -209,7 +209,7 @@ def validate_style(style: dict) -> dict:
                for k in ("ink", "accent", "muted")):
             raise ValueError("AI предложил неверный цвет текста.")
         if (type(options["scale_percent"]) is not int
-                or not 78 <= options["scale_percent"] <= 120):
+                or not 94 <= options["scale_percent"] <= 112):
             raise ValueError("AI предложил опасный масштаб шрифта.")
     return style
 
