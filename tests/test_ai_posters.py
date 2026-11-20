@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app import ai_poster_service, main
+from app import ai_poster_service, product_rebrand_service, main
 from app.render import default_brief
 
 
@@ -108,6 +108,8 @@ def test_ai_poster_route_without_exemplar_downloads_raster_and_originals(
     images=Images()
     monkeypatch.setattr(ai_poster_service,"client",
                         lambda:type("API",(),{"images":images})())
+    monkeypatch.setattr(product_rebrand_service,"client",
+                        lambda:type("API",(),{"images":images})())
     with TestClient(main.app) as client:
         response=client.post(
             "/api/ai-posters",
@@ -118,7 +120,9 @@ def test_ai_poster_route_without_exemplar_downloads_raster_and_originals(
         assert result["reference_used"] is False
         assert result["raster_only"] is True
         assert result["generation_mode"]=="openai_full_poster"
-        assert len(images.calls)==2
+        assert len(images.calls)==3
+        assert result["rebranding_applied"] is True
+        assert result["rebranded_photo"].endswith("rebranded_product.png")
         a=client.get(result["images"]["4x3"])
         b=client.get(result["images"]["9x16"])
         assert a.status_code==b.status_code==200
@@ -130,6 +134,8 @@ def test_ai_poster_route_without_exemplar_downloads_raster_and_originals(
             names=z.namelist()
             assert "ai_poster_4x3.png" in names
             assert "ai_poster_9x16.png" in names
+            assert "rebranded_product.png" in names
+            assert "selected_photo.json" in names
             assert "REVIEW_BEFORE_PUBLICATION.txt" in names
             assert z.read("originals/product_photo.png")==_png()
             assert "AI-макет" in z.read(
@@ -318,7 +324,7 @@ def test_both_paid_image_edit_requests_include_safe_layout_not_old_cache(
         cache_dir=tmp_path / "safe_brand_test",
     )
     assert len(images.calls) == 2
-    assert "v3-safe-brand-zones" in ai_poster_service.VERSION
+    assert "v4-rebranded-hero" in ai_poster_service.VERSION
     landscape, portrait = [call["prompt"].lower() for call in images.calls]
     assert "trailer must never overlap the logo area" in landscape
     assert "protected branding/header zone at the top" in portrait
