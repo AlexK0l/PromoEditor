@@ -195,3 +195,78 @@ def test_textless_art_prompt_never_requests_model_to_print_verified_copy():
         assert "copy_character_lengths" in prompt
         assert "6527000" not in prompt
         assert "+7 (951)" not in prompt
+
+
+def test_main_zip_contains_exact_text_svgs_blank_ai_art_and_originals(
+        monkeypatch,tmp_path):
+    """Single main-request export transaction, without any paid OpenAI calls."""
+    import zipfile
+    from app import main
+    from app.editable_export import rasterize_svg
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    # Explicitly mocked paid rebranding. Selected photo remains immutable.
+    selected=_png((500,310),"gold")
+    changed=_png((500,310),"purple")
+    original_logo=_png((120,70),"blue")
+    called=[]
+    def rebrand(brief,raw,**kwargs):
+        called.append(("rebrand",raw,kwargs.get("logo")))
+        return changed
+    def render(brief,raw,*,logo,drawing,reference,model,quality):
+        called.append(("render",raw,logo))
+        artworks={fmt:Image.new("RGB",FORMATS[fmt],"white")
+                  for fmt in FORMATS}
+        slots={fmt:_slots(fmt) for fmt in FORMATS}
+        # An uploaded logo can be placed independently of its appearance
+        # inside the AI-rebranded photograph.
+        for fmt in FORMATS:
+            slots[fmt]["logo"]={"x":42,"y":152,"w":140,"h":34}
+        svg={
+            fmt:render_exact_svg(
+                brief,fmt,artworks[fmt],slots[fmt],DEFAULT_STYLE,logo=logo)
+            for fmt in FORMATS
+        }
+        pngjpeg={fmt:rasterize_svg(svg[fmt]) for fmt in FORMATS}
+        return {
+            "png":{fmt:pngjpeg[fmt][0] for fmt in FORMATS},
+            "jpeg":{fmt:pngjpeg[fmt][1] for fmt in FORMATS},
+            "svg":svg,"artwork":artworks,"layout":slots,
+            "typography":{fmt:dict(DEFAULT_STYLE) for fmt in FORMATS},
+            "verified_copy":verified_copy(brief),
+            "cache_dir":tmp_path/"successful-cache",
+        }
+    monkeypatch.setattr(main,"rebrand_selected_photo",rebrand)
+    monkeypatch.setattr(main,"generate_exact_typography_posters",render)
+    result=main._exact_typography_posters_sync(
+        _brief(),selected,original_logo,None,None,
+        "gpt-image-2.5-flare","medium",
+        selected_source={"id":"photo_2","name":"side-view.png"})
+    assert [v[0] for v in called]==["rebrand","render"]
+    assert called[0][1] == selected
+    assert called[1][1] == changed
+    assert result["raster_only"] is False
+    assert result["generation_mode"]=="ai_template_exact_copy"
+    assert result["corel"]["9x16"].endswith(".svg")
+    folder=tmp_path/result["job_id"]
+    with zipfile.ZipFile(folder/"ai_typographic_posters.zip") as archive:
+        names=set(archive.namelist())
+        for fmt in FORMATS:
+            for name in (f"ai_template_{fmt}.png",f"corel_{fmt}.svg",
+                         f"ai_poster_{fmt}.png",f"ai_poster_{fmt}.jpg"):
+                assert name in names,name
+            root=ET.fromstring(archive.read(f"corel_{fmt}.svg"))
+            rows=[e for e in root.iter() if e.get("data-verified-role")]
+            assert any(e.get("data-verified-role")=="model"
+                       and e.get("data-exact-copy")=="ZubrTrail 500"
+                       for e in rows)
+        assert archive.read("originals/product_photo.png")==selected
+        assert archive.read("originals/customer_logo.png")==original_logo
+        assert archive.read("rebranded_product.png")==changed
+        chosen=json.loads(archive.read("selected_photo.json"))
+        assert chosen["selected_primary"]["id"]=="photo_2"
+        typography=json.loads(archive.read("typography_style.json"))
+        assert typography["4x3"]["font_family"]=="DejaVu Sans Condensed"
+        assert "verified_copy.json" in names
+        assert "REVIEW_BEFORE_PUBLICATION.txt" in names
+    assert selected==_png((500,310),"gold")
