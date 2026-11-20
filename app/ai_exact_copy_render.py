@@ -146,6 +146,66 @@ def poster_copy(brief: dict) -> dict[str, list[str]]:
     return chosen
 
 
+_SAFE_UNUSED_SLOT = {"x": 20, "y": 20, "w": 40, "h": 30}
+
+
+def _valid_slot_box(box: object) -> bool:
+    """Only a real, contained coordinate rectangle counts as usable."""
+    if not isinstance(box, dict) or set(box) != {"x", "y", "w", "h"}:
+        return False
+    if any(type(box[key]) is not int for key in ("x", "y", "w", "h")):
+        return False
+    x, y, w, h = (box[key] for key in ("x", "y", "w", "h"))
+    return (0 <= x <= 1000 and 0 <= y <= 1000
+            and 30 <= w <= 1000 and 20 <= h <= 1000
+            and x + w <= 1000 and y + h <= 1000)
+
+
+def normalize_inactive_slots(geometry: dict, copy: dict, *,
+                             has_logo=False, has_drawing=False) -> dict:
+    """Ignore bad geometry ONLY for roles which will not be rendered.
+
+    The Images/Responses JSON schema must still request all slot names, but
+    an unused dimensions/benefits/etc. rectangle has no printable meaning.
+    Preserve every valid AI rectangle and copy all objects: the paid raw
+    response must remain unchanged for cache reuse and debugging. Active
+    text and the product remain subject to strict validation/repair.
+    """
+    if not isinstance(geometry, dict) or set(geometry) != set(FORMATS):
+        raise ValueError("AI не вернул зоны обоих форматов.")
+    required = {"product"} | {role for role in ROLES if copy.get(role)}
+    if has_logo:
+        required.add("logo")
+    if has_drawing:
+        required.add("drawing")
+    normalized = {}
+    for fmt, slots in geometry.items():
+        if not isinstance(slots, dict) or set(slots) - set(ALL_SLOTS):
+            raise ValueError(f"AI вернул неизвестные зоны макета {fmt}.")
+        if not required.issubset(slots):
+            missing = ", ".join(sorted(required - set(slots)))
+            raise ValueError(f"AI не подготовил обязательные зоны {fmt}: {missing}.")
+        cleaned = {}
+        for role in ALL_SLOTS:
+            box = slots.get(role)
+            if role not in required:
+                # Invalid or missing *unused* coordinates must never block
+                # a paid generation. Keep valid inactive boxes unchanged.
+                cleaned[role] = (dict(box) if _valid_slot_box(box)
+                                 else dict(_SAFE_UNUSED_SLOT))
+                continue
+            if (not isinstance(box, dict)
+                    or set(box) != {"x", "y", "w", "h"}
+                    or any(type(box[key]) is not int
+                           for key in ("x", "y", "w", "h"))):
+                raise ValueError(f"AI вернул неверную обязательную зону {role} ({fmt}).")
+            if role == "product" and not _valid_slot_box(box):
+                raise ValueError(f"AI вывел область техники за границы {fmt}.")
+            cleaned[role] = dict(box)
+        normalized[fmt] = cleaned
+    return normalized
+
+
 def validate_slots(geometry: dict, copy: dict, *,
                    has_logo=False, has_drawing=False) -> dict:
     """Reject hallucinated, overlapping, unreadable or off-canvas zones.
@@ -153,12 +213,13 @@ def validate_slots(geometry: dict, copy: dict, *,
     Do NOT fall back to a rigid server template: those are the bad layouts
     which the customer explicitly rejected.
     """
-    if not isinstance(geometry, dict) or set(geometry) != set(FORMATS):
-        raise ValueError("AI не вернул зоны обоих форматов.")
+    # Treat unused slot coordinates as optional metadata. In particular,
+    # the model may return dimensions={x:980,y:980,w:100,h:100} even though
+    # poster_copy intentionally contains no dimensions.
+    geometry = normalize_inactive_slots(
+        geometry, copy, has_logo=has_logo, has_drawing=has_drawing)
     result = {}
     for fmt, value in geometry.items():
-        if not isinstance(value, dict) or set(value) != set(ALL_SLOTS):
-            raise ValueError(f"AI не подготовил все зоны макета {fmt}.")
         validated = {}
         for role, box in value.items():
             if not isinstance(box, dict) or set(box) != {"x", "y", "w", "h"}:
