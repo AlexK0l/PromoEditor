@@ -162,9 +162,9 @@
       :'OpenAI не подключён. Бесплатный макет можно создать без AI.';
     $('ai-creative-settings').hidden=!ai;
     $('ai-concepts-workflow').hidden=!ai;
-    // Full AI posters are now the MAIN workflow; do not show a duplicate
-    // paid generator under experimental controls.
-    $('openai-posters-workflow').hidden=true;
+    // Expert tools keep a direct full-Images entrypoint for compatibility;
+    // the SAME full generator now powers the primary Create button.
+    $('openai-posters-workflow').hidden=!ai;
     $('prompt-workflow').hidden=ai;
     $('expert-prompt').hidden=ai;
     $('generate-btn').textContent=ai
