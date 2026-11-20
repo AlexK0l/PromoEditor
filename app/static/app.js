@@ -125,7 +125,7 @@
       $(id).closest('label').classList.toggle('is-disabled',!apiReady);
     }
     $('hybrid-mode-hint').textContent=apiReady?
-      'OpenAI создаёт полное художественное оформление 4:3 и 9:16 (1 арт-план + 2 Images). Техника, логотип и данные подставляются точно.':
+      'OpenAI Images целиком рисует плакаты 4:3 и 9:16: 2 платных вызова. Перед публикацией проверьте цифры, текст, логотип и технику.':
       'Недоступно: на сервере не подключён OpenAI. Выберите бесплатный вариант.';
     refreshGenerationMode();
   }
@@ -141,8 +141,8 @@
   function refreshGenerationMode(){
     const ai=isAiPro();
     const hybrid=isHybrid();
-    // Hybrid is the default accurate editable workflow, with a mandatory
-    // AI background and immutable customer product/brand/source drawings.
+    // The primary paid path produces complete Images-authored raster ads,
+    // exactly like the former expert /api/ai-posters workflow.
     if(hybrid)$('use-openai').checked=true;
     $('use-openai').disabled=hybrid || !apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
@@ -155,14 +155,16 @@
       ?(ai
         ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
         :hybrid
-          ?'AI полностью создаёт рекламный дизайн двух плакатов. 3 платных запроса; оригинальная техника и точные данные добавляются отдельно.'
+          ?'OpenAI Images создаёт два полных рекламных постера. 2 платных вызова. Все надписи и характеристики требуют проверки.'
           :paidInTemplate
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
       :'OpenAI не подключён. Бесплатный макет можно создать без AI.';
     $('ai-creative-settings').hidden=!ai;
     $('ai-concepts-workflow').hidden=!ai;
-    $('openai-posters-workflow').hidden=!ai;
+    // Full AI posters are now the MAIN workflow; do not show a duplicate
+    // paid generator under experimental controls.
+    $('openai-posters-workflow').hidden=true;
     $('prompt-workflow').hidden=ai;
     $('expert-prompt').hidden=ai;
     $('generate-btn').textContent=ai
@@ -177,7 +179,7 @@
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
         setStatus(apiReady?'AI-дизайн · 3 платных запроса':'AI недоступен',
-          apiReady?'1 AI-план + 2 полностью созданных AI рекламных дизайна. Техника, логотип и цифры останутся точными.':
+          apiReady?'2 полных AI-постера от OpenAI Images. Проверьте текст, цифры, логотип и геометрию техники.':
             'Выберите бесплатный шаблон.');
       }else{
         setStatus(checked('use-openai')?'Шаблон с AI-фоном':'Без AI · бесплатно',
@@ -417,9 +419,9 @@
       showError('Экономика включена, но не заполнены все исходные параметры. Введите подтверждённые числа или отключите экономический расчёт.','price');
       return;
     }
-    if(isHybrid()&&!apiReady){showError('Для гибридного режима требуется OpenAI API. Выберите бесплатный шаблон.');return;}
+    if(isHybrid()&&!apiReady){showError('Для полной AI-генерации требуется OpenAI API. Выберите бесплатный шаблон.');return;}
     if(isHybrid()&&!window.PromoAssets?.hasFiles()&&!$('hero').files.length&&!$('detail').files.length){
-      showError('Для гибридного режима загрузите исходное фото товара.');return;
+      showError('Для полного AI-постера загрузите исходное фото товара.');return;
     }
     if(isAiPro()&&(!aiConceptSet||selectedAiConcept===null)){
       showError('Сначала создайте три AI-концепции и выберите одну из них.');return;
@@ -430,13 +432,13 @@
     }
     const paidRendering=isHybrid()||checked('use-openai');
     if(isHybrid()&&!window.confirm(
-      'OpenAI полностью создаст художественное оформление обоих рекламных плакатов: 1 запрос на арт-план + 2 на полный дизайн. Техника, логотип и цифры будут подставлены отдельно. 3 платных вызова. Продолжить?'
+      'OpenAI Images создаст два полных растровых рекламных постера. Это 2 платных вызова. AI может ошибаться в тексте, логотипе и характеристиках; SVG с редактируемым текстом в этом режиме нет. Продолжить?'
     ))return;
     invalidateResult();busy(true);
     setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
     const loadingMessage=$('loading').querySelector('small');
     loadingMessage.textContent=paidRendering
-      ?'OpenAI создаёт полный дизайн двух рекламных плакатов. Затем разместим вашу технику и точные данные в SVG, PNG и JPEG.'
+      ?'OpenAI Images рисует оба рекламных постера целиком. Получите PNG, JPEG и ZIP; проверьте надписи, числа и технику.'
       :'Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
     const elapsed=$('generate-elapsed');
     const started=Date.now();
@@ -470,8 +472,9 @@
       const selected=window.PromoAssets?.getReport?.();
       if(isHybrid()&&window.PromoAssets?.hasFiles()&&!selected?.selected_assets?.primary_photo)
         throw new Error('Не найдено главное фото товара. Откройте проверку материалов и назначьте главный ракурс.');
-      setStatus(paidRendering?'Создаём AI-дизайн':'Создаём оба макета',
-        paidRendering?'1 арт-план + 2 полных рекламных дизайна, затем точные SVG/PNG/JPEG. Это платные вызовы OpenAI.':
+      setStatus(paidRendering?'Создаём AI-постеры':'Создаём оба макета',
+        isHybrid()?'OpenAI Images рисует два цельных постера: 4:3 и 9:16. Это 2 платных вызова.':
+          paidRendering?'Создаём макеты с OpenAI. Это платные вызовы.':
           'Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
       const prompt=(promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim();
       const form=new FormData();form.append('payload',JSON.stringify(formBrief()));
@@ -498,8 +501,8 @@
         $('result-warning-items').appendChild(item);
       }
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
-      // Show the exact PNGs rasterized from the same editable SVG files.
-      // No separate AI preview call, no extra charge or guessed rendering.
+      // Show actual paid Image outputs (or SVG-derived previews in non-full-AI modes).
+      // This preview performs NO additional model calls.
       for(const fmt of ['4x3','9x16']){
         const path=latest.images?.[fmt];
         if(path){
@@ -509,9 +512,26 @@
       }
       $('generated-previews').hidden=false;
       $('download-panel').hidden=false;
-      ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
-      setStatus('Готово',(isAiPro()?'Выбранный AI-дизайн':isHybrid()?'Гибридный PRO':'Шаблон')+
-        ': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
+      const rasterOnly=Boolean(latest.raster_only);
+      for(const id of ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16'])
+        $(id).disabled=false;
+      for(const fmt of ['4x3','9x16']){
+        const svgButton=$('download-svg-'+fmt);
+        svgButton.disabled=rasterOnly||!latest.corel?.[fmt];
+        svgButton.parentElement.hidden=rasterOnly;
+      }
+      $('individual-downloads').querySelector('summary').textContent=rasterOnly
+        ?'Скачать отдельные PNG или JPEG'
+        :'Скачать отдельные PNG, JPEG или SVG';
+      document.querySelector('.prompt-download-note').textContent=rasterOnly
+        ?'ZIP содержит два полных AI-постера в PNG/JPEG и ваши исходные материалы. Редактируемых SVG нет.'
+        :'ZIP содержит оба формата, редактируемые SVG для CorelDRAW и ваши оригиналы.';
+      document.querySelector('.result-disclaimer').textContent=rasterOnly
+        ?'OpenAI может ошибиться в цене, телефонах, характеристиках, логотипе и деталях техники. Сверьте изображения перед публикацией. Текст в растре не редактируется.'
+        :'Перед публикацией проверьте данные и права на изображения. Для правок откройте SVG в CorelDRAW.';
+      setStatus('Готово',rasterOnly
+        ?'Два полных AI-постера (4:3 и 9:16): PNG, JPEG и ZIP готовы. Проверьте данные.'
+        :(isAiPro()?'Выбранный AI-дизайн':'Шаблон')+': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
