@@ -86,6 +86,96 @@ def test_ai_zones_must_be_valid_and_not_overlap_trailer_or_each_other():
 
 
 
+def test_unused_dimensions_outside_4x3_are_ignored_not_fatal():
+    """Production regression: AI returned unusable dimensions for no-copy role."""
+    brief=_brief()
+    approved=poster_copy(brief)
+    assert not approved["dimensions"], "No dimension text is rendered in ads"
+    raw=_layouts()
+    misplaced={"x":970,"y":965,"w":180,"h":150}
+    raw["4x3"]["dimensions"]=dict(misplaced)
+    raw["9x16"]["proofs"]={"x":995,"y":995,"w":120,"h":85}
+
+    checked=validate_slots(raw,approved)
+    assert checked["4x3"]["dimensions"]=={
+        "x":20,"y":20,"w":40,"h":30}
+    assert checked["9x16"]["proofs"]=={
+        "x":20,"y":20,"w":40,"h":30}
+    assert checked["4x3"]["model"]==raw["4x3"]["model"]
+    assert checked["4x3"]["product"]==raw["4x3"]["product"]
+    assert raw["4x3"]["dimensions"]==misplaced, "Paid response is immutable"
+    repaired=repair_ai_slots(raw,approved)
+    assert validate_slots(repaired,approved)==repaired
+    assert repaired["4x3"]["model"]==raw["4x3"]["model"]
+    assert repaired["4x3"]["dimensions"]==checked["4x3"]["dimensions"]
+
+
+def test_unused_missing_or_malformed_roles_do_not_block_valid_artwork():
+    approved=poster_copy(_brief())
+    raw=_layouts()
+    del raw["4x3"]["dimensions"]
+    raw["4x3"]["benefits"]={"x":"not a number"}
+    raw["9x16"]["drawing"]=None
+    raw["9x16"]["roi"]={"x":True,"y":0,"w":80,"h":35}
+    result=repair_ai_slots(raw,approved)
+    assert result["4x3"]["dimensions"]["w"]==40
+    assert result["4x3"]["benefits"]["w"]==40
+    assert result["9x16"]["drawing"]["w"]==40
+    assert result["9x16"]["roi"]["w"]==40
+    assert result["9x16"]["model"]==raw["9x16"]["model"]
+
+
+def test_active_or_product_out_of_bounds_still_rejected():
+    original=_layouts()
+    original["4x3"]["dimensions"]={
+        "x":970,"y":970,"w":140,"h":140}
+    approved=poster_copy(_brief())
+    approved["dimensions"]=["Длина: 12 м"]
+    with pytest.raises(ValueError,match="dimensions за границы 4x3"):
+        validate_slots(original,approved)
+    original=_layouts()
+    original["4x3"]["product"]={
+        "x":750,"y":250,"w":460,"h":400}
+    with pytest.raises(ValueError,match="техники за границы 4x3"):
+        repair_ai_slots(original,poster_copy(_brief()))
+
+
+def test_paid_layout_with_bad_unused_dimensions_is_cached_and_reused(
+        monkeypatch,tmp_path):
+    """A wasted irrelevant AI slot must not trigger another paid Responses call."""
+    raw=_layouts()
+    raw["4x3"]["dimensions"]={
+        "x":975,"y":980,"w":125,"h":120}
+    calls=[]
+    class Responses:
+        def create(self,**kwargs):
+            calls.append(kwargs["text"]["format"]["name"])
+            return type("R",(),{
+                "output_text":json.dumps({"layouts":raw})
+            })()
+    monkeypatch.setattr(
+        workflow,"client",
+        lambda:type("API",(),{"responses":Responses()})())
+    artwork={fmt:Image.new("RGB",FORMATS[fmt],"white")
+             for fmt in FORMATS}
+    try:
+        first=workflow._layout_plan(
+            _brief(),artwork,has_logo=False,has_drawing=False,
+            folder=tmp_path)
+        second=workflow._layout_plan(
+            _brief(),artwork,has_logo=False,has_drawing=False,
+            folder=tmp_path)
+    finally:
+        for frame in artwork.values(): frame.close()
+    assert calls==["poster_blank_slots"]
+    assert first==second
+    assert first["4x3"]["dimensions"]=={
+        "x":20,"y":20,"w":40,"h":30}
+    assert json.loads(
+        (tmp_path/"layout_raw.json").read_text()
+    )["4x3"]["dimensions"]==raw["4x3"]["dimensions"]
+
+
 def _overlapping_category_and_benefits():
     """Real 9:16 regression: both roles active, overlapping on the poster."""
     layouts=_layouts()
