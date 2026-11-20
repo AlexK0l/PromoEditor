@@ -688,7 +688,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
 
 @app.post('/api/ai-posters')
 async def create_full_ai_posters(request:Request):
-    """Two explicit paid Images edits; never requires an exemplar.
+    """One selected-photo rebrand edit plus two AI-poster edits.
 
     User-authored facts and photos are treated as sources, not AI claims.
     The resulting raster must be proofread prior to public distribution.
@@ -717,7 +717,9 @@ async def create_full_ai_posters(request:Request):
     prefs,cached=_asset_review(form)
     try:
         report,records=await asyncio.to_thread(
-            analyze_project,groups,prefs,cached_report=cached,use_ai=False)
+            analyze_project,groups,prefs,cached_report=cached,use_ai=False,
+            rank_photos_with_ai=True,
+            requirements=brief.get('design_notes',''))
         product=chosen_bytes(report,records,'primary_photo')
         if not product:
             raise HTTPException(400,detail='Загрузите и выберите главное фото техники.')
@@ -725,10 +727,14 @@ async def create_full_ai_posters(request:Request):
         drawing_id=report['selected_assets'].get('drawing')
         if drawing and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
             drawing=await asyncio.to_thread(pdf_first_page_png,drawing)
+        photo_id=report['selected_assets']['primary_photo']
+        source={'id':photo_id,'name':records[photo_id]['name'],
+                'sha256':records[photo_id]['sha256']}
         return await asyncio.to_thread(
             _full_posters_sync,brief,product,
             chosen_bytes(report,records,'logo'),drawing,
-            chosen_bytes(report,records,'reference_example'),model,quality)
+            chosen_bytes(report,records,'reference_example'),model,quality,
+            selected_source=source)
     except QuotaExceeded as exc:
         raise HTTPException(429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
@@ -829,6 +835,14 @@ async def generate(request:Request):
     prefs,cached=_asset_review(form)
     use_openai=str(form.get('use_openai','false')).lower()=='true'
     use_demo=str(form.get('use_demo','false')).lower()=='true'
+    mode=str(form.get('generation_mode','template'))
+    if mode not in ('ai_pro','template','hybrid'):
+        raise HTTPException(400,detail='Неподдерживаемый режим создания.')
+    if mode=='hybrid':
+        from .openai_service import IMAGE_MODELS, IMAGE_QUALITIES
+        if (str(form.get('model','gpt-image-2.5-flare')) not in IMAGE_MODELS
+                or str(form.get('quality','medium')) not in IMAGE_QUALITIES):
+            raise HTTPException(400,detail='Недопустимые настройки OpenAI Images.')
     if use_openai and not os.getenv('OPENAI_API_KEY'):
         raise HTTPException(400,detail='Для AI-генерации укажите OPENAI_API_KEY на сервере.')
     supplied_prompt=form.get('prompt','')
@@ -836,7 +850,9 @@ async def generate(request:Request):
         raise HTTPException(400,detail='Промпт не должен превышать 8000 символов.')
     try:
         report,records=await asyncio.to_thread(
-            analyze_project,groups,prefs,cached_report=cached,use_ai=False)
+            analyze_project,groups,prefs,cached_report=cached,use_ai=False,
+            rank_photos_with_ai=(mode=='hybrid'),
+            requirements=brief.get('design_notes',''))
         # Approved user edits to the prompt are kept. Asset choices are still
         # appended as non-instructional, real file-derived context.
         assets_prompt=build_promo_prompt(brief,report)
@@ -849,6 +865,10 @@ async def generate(request:Request):
             if suffix and suffix not in design_prompt:
                 design_prompt=(design_prompt+'\n'+suffix)[:8000]
         if len(design_prompt)<5:raise ValueError('Добавьте описание для генерации.')
+    except QuotaExceeded as exc:
+        raise HTTPException(429,detail=str(exc)) from exc
+    except QuotaStoreUnavailable as exc:
+        raise HTTPException(503,detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     hero_raw=chosen_bytes(report,records,'primary_photo')
@@ -858,9 +878,6 @@ async def generate(request:Request):
     background_raw=chosen_bytes(report,records,'background')
     references=chosen_bytes(report,records,'references')
     reference_example_raw=chosen_bytes(report,records,'reference_example')
-    mode=str(form.get('generation_mode','template'))
-    if mode not in ('ai_pro','template','hybrid'):
-        raise HTTPException(400,detail='Неподдерживаемый режим создания.')
     if mode=='hybrid':
         # Compatibility value for the primary checkbox. The main button must
         # use the SAME full Images poster engine as /api/ai-posters, never the
@@ -910,7 +927,12 @@ async def generate(request:Request):
                 _full_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
                 reference_example_raw,
                 str(form.get('model','gpt-image-2.5-flare')),
-                str(form.get('quality','medium')))
+                str(form.get('quality','medium')),
+                selected_source={
+                    'id':report['selected_assets']['primary_photo'],
+                    'name':records[report['selected_assets']['primary_photo']]['name'],
+                    'sha256':records[report['selected_assets']['primary_photo']]['sha256'],
+                })
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references
             result=await asyncio.to_thread(
