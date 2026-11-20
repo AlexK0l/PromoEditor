@@ -244,10 +244,73 @@ def generate_templates(brief: dict, rebranded: bytes, *,
     return images
 
 
+_OPTIONAL_COPY_ROLES = (
+    "specs", "claims", "category", "slogan", "roi",
+    "benefits", "dimensions", "proofs",
+)
+_MANDATORY_COPY_ROLES = ("brand", "model", "price", "phones")
+
+
+def _fit_layout_with_adaptive_copy(
+    geometry: dict, copy: dict, *, protect_product: bool = False,
+) -> tuple[dict, dict]:
+    """Fit only actual approved ad copy into the already-paid AI artwork.
+
+    A background/vision response cannot promise that three specs fit beside
+    the photographed vehicle. On a role-specific space failure, remove ONLY
+    that role's last optional line, retry locally, and never call OpenAI.
+    Text is never abbreviated or reworded; all original facts remain in
+    verified_copy.json. Mandatory branding, price and contact text survive.
+    """
+    selected = {role:list(values) for role,values in copy.items()}
+    maximum = 1 + sum(len(selected.get(role) or [])
+                      for role in _OPTIONAL_COPY_ROLES)
+    for _ in range(maximum):
+        try:
+            fitted = repair_ai_slots(
+                geometry,selected,has_logo=False,has_drawing=False,
+                protect_product=protect_product,
+            )
+            return fitted,selected
+        except ValueError as exc:
+            message = str(exc)
+            # Only a text-fit failure may justify removing approved copy.
+            # An invalid product box or malformed mandatory geometry must
+            # not be hidden by dropping a marketing statement.
+            if "AI не оставил достаточно свободного места для «" not in message:
+                raise
+            requested = message.split("для «",1)[1].split("»",1)[0]
+            if requested in _MANDATORY_COPY_ROLES:
+                raise ValueError(
+                    "Обязательные данные («"+requested+"») не помещаются "
+                    "на подготовленном AI-макете. Они не удалены и не "
+                    "изменены; оплаченные изображения сохранены."
+                ) from exc
+            if requested in _OPTIONAL_COPY_ROLES and selected.get(requested):
+                selected[requested] = selected[requested][:-1]
+                continue
+            # If the requested role was already empty, or is an auxiliary
+            # zone, shrink the next available optional block cumulatively.
+            fallback = next((role for role in _OPTIONAL_COPY_ROLES
+                             if selected.get(role)),None)
+            if fallback is not None:
+                selected[fallback] = selected[fallback][:-1]
+                continue
+            raise ValueError(
+                "AI-макет не вмещает даже минимальный обязательный текст. "
+                "Он не обрезан; оплаченные изображения сохранены."
+            ) from exc
+    raise ValueError(
+        "Не удалось согласовать рекламный текст с макетом без нарушения "
+        "обязательных данных. Оплаченные AI-изображения сохранены."
+    )
+
+
 def _layout_plan(brief: dict, art: dict, *,
                  has_logo: bool, has_drawing: bool,
                  folder: Path | None = None,
-                 protect_product: bool = False) -> dict:
+                 protect_product: bool = False,
+                 return_raw: bool = False) -> dict:
     copy = poster_copy(brief)
     # A completed vision layout can be geometrically inconsistent. Cache
     # the original PAID JSON first, then reconcile its regions locally.
@@ -255,6 +318,8 @@ def _layout_plan(brief: dict, art: dict, *,
     # vision requests and reuse the same two already generated art PNGs.
     original = _load_json(folder,"layout_raw.json") if folder else None
     if original is not None:
+        if return_raw:
+            return original
         return repair_ai_slots(
             original,copy,has_logo=has_logo,has_drawing=has_drawing,
             protect_product=protect_product)
@@ -322,9 +387,11 @@ def _layout_plan(brief: dict, art: dict, *,
         raise ValueError("OpenAI вернул некорректные зоны текста.") from exc
     if folder is not None:
         _save_json(folder,"layout_raw.json",original)
+    if return_raw:
+        return original
     return repair_ai_slots(
         original,copy,has_logo=has_logo,has_drawing=has_drawing,
-            protect_product=protect_product)
+        protect_product=protect_product)
 
 
 def _finish_typography(previews: dict[str,Image.Image]) -> dict:
