@@ -72,6 +72,7 @@ def test_pr_preview_is_isolated_rate_limited_and_rollback_free():
     assert "RuntimeMaxSec=3600" in script
     assert "Restart=no" in script
     assert "PROMO_AUTH_ENABLED=0" in script
+    assert "PROMO_RENDER_MAX_EDGE=1600" in script
     assert "OPENAI_API_KEY=" in script
     assert '"ReadWritePaths=$JOBS"' in script
     assert "InaccessiblePaths=/var/lib/promoeditor/jobs" in script
