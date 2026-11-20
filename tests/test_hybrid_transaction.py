@@ -201,12 +201,12 @@ def test_completed_hybrid_response_reports_actual_mode(monkeypatch, tmp_path):
     assert metadata["art_director"].startswith("OpenAI Responses")
 
 
-def test_primary_create_uses_experimental_full_poster_engine_not_template(
+def test_primary_create_uses_exact_copy_ai_template_not_full_raster(
         monkeypatch, tmp_path):
-    """Customer-facing Create must use EXACTLY the /api/ai-posters engine.
+    """Customer-facing Create must use textless AI design + exact SVG copy.
 
-    A plan or SVG compositor here would regress to the templated result.
-    No paid OpenAI network call is allowed in this regression test.
+    The legacy raster Images engine must NOT run from the main button.
+    CI does not make paid network requests.
     """
     monkeypatch.setenv("OPENAI_API_KEY", "test-no-network")
     monkeypatch.setenv("PROMO_DATA_DIR", str(tmp_path))
@@ -215,9 +215,9 @@ def test_primary_create_uses_experimental_full_poster_engine_not_template(
     original = _png("yellow")
     called = []
 
-    def full_posters(brief, product, logo, drawing, reference, model, quality,
+    def typed_posters(brief, product, logo, drawing, reference, model, quality,
                      selected_source=None):
-        called.append(("full_poster", product, model, quality))
+        called.append(("typed_poster", product, model, quality))
         assert selected_source["id"] == "photo_1"
         assert selected_source["name"] == "real.png"
         assert brief["model"]
@@ -227,9 +227,11 @@ def test_primary_create_uses_experimental_full_poster_engine_not_template(
                        "9x16": "/files/test/ai_poster_9x16.png"},
             "jpeg": {"4x3": "/files/test/ai_poster_4x3.jpg",
                      "9x16": "/files/test/ai_poster_9x16.jpg"},
-            "zip": "/files/test/ai_posters.zip",
-            "generation_mode": "openai_full_poster",
-            "raster_only": True,
+            "zip": "/files/test/ai_typographic_posters.zip",
+            "corel": {"4x3":"/files/test/corel_4x3.svg",
+                      "9x16":"/files/test/corel_9x16.svg"},
+            "generation_mode": "ai_template_exact_copy",
+            "raster_only": False,
             "ai_used": True,
             "warnings": [],
         }
@@ -237,7 +239,8 @@ def test_primary_create_uses_experimental_full_poster_engine_not_template(
     def forbidden_old_renderer(*args, **kwargs):
         raise AssertionError("Primary AI creation called old layout renderer")
 
-    monkeypatch.setattr(main, "_full_posters_sync", full_posters)
+    monkeypatch.setattr(main, "_exact_typography_posters_sync", typed_posters)
+    monkeypatch.setattr(main, "_full_posters_sync", forbidden_old_renderer)
     monkeypatch.setattr(main, "_generate_sync", forbidden_old_renderer)
     with TestClient(main.app) as browser:
         result = browser.post("/api/generate",
@@ -250,8 +253,9 @@ def test_primary_create_uses_experimental_full_poster_engine_not_template(
             },
             files={"hero": ("real.png", original, "image/png")})
     assert result.status_code == 200, result.text
-    assert result.json()["generation_mode"] == "openai_full_poster"
-    assert result.json()["raster_only"] is True
-    assert result.json()["zip"].endswith("ai_posters.zip")
-    assert "corel" not in result.json(), "Do not advertise a fake editable SVG"
+    assert result.json()["generation_mode"] == "ai_template_exact_copy"
+    assert result.json()["raster_only"] is False
+    assert result.json()["zip"].endswith("ai_typographic_posters.zip")
+    assert result.json()["corel"]["4x3"].endswith(".svg")
+    assert called and called[0][0] == "typed_poster"
     assert len(called) == 1 and called[0][0] == "full_poster"
