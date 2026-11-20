@@ -179,7 +179,6 @@ def test_two_image_designs_then_ai_slot_plan_then_exact_previews_then_ai_fonts(
         assert out["png"][fmt].startswith(b"\x89PNG")
         assert out["svg"][fmt].startswith(b"<?xml")
         assert b"data-verified-role" in out["svg"][fmt]
-        assert b"corel" not in out["svg"][fmt].lower() or True
     assert out["typography"]["4x3"]["accent"]=="#BE1828"
     out2=workflow.generate_exact_typography_posters(**params)
     assert len(events)==4, "Cache must prevent duplicate paid API calls"
