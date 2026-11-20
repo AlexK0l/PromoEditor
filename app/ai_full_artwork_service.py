@@ -34,6 +34,27 @@ ZONE_LABELS = {
 }
 
 
+def _output_box(fmt: str, rect: dict) -> dict:
+    """Map final-poster coordinates to the larger image-model aspect ratio.
+
+    The Images API produces 3:2 and 2:3, while the actual posters are 4:3
+    and 9:16. The renderer center-crops the output; we must reserve exactly
+    those positions in the *uncropped* image to keep overlays aligned.
+    """
+    (width, height), api_size = FORMAT_SIZES[fmt]
+    raw_w, raw_h = (1536, 1024) if fmt == "4x3" else (1024, 1536)
+    visible_raw_w = raw_h * width / height
+    left = (raw_w - visible_raw_w) / 2
+    factor = visible_raw_w / raw_w
+    offset = left / raw_w
+    return {
+        "x": round((offset + factor * rect["x"] / 1000) * 1000),
+        "y": rect["y"],
+        "w": round(factor * rect["w"]),
+        "h": rect["h"],
+    }
+
+
 def _prompt(brief: dict, concept: dict, fmt: str) -> str:
     """Build a visual-art request from AI-authored coordinates, not a template."""
     layout = concept["layouts"][fmt]
@@ -41,7 +62,7 @@ def _prompt(brief: dict, concept: dict, fmt: str) -> str:
         {
             "role": name,
             "meaning": ZONE_LABELS[name],
-            "box_normalized_1000": layout[name],
+            "box_normalized_1000": _output_box(fmt, layout[name]),
         }
         for name in ZONE_LABELS
     ]
@@ -56,6 +77,8 @@ def _prompt(brief: dict, concept: dict, fmt: str) -> str:
         "additional_visual_actions": str(brief.get("design_actions") or "")[:850],
         "verified_product_category": str(brief.get("category") or "")[:100],
         "all_reserved_regions": regions,
+        "output_model_canvas": "1536x1024" if fmt == "4x3" else "1024x1536",
+        "final_crop": "center crop to 4:3" if fmt == "4x3" else "center crop to 9:16",
     }
     return (
         "CREATE THE ACTUAL FINISHED VISUAL DESIGN of a premium, high-impact "
@@ -89,7 +112,10 @@ def _prompt(brief: dict, concept: dict, fmt: str) -> str:
         "Use plain surfaces: header, specifications, dimension, benefits, "
         "ROI and CTA interiors must have high contrast with subsequent "
         "text using their proposed foreground/accent colors. "
-        "The product HERO rectangle is fully open and unobstructed. "
+        "Text interiors should be LIGHT, neutral ivory or white, suitable for dark "
+        "foreground text and saturated red accent text, even when the "
+        "surrounding dramatic artwork is dark. The product HERO rectangle "
+        "is fully open and unobstructed. "
         "Place industrial photography ONLY as distant context around or "
         "behind the empty hero-safe region; no foreground clutter over it. "
         "Preserve the specified aspect ratio and coordinates exactly. "
