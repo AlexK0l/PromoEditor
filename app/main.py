@@ -719,29 +719,51 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
         chosen=rebrand_selected_photo(
             brief,product_raw,logo=logo_raw,model=model,quality=quality,
             folder=rebrand_dir)
-    if progress: progress('Подготавливаем два AI-макета и точные текстовые зоны')
-    render_options={'logo':logo_raw,'drawing':drawing_raw,
-                    'reference':reference_raw,'model':model,'quality':quality}
-    if progress is not None:
-        render_options['progress']=progress
-    rendered=generate_exact_typography_posters(brief,chosen,**render_options)
-    if progress: progress('Сохраняем SVG, PNG, JPEG и исходники в ZIP')
+    # Create the private output directory BEFORE the costly render.
+    # All completed AI art remains in the paid cache even if export fails.
+    # Production never holds both SVG + PNG + JPEG posters as large bytes
+    # in the 800 MiB Uvicorn process.
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
     folder.mkdir(mode=0o700)
     try:
+        if progress: progress('Подготавливаем два AI-макета и точные текстовые зоны')
+        render_options={'logo':logo_raw,'drawing':drawing_raw,
+                        'reference':reference_raw,'model':model,'quality':quality,
+                        'output_dir':folder}
+        if progress is not None:
+            render_options['progress']=progress
+        rendered=generate_exact_typography_posters(
+            brief,chosen,**render_options)
+        if progress: progress('Собираем подготовленные SVG, PNG и JPEG в ZIP')
         (folder/'rebranded_product.png').write_bytes(chosen)
         images={};jpegs={};corel={}
         for fmt in ('4x3','9x16'):
-            for name,payload in (
-                (f'ai_poster_{fmt}.png',rendered['png'][fmt]),
-                (f'ai_poster_{fmt}.jpg',rendered['jpeg'][fmt]),
-                (f'corel_{fmt}.svg',rendered['svg'][fmt]),
-            ):
-                (folder/name).write_bytes(payload)
-            rendered['artwork'][fmt].save(
-                folder/f'ai_template_{fmt}.png',format='PNG')
+            if rendered.get('file_backed'):
+                for key,name in (
+                    ('png',f'ai_poster_{fmt}.png'),
+                    ('jpeg',f'ai_poster_{fmt}.jpg'),
+                    ('svg',f'corel_{fmt}.svg'),
+                    ('artwork_paths',f'ai_template_{fmt}.png'),
+                ):
+                    source=Path(rendered[key][fmt])
+                    target=folder/name
+                    if not source.is_file():
+                        raise RuntimeError('Отсутствует результат рендеринга '+name)
+                    if source!=target:
+                        shutil.copyfile(source,target)
+            else:
+                # Compatibility with already tested callers and synthetic CI
+                # fakes. Real production always uses disk-backed exports.
+                for name,payload in (
+                    (f'ai_poster_{fmt}.png',rendered['png'][fmt]),
+                    (f'ai_poster_{fmt}.jpg',rendered['jpeg'][fmt]),
+                    (f'corel_{fmt}.svg',rendered['svg'][fmt]),
+                ):
+                    (folder/name).write_bytes(payload)
+                rendered['artwork'][fmt].save(
+                    folder/f'ai_template_{fmt}.png',format='PNG')
             images[fmt]=f'/files/{job_id}/ai_poster_{fmt}.png'
             jpegs[fmt]=f'/files/{job_id}/ai_poster_{fmt}.jpg'
             corel[fmt]=f'/files/{job_id}/corel_{fmt}.svg'
