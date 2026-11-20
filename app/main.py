@@ -702,19 +702,18 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
     font/color/scale from a visual preview; it never gets to rewrite the facts.
     Old pure raster /api/ai-posters remains available for compatibility.
     """
-    # Proactively check funding for all THREE Images requests and two text
-    # vision requests, BEFORE the first paid Images call, unless rebrand
-    # was already cached from an interrupted attempt.
-    check_paid_capacity('text',2)
+    # Before the FIRST paid edit, preflight all three Images requests and
+    # both Responses stages. On a partial-failure retry, the already paid
+    # rebrand image is reused and the template module checks ONLY its truly
+    # missing art/layout/typography calls, so a completed cache costs zero.
     rebrand_dir=rebrand_cache_dir(brief,product_raw,logo_raw,model,quality)
     chosen=cached_rebrand_photo(rebrand_dir)
     if chosen is None:
+        check_paid_capacity('text',2)
         check_paid_capacity('image',3)
         chosen=rebrand_selected_photo(
             brief,product_raw,logo=logo_raw,model=model,quality=quality,
             folder=rebrand_dir)
-    else:
-        check_paid_capacity('image',2)
     rendered=generate_exact_typography_posters(
         brief,chosen,logo=logo_raw,drawing=drawing_raw,
         reference=reference_raw,model=model,quality=quality)
