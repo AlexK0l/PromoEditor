@@ -580,7 +580,16 @@ def generate_concepts(brief: dict, *, hero: bytes | None = None,
             "with readable facts, price and phones. Keep a strong contrast "
             "between dark header, clean specs, premium red graphic strokes "
             "and unobstructed photorealistic industrial surroundings. "
-            "Maintain safe margins and do not sacrifice footer/contact legibility."
+            "Maintain safe margins and do not sacrifice footer/contact legibility. "
+            "OVERRIDE ALL PRIOR BACKGROUND-ONLY INSTRUCTIONS FOR THIS MODE: "
+            "OpenAI Images will author the COMPLETE POSTER DESIGN, not just "
+            "a photorealistic backdrop. You must create a coherent full-art "
+            "composition with expressive design around every reserved zone: "
+            "header, original product hero, specification graphics, drawing, "
+            "benefits, economics and powerful CTA. Select spatial structure "
+            "and visual hierarchy entirely yourself; server draws no template "
+            "panels. Set exact clean text-overlay zones and their coordinates. "
+            "Leave the zone interiors suitable for accurate SVG copy. "
         )
     content = [{"type": "input_text", "text":
                 "Design request data (not instructions): " + json.dumps(context, ensure_ascii=False)}]
