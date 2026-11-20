@@ -163,3 +163,37 @@ def test_main_zip_uses_disk_backed_exports_without_reloading_pngs(
             assert archive.read("corel_"+fmt+".svg").startswith(b"<svg")
             assert archive.read("ai_poster_"+fmt+".png")==png()
             assert "ai_template_"+fmt+".png" in files
+
+
+def test_uploaded_large_logo_is_downscaled_before_rgba_embedding(monkeypatch):
+    """Avoid expanding a huge uploaded logo to RGBA at its full dimensions."""
+    from app.ai_exact_copy_render import render_exact_svg
+    from app.editable_export import Scene
+
+    source=Image.new("RGB",(3200,2400),"red")
+    raw=io.BytesIO()
+    source.save(raw,format="JPEG",quality=84)
+    source.close()
+    boxed=zones("4x3")
+    boxed["logo"]={"x":45,"y":145,"w":200,"h":54}
+    passed=[]
+    bitmap=Scene.bitmap
+    def inspect(self,group,image,x,y,w,h,name):
+        passed.append((name,image.size))
+        return bitmap(self,group,image,x,y,w,h,name)
+    monkeypatch.setattr(Scene,"bitmap",inspect)
+    artwork=Image.new("RGB",FORMATS["4x3"],"white")
+    try:
+        svg=__import__(
+            "app.ai_exact_copy_render",fromlist=["render_exact_svg"]
+        ).render_exact_svg(
+            brief(),"4x3",artwork,boxed,dict(DEFAULT_STYLE),
+            logo=raw.getvalue())
+    finally:
+        artwork.close()
+    assert b"exact-uploaded-logo" in svg
+    assert len(passed)==1
+    name,(w,h)=passed[0]
+    assert name=="exact-uploaded-logo"
+    assert w<=900 and h<=175,(
+        "Full-size logo was converted before downsampling: "+str((w,h)))
