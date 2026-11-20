@@ -151,6 +151,36 @@ def main():
         page.set_viewport_size({"width":390,"height":820})
         assert page.evaluate("document.documentElement.scrollWidth<=window.innerWidth+2")
         assert not errors,errors
+
+        # The normal hybrid requires a conscious confirmation before ANY
+        # free analysis, planning or chargeable image calls. Dismissal must
+        # leave the page ready and perform no /api/generate request.
+        paid=browser.new_page(viewport={"width":1100,"height":770})
+        paid_errors=[]
+        paid.on("pageerror",lambda error: paid_errors.append(str(error)))
+        paid.route("**/api/config",lambda route:route.fulfill(
+            status=200,content_type="application/json",
+            body=json.dumps({"openai_ready":True,"auth_enabled":False})))
+        request_count=[]
+        paid.on("request",lambda request: request_count.append(request.url)
+                if "/api/generate" in request.url else None)
+        paid.goto(BASE,wait_until="domcontentloaded")
+        paid.wait_for_function("document.querySelector('#mode-hybrid').checked")
+        paid.locator("#model").fill("TEST CONFIRMATION 500")
+        paid.locator("#hero").set_input_files({
+            "name":"vehicle.png","mimeType":"image/png","buffer":photo.getvalue()})
+        dialogs=[]
+        def decline_charge(dialog):
+            dialogs.append(dialog.message)
+            dialog.dismiss()
+        paid.once("dialog",decline_charge)
+        paid.locator("#generate-btn").click()
+        assert dialogs and "3 платных запроса" in dialogs[0]
+        assert not request_count,request_count
+        assert paid.locator("#loading").is_hidden()
+        assert paid.locator("#generate-btn").is_enabled()
+        assert not paid_errors,paid_errors
+        paid.close()
         browser.close()
     print("AI concepts browser: optional reference, A/B/C, stale invalidation and fallback — PASS")
 
