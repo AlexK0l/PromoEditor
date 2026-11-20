@@ -62,6 +62,7 @@ def main():
         assert page.locator("#use-openai").is_disabled()
         assert page.locator("#openai-posters-workflow").is_hidden()
         # The previous AI-concept and raster-experiment workflow is still available.
+        page.locator("#pro-workspace > summary").click()
         page.locator("#expert-modes > summary").click()
         page.locator("#mode-ai-pro").check()
         assert page.locator("#mode-ai-pro").is_checked()
@@ -118,11 +119,68 @@ def main():
         assert page.locator("#generate-btn").is_disabled()
         assert page.locator(".ai-concept-card").count()==0
         page.locator("#mode-template").check()
+        assert not page.locator("#quick-ai-toggle").is_checked()
+        assert not page.locator("#use-openai").is_checked()
+        page.locator("#quick-ai-toggle").check()
+        assert page.locator("#mode-hybrid").is_checked()
+        assert page.locator("#use-openai").is_checked()
+        page.locator("#quick-ai-toggle").uncheck()
+        assert page.locator("#mode-template").is_checked()
+        assert not page.locator("#use-openai").is_checked()
         assert page.locator("#ai-concepts-workflow").is_hidden()
         assert not page.locator("#generate-btn").is_disabled()
+        # A paid background in the legacy template must never look "free"
+        # in the new primary switch.
+        page.locator("#design-options > summary").click()
+        page.locator("#use-openai").check()
+        assert page.locator("#quick-ai-toggle").is_checked()
+        assert "2 платных запроса" in page.locator("#quick-ai-description").inner_text()
+        page.locator("#use-openai").uncheck()
+        assert not page.locator("#quick-ai-toggle").is_checked()
+
+        # Old Br ROI figures are not silently reused for a new project.
+        page.locator("#advanced-settings > summary").click()
+        page.locator("#data-roi > summary").click()
+        assert page.locator("#rate").input_value() == ""
+        assert page.locator("#baseline-price").input_value() == ""
+        page.locator("#show-roi").check()
+        page.locator("#generate-btn").click()
+        assert "Экономика включена" in page.locator("#error-box").inner_text()
+        assert page.locator("#download-panel").is_hidden()
+        page.locator("#show-roi").uncheck()
         page.set_viewport_size({"width":390,"height":820})
         assert page.evaluate("document.documentElement.scrollWidth<=window.innerWidth+2")
         assert not errors,errors
+
+        # The normal hybrid requires a conscious confirmation before ANY
+        # free analysis, planning or chargeable image calls. Dismissal must
+        # leave the page ready and perform no /api/generate request.
+        paid=browser.new_page(viewport={"width":1100,"height":770})
+        paid_errors=[]
+        paid.on("pageerror",lambda error: paid_errors.append(str(error)))
+        paid.route("**/api/config",lambda route:route.fulfill(
+            status=200,content_type="application/json",
+            body=json.dumps({"openai_ready":True,"auth_enabled":False})))
+        request_count=[]
+        paid.on("request",lambda request: request_count.append(request.url)
+                if "/api/generate" in request.url else None)
+        paid.goto(BASE,wait_until="domcontentloaded")
+        paid.wait_for_function("document.querySelector('#mode-hybrid').checked")
+        paid.locator("#model").fill("TEST CONFIRMATION 500")
+        paid.locator("#hero").set_input_files({
+            "name":"vehicle.png","mimeType":"image/png","buffer":photo.getvalue()})
+        dialogs=[]
+        def decline_charge(dialog):
+            dialogs.append(dialog.message)
+            dialog.dismiss()
+        paid.once("dialog",decline_charge)
+        paid.locator("#generate-btn").click()
+        assert dialogs and "3 платных запрос" in dialogs[0]
+        assert not request_count,request_count
+        assert paid.locator("#loading").is_hidden()
+        assert paid.locator("#generate-btn").is_enabled()
+        assert not paid_errors,paid_errors
+        paid.close()
         browser.close()
     print("AI concepts browser: optional reference, A/B/C, stale invalidation and fallback — PASS")
 

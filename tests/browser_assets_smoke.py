@@ -28,11 +28,12 @@ def main():
         assert page.locator('#mode-hybrid').is_disabled()
         assert page.locator('#reference_example').count()==1
         assert page.locator('#file-reference_example').is_hidden()
+        page.locator('#pro-workspace > summary').click()
         page.locator('#optional-materials > summary').click()
         assert page.locator('#file-reference_example').is_visible()
         # CI deliberately has no API key: the explicit low-cost fallback
         # must still support the complete existing browser workflow.
-        page.locator('#mode-template').check()
+        assert page.locator('#quick-ai-toggle').is_disabled()
         assert page.locator('#ai-concepts-workflow').is_hidden()
         assert page.locator('.media-column label[for="drawing"]').count()==1
         assert page.locator('#advanced-settings label[for="drawing"]').count()==0
@@ -57,10 +58,10 @@ def main():
         assert 'Пример заполнен' in page.locator('#modebanner').inner_text()
         page.locator('#reset-btn').click()
         assert page.locator('#model').input_value()==''
-        assert page.locator('#reset-btn').inner_text()=='Заполнить пример'
+        assert page.locator('#reset-btn').inner_text()=='Старый тестовый пример (не для публикации)'
         assert not errors,errors
         # Reset stays in safe free mode without API credentials.
-        page.locator('#mode-template').check()
+        assert page.locator('#quick-ai-toggle').is_disabled()
         page.locator('#model').fill('Промышленный подъёмник A1')
         upload(page,'hero','small.png',png('yellow',(360,240),15),'image/png')
         upload(page,'hero','large.png',png('red',(1320,840),10),'image/png')
@@ -148,6 +149,7 @@ def main():
         sheet.save(buf,format='JPEG',quality=92)
         upload(other,'hero','technical-sheet.jpg',buf.getvalue(),'image/jpeg')
         upload(other,'hero','product.png',png('yellow',(950,560),16),'image/png')
+        other.locator('#pro-workspace > summary').click()
         other.locator('#asset-files-details > summary').click()
         other.locator('#asset-review-details > summary').click()
         other.locator('#analyze-assets-btn').click()
@@ -179,10 +181,32 @@ def main():
         quick.wait_for_function('!document.getElementById("download-panel").hidden',timeout=60000)
         assert quick.evaluate('window.PromoAssets.isReady()')
         assert quick.locator('#asset-selection').count()==1
+        assert quick.locator('#generated-previews').is_visible()
+        assert quick.locator('#generated-preview-4x3').get_attribute('src').endswith('poster_4x3.png')
+        assert quick.locator('#generated-preview-9x16').get_attribute('src').endswith('poster_9x16.png')
         assert quick.locator('#individual-downloads').evaluate('(el)=>!el.open')
         assert quick.locator('#download-all').is_enabled()
         assert not errors,errors
         quick.close()
+
+        # Applying the approved ZubrTrail brief AFTER uploading source photos
+        # must not erase the user's artwork or make them re-upload it.
+        preset=browser.new_page(viewport={'width':1024,'height':780})
+        preset.goto(BASE,wait_until='domcontentloaded')
+        upload(preset,'hero','owned-product.png',png('yellow',(780,430),13),'image/png')
+        upload(preset,'logo','owned-logo.png',png('black',(280,160),9),'image/png')
+        preset.locator('#approved-preset-btn').click()
+        preset.wait_for_function(
+            'document.getElementById("model").value==="ZubrTrail 500"')
+        assert preset.locator('#hero').evaluate('(el)=>el.files.length')==1
+        assert preset.locator('#hero').evaluate('(el)=>el.files[0].name')=='owned-product.png'
+        assert preset.locator('#logo').evaluate('(el)=>el.files[0].name')=='owned-logo.png'
+        assert preset.locator('#price').input_value()=='6527000'
+        assert preset.locator('#phones').input_value().startswith('+7 (951)')
+        assert preset.evaluate('window.PromoAssets.hasFiles()')
+        assert not preset.evaluate('window.PromoAssets.isReady()')
+        assert not errors,errors
+        preset.close()
         browser.close()
     print('Browser multi-asset review: add, analyze, override, prompt, ZIP, remove, mobile — PASS')
 

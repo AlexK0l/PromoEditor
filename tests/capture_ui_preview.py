@@ -54,6 +54,7 @@ def main():
             "() => document.querySelector('#model').value === 'ZubrTrail 500'"
         )
         assert "6 527 000" in page.locator("#brief-data-hint").inner_text()
+        page.locator("#pro-workspace > summary").click()
         page.locator("#advanced-settings > summary").click()
         page.locator("#data-contacts > summary").click()
         page.locator("#data-facts > summary").click()
@@ -98,7 +99,7 @@ def main():
         assert ai_page.locator("#mode-hybrid").is_checked()
         assert ai_page.locator("#mode-hybrid").is_enabled()
         ai_page.locator("section.composer").screenshot(
-            path=OUTPUT / "05-ai-hybrid-choice-demo.png",
+            path=OUTPUT / "05-ai-art-director-choice-demo.png",
             animations="disabled",
         )
 
@@ -106,12 +107,12 @@ def main():
         browser.close()
 
     (OUTPUT / "README.txt").write_text(
-        "PromoEditor - интерфейс PR #56 (предварительный просмотр)\n"
+        "PromoEditor - интерфейс PR #58 (предварительный просмотр)\n"
         "01 - полная стартовая страница, desktop\n"
         "02 - основная форма, desktop\n"
         "03 - подтверждённые характеристики ZubrTrail 500\n"
         "04 - мобильный вид 390px\n"
-        "05 - включённый вариант AI-фона: ТОЛЬКО визуальная имитация ключа, "
+        "05 - включённый AI-арт-директор: ТОЛЬКО визуальная имитация ключа, "
         "без API-генерации и платежей\n"
         "Снимки автоматически получены настоящим Chromium из ветки PR.\n"
         "Это не публичный работающий сервер и не гарантия платного AI-рендера.\n",

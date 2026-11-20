@@ -55,6 +55,7 @@ def main():
         page.emulate_media(reduced_motion="no-preference")
         assert page.locator("#edit-body").is_hidden()
         assert page.locator("#edit-workspace").is_hidden()
+        page.locator("#editing-suite > summary").click()
         page.locator("#edit-toggle").click()
         assert page.locator("#edit-body").is_visible()
         page.locator("#edit-open-file").set_input_files(
@@ -90,6 +91,7 @@ def main():
         assert data["type"]=="PromoEditor-editable-v1"
         assert len(data["layers"])>=2
         page.reload(wait_until="domcontentloaded")
+        page.locator("#editing-suite > summary").click()
         page.locator("#edit-toggle").click()
         page.locator("#edit-project-file").set_input_files(
             {"name":"saved.promo.json","mimeType":"application/json","buffer":project_file.read_bytes()})

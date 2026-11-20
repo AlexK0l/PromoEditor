@@ -74,11 +74,12 @@ def _contrast_text(hex_color):
     return "#172235" if light>.183 else "#FFFFFF"
 
 
-def _header(scene, brief, logo, rect, colors, system='sales'):
+def _header(scene, brief, logo, rect, colors, system='sales', cinematic=False):
     x,y,w,h=rect
     accent, ink=colors["accent"], colors["foreground"]
-    paper="#1A3044" if system=="engineering" else (
-        "#FCFBF8" if system=="editorial" else "#F9FAFC")
+    paper=("#171D28" if cinematic else
+           "#1A3044" if system=="engineering" else
+           "#FCFBF8" if system=="editorial" else "#F9FAFC")
     _panel(scene,"heading",x,y,w,h,"header",paper,0)
     if system=="engineering":
         scene.rect("heading",x,y,w,5,accent,ident="ai-header-line")
@@ -95,6 +96,17 @@ def _header(scene, brief, logo, rect, colors, system='sales'):
         scene.rect("heading",x,y,w,max(9,h*.09),accent,
                    ident="ai-header-line")
         model_color=accent
+        if cinematic:
+            # Cinematic industrial branding; these SVG shapes are editable.
+            scene.polygon("heading",[
+                (x+w*.79,y),(x+w*.90,y),
+                (x+w*.81,y+h),(x+w*.70,y+h)
+            ],accent,ident="hybrid-header-slash",opacity=".25")
+            scene.polygon("heading",[
+                (x+w*.92,y),(x+w,y),(x+w*.91,y+h),(x+w*.83,y+h)
+            ],accent,ident="hybrid-header-edge",opacity=".43")
+            model_color="#FFFFFF"
+            ink="#FFFFFF"
     logo_w=min(w*.19, max(100,h*1.2))
     if logo is not None:
         scene.bitmap("logo",logo,x+11,y+16,logo_w-19,h-29,"original-logo")
@@ -358,16 +370,27 @@ def _dimensions(scene, brief, drawing, rect, colors, system="sales"):
     panel_detail(scene,"dimensions",rect,system,a)
 
 
-def _benefits(scene, brief, rect, colors, system="sales"):
-    claims=[str(t).strip() for t in
-            ((brief.get("benefits") or []) or (brief.get("hero_claims") or []))
-            if str(t).strip()][:4]
+def _benefits(scene, brief, rect, colors, system="sales", cinematic=False):
+    # Give the genuine source product the entire hero area in cinematic
+    # mode. Concise user-approved claims appear once, in the benefits panel.
+    preferred=((brief.get("hero_claims") or []) if cinematic else
+               ((brief.get("benefits") or []) or (brief.get("hero_claims") or [])))
+    claims=[str(t).strip() for t in preferred if str(t).strip()][:4]
     proofs=[str(t).strip() for t in (brief.get("proof_points") or [])
             if str(t).strip()][:3]
     if not claims and not proofs:return
     x,y,w,h=rect
-    a,ink=colors["accent"],colors["foreground"]
-    _panel(scene,"benefits",x,y,w,h,"benefits")
+    a,ink=colors["accent"],("#FFFFFF" if cinematic else colors["foreground"])
+    _panel(scene,"benefits",x,y,w,h,"benefits",
+           "#1B2430" if cinematic else "#FFFFFF")
+    if cinematic:
+        # A full-width black/red B2B benefits rail, not small white
+        # instruction cards. Red ornaments are separate SVG vectors.
+        scene.rect("benefits",x,y,5,h,a,ident="hybrid-benefits-rail")
+        scene.polygon("benefits",[
+            (x+w*.91,y),(x+w*.99,y),(x+w*.94,y+h),
+            (x+w*.86,y+h)
+        ],a,ident="hybrid-benefits-slash",opacity=".16")
     band=min(37,h*.21)
     _section_banner(scene,"benefits","ПРЕИМУЩЕСТВА",
                     (x,y,w,band),colors,system,
@@ -400,25 +423,29 @@ def _benefits(scene, brief, rect, colors, system="sales"):
                        f"ai-benefit-text-{i}",3)
     if proofs:
         message="  •  ".join(proofs)
-        value_ink=a if _contrast_ratio(a,"#FFFFFF")>=4.5 else ink
+        value_ink=(ink if cinematic else
+                   a if _contrast_ratio(a,"#FFFFFF")>=4.5 else ink)
         scene.text("benefits",message,x+14,y+h-proof_h-3,w-28,max(17,proof_h),
                    17,10,value_ink,True,"ai-verified-proof",2)
     panel_detail(scene,"benefits",rect,system,a)
 
 
-def _economy(scene, brief, rect, colors, system="sales"):
+def _economy(scene, brief, rect, colors, system="sales", cinematic=False):
     if not brief.get("show_roi"):return
     data=compute_roi(brief)
     if not data:return
     x,y,w,h=rect
     a,ink=colors["accent"],colors["foreground"]
-    background=("#1A3248" if system=="engineering" else
+    background=("#1B2430" if cinematic else
+                "#1A3248" if system=="engineering" else
                 "#F8F7F3" if system=="editorial" else "#FFF3F4")
-    text_ink="#FFFFFF" if system=="engineering" else ink
-    value_ink=("#FFFFFF" if system=="engineering" else
+    text_ink="#FFFFFF" if (cinematic or system=="engineering") else ink
+    value_ink=("#FFFFFF" if (cinematic or system=="engineering") else
                a if system!="editorial" and
                _contrast_ratio(a,background)>=4.5 else ink)
     _panel(scene,"roi",x,y,w,h,"roi",background)
+    if cinematic:
+        scene.rect("roi",x,y,6,h,a,ident="hybrid-economy-red-rail")
     if system=="engineering":
         scene.rect("roi",x,y,5,h,a,ident="ai-engineering-roi-spine")
     band=min(32,h*.23)
@@ -437,7 +464,7 @@ def _economy(scene, brief, rect, colors, system="sales"):
         col,row=i%columns,i//columns
         bx=x+6+col*cw
         by=y+band+5+row*ch
-        separator="#597084" if system=="engineering" else "#DAD8D4"
+        separator="#556270" if cinematic else "#597084" if system=="engineering" else "#DAD8D4"
         if col:
             scene.rect("roi",bx,by+3,1.5,ch-6,separator,
                        ident=f"ai-roi-divider-{i}")
@@ -536,17 +563,23 @@ def render_ai_concept_svg(brief, key, concept, *,
                ident="ai-art-directed-paper")
     layout=concept["layouts"][key]
     system=direction_of(concept)
+    cinematic=concept.get("id")=="hybrid_sales"
     direction_mark(scene,system,colors["accent"])
-    # Geometry and factual content remain validated and separately editable.
-    _header(scene,brief,logo,_rect(layout,"header",scene),colors,system)
+    # Exactly the same approved facts and original product: only the artistic
+    # header changes for the automatic hybrid director.
+    _header(scene,brief,logo,_rect(layout,"header",scene),colors,system,
+            cinematic=cinematic)
     hero_rect=_rect(layout,"hero",scene)
     _hero(scene,hero,detail,backdrop,hero_rect,colors,ai_product,system,
-          _claim_band_height(brief,hero_rect))
-    _hero_claims(scene,brief,_rect(layout,"hero",scene),colors,system)
+          0 if cinematic else _claim_band_height(brief,hero_rect))
+    if not cinematic:
+        _hero_claims(scene,brief,_rect(layout,"hero",scene),colors,system)
     _specs(scene,brief,_rect(layout,"specs",scene),colors,system)
     _dimensions(scene,brief,drawing,_rect(layout,"dimensions",scene),
                 colors,system)
-    _benefits(scene,brief,_rect(layout,"benefits",scene),colors,system)
-    _economy(scene,brief,_rect(layout,"roi",scene),colors,system)
+    _benefits(scene,brief,_rect(layout,"benefits",scene),colors,system,
+              cinematic=cinematic)
+    _economy(scene,brief,_rect(layout,"roi",scene),colors,system,
+             cinematic=cinematic)
     _footer(scene,brief,_rect(layout,"footer",scene),colors,system)
     return scene.export()

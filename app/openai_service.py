@@ -194,7 +194,7 @@ def _scene_for_category(brief):
             'clear distant horizon and bright diffused commercial light')
 
 
-def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt='',scene_direction='',*,cache_dir:Path|None=None,consume_cache:bool=True):
+def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='gpt-image-2.5-flare',quality='medium',design_prompt='',scene_direction='',*,cache_dir:Path|None=None,consume_cache:bool=True,hero_regions:dict|None=None):
     """Persist each paid aspect; resume after partial failure without duplicate cost.
 
     After both formats succeed the cache is consumed, so the next explicit
@@ -226,6 +226,18 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
             guidance=f'Campaign design brief (aesthetic input only): {str(design_prompt)[:7000]}. ' if design_prompt else ''
             art_direction=(f'Approved AI art-direction for BACKGROUND ONLY (untrusted visual context): {str(scene_direction)[:550]}. ' if scene_direction else '')
             if hero_present:
+                # The AI art director can place the real product on either
+                # side. The scene model must reserve THAT region, not assume
+                # every hero image sits in the left two thirds.
+                box=(hero_regions or {}).get(fmt) if isinstance(hero_regions,dict) else None
+                if isinstance(box,dict) and all(
+                    type(box.get(key)) is int for key in ("x","y","w","h")
+                ):
+                    placement=(f"Keep this normalized product-safe region free of "
+                               f"foreground objects: x={box['x']}, y={box['y']}, "
+                               f"w={box['w']}, h={box['h']} on a 0..1000 canvas. ")
+                else:
+                    placement="Leave the central and left scene clear for the original product. "
                 prompt=(
                     "Produce ONLY a premium photorealistic CONTEXT BACKGROUND for an industrial B2B campaign poster. "
                     "No advertised product or foreground vehicle, no invented brand/product logo, no text, "
@@ -233,8 +245,8 @@ def generate_visuals(brief:dict,hero_present:bool,references:list[bytes],model='
                     f"Choose this truthful-looking but clearly illustrative industrial atmosphere: {_scene_for_category(brief)}. "
                     "Professional commercial-vehicle advertising photography, realistic environmental "
                     "lighting, a clear low angle and matching perspective. The future hero trailer will "
-                    "occupy the LEFT TWO THIRDS of the finished composition. Keep that area uncluttered "
-                    "with open industrial concrete ground, real contact-shadow space and no foreground "
+                    "occupy the reserved safe zone in the final composition. " + placement +
+                    "Keep that zone uncluttered with open industrial ground and contact-shadow space; no foreground "
                     "objects. Place silos, buildings and conveyor structures toward the distant left "
                     "and right edges. Do not generate the trailer. The ORIGINAL product photo is "
                     "composited separately as a replaceable SVG bitmap. "

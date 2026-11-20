@@ -349,6 +349,7 @@
   });
   $('asset-manual').addEventListener('click',()=>{
     // The simplified UI keeps detailed file-role controls collapsed.
+    $('pro-workspace').open=true;
     $('asset-files-details').open=true;
     $('asset-files-list').scrollIntoView({behavior:'smooth',block:'center'});
     const first=$('asset-files-list').querySelector('select');
@@ -358,6 +359,7 @@
   renderFiles();
   window.PromoAssets={
     append,analyze,reset,setAiReady,extractedSpecs,extraFacts,rows,
+    invalidateSelection:()=>markStale('Данные товара обновлены. Фотографии сохранены; программа перепроверит их при создании.'),
     hasFiles:()=>fileCount()>0,isReady:()=>!dirty&&!!report,
     getReport:()=>!dirty?report:null,getPreviousReport:()=>report,
     totalCount:fileCount,

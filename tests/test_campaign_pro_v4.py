@@ -277,3 +277,18 @@ def test_dimension_labels_do_not_overlap_values():
             rendered_label,label_right,rendered_value,value_start)
         assert value_right < 934, (rendered_value,value_right)
         assert "…" not in rendered_label+rendered_value
+
+
+
+def test_approved_rear_height_label_is_complete_in_landscape():
+    """The real four-row ZubrTrail layout must not show 'ВЫСОТА...'."""
+    from app.approved_presets import approved_zubrtrail_500
+    brief = approved_zubrtrail_500()
+    root = ET.fromstring(create_editable_svg(
+        brief, "4x3", drawing=_two_projection_sheet()))
+    labels = named(root, "pro-dimension-name-", "text")
+    assert len(labels) == 4
+    captions = ["".join(n.itertext()) for n in labels]
+    assert "ВЫСОТА ЗАДНЕЙ ЧАСТИ" in captions
+    assert not any("…" in caption for caption in captions)
+    assert all(len(list(node)) <= 2 for node in labels)

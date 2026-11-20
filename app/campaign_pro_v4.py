@@ -238,19 +238,27 @@ def _drawing_dimensions_four(scene,brief,detail,drawing,x,y,w,h,accent):
                        ident=f"pro-dimension-cell-{i}")
             scene.rect("dimensions",column_x,cy,3,rh,accent,
                        ident=f"pro6-size-mark-{i}")
-            # Titles and numbers occupy distinct measured areas; the
-            # previous 19px label could collide with an adjacent 30px value.
-            divider_x=column_x+column_w*.45
-            _rule(scene,"dimensions",divider_x,cy+7,
-                  divider_x,cy+rh-7,"#E4CCD0",1,
-                  f"pro6-dimension-separator-{i}")
-            v3._type(scene,"dimensions",str(label).upper(),
-                     column_x+9,cy+5,divider_x-column_x-17,rh-9,
-                     16,11,INK,True,f"pro-dimension-name-{i}",1)
-            v3._type(scene,"dimensions",str(value),
-                     divider_x+8,cy+3,
-                     column_x+column_w-divider_x-14,rh-6,
-                     29,12,accent,True,f"pro-dimension-value-{i}",1)
+            # Compact 4:3 cells have only ~35px height. Longer approved
+            # labels must use a two-tier row, not silently drop words.
+            if len(str(label))>13:
+                v3._type(scene,"dimensions",str(label).upper(),
+                         column_x+9,cy+1,column_w-18,rh*.41,
+                         13,10,INK,True,f"pro-dimension-name-{i}",1)
+                v3._type(scene,"dimensions",str(value),
+                         column_x+9,cy+rh*.43,column_w-18,rh*.53,
+                         23,14,accent,True,f"pro-dimension-value-{i}",1)
+            else:
+                divider_x=column_x+column_w*.45
+                _rule(scene,"dimensions",divider_x,cy+7,
+                      divider_x,cy+rh-7,"#E4CCD0",1,
+                      f"pro6-dimension-separator-{i}")
+                v3._type(scene,"dimensions",str(label).upper(),
+                         column_x+9,cy+5,divider_x-column_x-17,rh-9,
+                         16,11,INK,True,f"pro-dimension-name-{i}",1)
+                v3._type(scene,"dimensions",str(value),
+                         divider_x+8,cy+3,
+                         column_x+column_w-divider_x-14,rh-6,
+                         29,12,accent,True,f"pro-dimension-value-{i}",1)
             _rule(scene,"dimensions",column_x+8,cy+rh-3,
                   column_x+column_w-10,cy+rh-3,
                   "#E2C1C5",1,f"pro-dimension-measure-{i}")

@@ -41,9 +41,22 @@
       show_roi:checked('show-roi'),roi:{extra_payload:get('extra-payload'),distance:get('distance'),rate:get('rate'),trips:get('trips'),years:get('years'),baseline_price:get('baseline-price')}
     };
   }
+  const roiRequired=['price','extra-payload','distance','rate','trips','years','baseline-price'];
+  function missingRoiInputs(){
+    return roiRequired.some(id=>{
+      const value=get(id).trim();
+      if(!value)return true;
+      const amount=Number(value.replace(/\s/g,'').replace(',','.'));
+      return !Number.isFinite(amount)||amount<=0;
+    });
+  }
   function updateRoi(){
     $('roi-fields').hidden=!checked('show-roi');
     if(!checked('show-roi'))return;
+    if(missingRoiInputs()){
+      $('roi-preview').textContent='Для публикации расчёта заполните цену, цену аналога, массу, маршрут, ставку, число рейсов и срок. Неподтверждённые цифры не показываем.';
+      return;
+    }
     const value=number('extra-payload')*number('distance')*number('rate')*number('trips');
     const years=number('years');
     const delta=number('price')-number('baseline-price');
@@ -133,13 +146,27 @@
     if(hybrid)$('use-openai').checked=true;
     $('use-openai').disabled=hybrid || !apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
+    const simple=$('quick-ai-toggle');
+    const paidInTemplate=!hybrid&&!ai&&checked('use-openai');
+    simple.checked=hybrid||paidInTemplate;
+    simple.disabled=!apiReady||ai;
+    simple.closest('.one-ai-choice').classList.toggle('is-disabled',!apiReady||ai);
+    $('quick-ai-description').textContent=apiReady
+      ?(ai
+        ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
+        :hybrid
+          ?'AI создаёт композицию и два художественных фона. 3 платных запроса; фото и цифры сохраняются.'
+          :paidInTemplate
+            ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
+            :'Без AI: бесплатная сборка по локальному шаблону.')
+      :'OpenAI не подключён. Бесплатный макет можно создать без AI.';
     $('ai-creative-settings').hidden=!ai;
     $('ai-concepts-workflow').hidden=!ai;
     $('openai-posters-workflow').hidden=!ai;
     $('prompt-workflow').hidden=ai;
     $('expert-prompt').hidden=ai;
     $('generate-btn').textContent=ai
-      ?'Собрать выбранную AI-концепцию →':'Создать два макета →';
+      ?'Собрать выбранную AI-концепцию →':'Создать промо →';
     $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
     $('generate-concepts-btn').disabled=isBusy||!apiReady;
     $('generate-ai-posters-btn').disabled=isBusy||!apiReady;
@@ -149,8 +176,8 @@
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
-        setStatus(apiReady?'С AI-фоном · 2 платных запроса':'AI недоступен',
-          apiReady?'Фото, логотип, чертёж и точные надписи не перерисовываются.':
+        setStatus(apiReady?'AI-дизайн · 3 платных запроса':'AI недоступен',
+          apiReady?'1 план композиции + 2 фона. Оригинальные фото, логотип и цифры не перерисовываются.':
             'Выберите бесплатный шаблон.');
       }else{
         setStatus(checked('use-openai')?'Шаблон с AI-фоном':'Без AI · бесплатно',
@@ -383,6 +410,13 @@
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
     }
     const invalid=validateFiles();if(invalid){showError(invalid);return;}
+    if(checked('show-roi')&&missingRoiInputs()){
+      $('pro-workspace').open=true;
+      $('advanced-settings').open=true;
+      $('data-roi').open=true;
+      showError('Экономика включена, но не заполнены все исходные параметры. Введите подтверждённые числа или отключите экономический расчёт.','price');
+      return;
+    }
     if(isHybrid()&&!apiReady){showError('Для гибридного режима требуется OpenAI API. Выберите бесплатный шаблон.');return;}
     if(isHybrid()&&!window.PromoAssets?.hasFiles()&&!$('hero').files.length&&!$('detail').files.length){
       showError('Для гибридного режима загрузите исходное фото товара.');return;
@@ -394,8 +428,36 @@
     if(!checked('use-openai')&&!isHybrid()&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
       showError('Сначала добавьте фото товара или нажмите «Заполнить пример» для пробного комплекта.');return;
     }
+    const paidRendering=isHybrid()||checked('use-openai');
+    if(isHybrid()&&!window.confirm(
+      'Для создания этой рекламы OpenAI выполнит до 3 платных запросов: 1 план композиции + 2 фона. Продолжить?'
+    ))return;
     invalidateResult();busy(true);
     setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
+    const loadingMessage=$('loading').querySelector('small');
+    loadingMessage.textContent=paidRendering
+      ?'OpenAI создаёт композицию и два фона. Затем соберём точные SVG, PNG и JPEG.'
+      :'Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
+    const elapsed=$('generate-elapsed');
+    const started=Date.now();
+    const updateElapsed=()=>{
+      const seconds=Math.floor((Date.now()-started)/1000);
+      elapsed.textContent='Прошло: '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
+    };
+    elapsed.hidden=false;
+    updateElapsed();
+    const elapsedClock=window.setInterval(updateElapsed,1000);
+    const slowWarning=window.setTimeout(()=>{
+      // A stalled HTTP request may still be rendering on the server. Avoid
+      // pretending it was cancelled or encouraging costly duplicate jobs.
+      if(!isBusy)return;
+      loadingMessage.textContent=paidRendering
+        ?'OpenAI всё ещё выполняет запросы. Это может занимать несколько минут. Не запускайте генерацию повторно.'
+        :'Создание макета затянулось. Не нажимайте повторно; проверьте нагрузку тестовой службы на VPS.';
+      if(!paidRendering)
+        setStatus('Бесплатная сборка затянулась',
+          'Возможна нехватка оперативной памяти на VPS. Не запускайте второй раз.','working');
+    },90000);
     try {
       if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
         // The basic workflow runs FREE asset analysis automatically.
@@ -408,7 +470,9 @@
       const selected=window.PromoAssets?.getReport?.();
       if(isHybrid()&&window.PromoAssets?.hasFiles()&&!selected?.selected_assets?.primary_photo)
         throw new Error('Не найдено главное фото товара. Откройте проверку материалов и назначьте главный ракурс.');
-      setStatus('Создаём оба макета','Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
+      setStatus(paidRendering?'Создаём AI-дизайн':'Создаём оба макета',
+        paidRendering?'1 план + 2 фона, затем точные SVG/PNG/JPEG. Это платные вызовы OpenAI.':
+          'Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
       const prompt=(promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim();
       const form=new FormData();form.append('payload',JSON.stringify(formBrief()));
       form.append('prompt',prompt);
@@ -434,6 +498,16 @@
         $('result-warning-items').appendChild(item);
       }
       window.dispatchEvent(new CustomEvent('promoeditor:generated',{detail:latest}));
+      // Show the exact PNGs rasterized from the same editable SVG files.
+      // No separate AI preview call, no extra charge or guessed rendering.
+      for(const fmt of ['4x3','9x16']){
+        const path=latest.images?.[fmt];
+        if(path){
+          $('generated-preview-'+fmt).src=path;
+          $('generated-preview-link-'+fmt).href=path;
+        }
+      }
+      $('generated-previews').hidden=false;
       $('download-panel').hidden=false;
       ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=false);
       setStatus('Готово',(isAiPro()?'Выбранный AI-дизайн':isHybrid()?'Гибридный PRO':'Шаблон')+
@@ -442,11 +516,17 @@
     }catch(error){
       setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
       if(/файл|фото|ракурс|материал/i.test(error.message||'')){
+        $('pro-workspace').open=true;
         $('asset-review-details').open=true;
         $('asset-files-details').open=true;
       }
       showError(error.message||'Не удалось завершить генерацию.');
-    }finally{busy(false);}
+    }finally{
+      window.clearTimeout(slowWarning);
+      window.clearInterval(elapsedClock);
+      elapsed.hidden=true;
+      busy(false);
+    }
   }
   async function inspect(){
     clearError();
@@ -465,7 +545,9 @@
       const pairsFound=ai&&Array.isArray(ai.specs)?ai.specs.map(v=>[v.label,v.value]).filter(p=>p[0]&&p[1]):result.suggested_specs||[];
       $('extract-result').value=asLines(pairsFound);
       $('extract-summary').textContent=`Обработано: ${(result.files||[]).map(v=>v.file).join(', ')}. ${[...(result.warnings||[]),...(ai?.warnings||[])].join(' ')}`;
+      $('pro-workspace').open=true;
       $('advanced-settings').open=true;
+      $('data-facts').open=true;
       $('extract-box').hidden=false;
       $('extract-box').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){showError(error.message||'Ошибка при извлечении данных.');}
@@ -490,14 +572,16 @@
     markPromptStale();
     set('currency','₽');set('style','industrial');set('accent','#e31b26');
     $('vat').checked=true;$('show-roi').checked=false;$('use-openai').checked=false;$('use-demo').checked=false;$('parse-ai').checked=false;
+    for(const id of ['extra-payload','distance','rate','trips','years','baseline-price'])set(id,'');
     for(const id of fileIds)$(id).value='';
     window.PromoAssets?.reset();
     $('extract-box').hidden=true;
     $('advanced-settings').open=false;
     $('color-label').textContent='#E31B26';
     hasDemo=false;
-    $('brief-data-hint').textContent='Характеристики, цена и телефоны — в разделе «Данные для рекламы». По эталону ZubrTrail 500 они заполняются автоматически.';
-    $('reset-btn').textContent='Заполнить пример';
+    $('brief-data-hint').hidden=true;
+    $('brief-data-hint').textContent='Данные для рекламы можно проверить в дополнительных настройках.';
+    $('reset-btn').textContent='Старый тестовый пример (не для публикации)';
     latest=null;$('download-panel').hidden=true;
     ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16','download-svg-4x3','download-svg-9x16'].forEach(id=>$(id).disabled=true);
     clearError();updateRoi();refreshStyle();updateFileLabels();updateAi();
@@ -514,21 +598,24 @@
       if(!brief?.model)throw new Error('Утверждённый эталон недоступен.');
       fillBrief(brief);
       invalidateAiConcepts();
-      for(const id of fileIds)$(id).value='';
-      window.PromoAssets?.reset();
+      // Selecting the approved data must NEVER delete photographs, logo,
+      // drawing or reference files that the customer uploaded first.
+      // Recheck selected roles against the updated approved brief instead.
+      window.PromoAssets?.invalidateSelection();
       $('use-demo').checked=false;
       $('use-openai').checked=apiReady;
       $('mode-hybrid').checked=apiReady;
       $('mode-template').checked=!apiReady;
       $('mode-ai-pro').checked=false;
       $('advanced-settings').open=false;
-      $('brief-data-hint').textContent='Эталон загружен: 10 характеристик, 7 размеров, цена 6 527 000 ₽, телефоны и расчёт выгоды. Для проверки откройте «Данные для рекламы».';
+      $('brief-data-hint').hidden=false;
+      $('brief-data-hint').textContent='Эталон загружен: 10 ТТХ, 7 размеров, 6 527 000 ₽ и телефоны. Остальные поля — в «Дополнительно».';
       hasDemo=false;
       latest=null;$('download-panel').hidden=true;
       markPromptStale();
       updateAi();updateFileLabels();updateRoi();refreshStyle();
       setStatus('Эталон ZubrTrail 500 загружен',
-        'Цена, ТТХ, экономика и телефоны заполнены. Добавьте оригинальные изображения, логотип и чертёж.');
+        'Цена, ТТХ и контакты заполнены; ранее загруженные фото и чертёж сохранены.');
       $('model').scrollIntoView({behavior:'smooth',block:'center'});
     }catch(error){showError(error.message||'Не удалось загрузить утверждённый эталон.');}
     finally{button.disabled=false;}
@@ -560,7 +647,8 @@
       $('mode-ai-pro').checked=false;
       $('use-openai').checked=false;$('use-demo').checked=true;$('parse-ai').checked=false;
       $('advanced-settings').open=false;
-      $('brief-data-hint').textContent='Загружен тестовый пример. Его значения не являются подтверждёнными сведениями о вашем товаре.';
+      $('brief-data-hint').hidden=false;
+      $('brief-data-hint').textContent='ТЕСТОВЫЕ НЕАКТУАЛЬНЫЕ ДАННЫЕ. Не публикуйте без проверки цены и контактов.';
       $('extract-box').hidden=true;
       hasDemo=true;
       latest=null;$('download-panel').hidden=true;
@@ -664,6 +752,7 @@
       }
     }
     set('specs',asLines(combined));
+    $('pro-workspace').open=true;
     $('advanced-settings').open=true;
     $('data-facts').open=true;
     markPromptStale();invalidateResult();
@@ -687,6 +776,7 @@
     if(Array.isArray(facts.dimensions)&&facts.dimensions.length&&!get('dimensions').trim()){
       set('dimensions',asLines(facts.dimensions.map(row=>[row.label,row.value])));count++;
     }
+    $('pro-workspace').open=true;
     $('advanced-settings').open=true;
     $('data-facts').open=true;
     $('data-contacts').open=true;
@@ -712,6 +802,20 @@
     $('promo-prompt-status').textContent='Промпт изменён вручную. Он будет отправлен для AI-сцены и сохранён в ZIP.';
     invalidateResult();
   });
+  $('quick-ai-toggle').addEventListener('change',()=>{
+    if(!apiReady){
+      $('quick-ai-toggle').checked=false;
+      return;
+    }
+    if(checked('quick-ai-toggle')){
+      $('mode-hybrid').checked=true;
+      $('use-openai').checked=true;
+    }else{
+      $('mode-template').checked=true;
+      $('use-openai').checked=false; // free means ZERO paid AI calls.
+    }
+    refreshGenerationMode();invalidateResult();clearError();
+  });
   $('approved-preset-btn').addEventListener('click',loadApprovedPreset);
   $('reset-btn').addEventListener('click',resetDemo);
   $('generate-concepts-btn').addEventListener('click',generateAiConcepts);
@@ -727,7 +831,7 @@
   $('apply-extracted').addEventListener('click',()=>{
     const values=$('extract-result').value.trim();
     if(!values){showError('Нет характеристик для переноса.');return;}
-    set('specs',values);$('advanced-settings').open=true;$('data-facts').open=true;$('extract-box').hidden=true;
+    set('specs',values);$('pro-workspace').open=true;$('advanced-settings').open=true;$('data-facts').open=true;$('extract-box').hidden=true;
     markPromptStale();invalidateResult();setStatus('ТТХ перенесены','Проверьте каждую характеристику до публикации.');
     $('specs').scrollIntoView({behavior:'smooth',block:'center'});
   });

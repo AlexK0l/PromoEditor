@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import secrets
@@ -34,6 +35,7 @@ from .editable_export import build_promo_prompt, create_editable_svg, rasterize_
 from .ai_layout import generate_concepts, STYLES, GOALS
 from .ai_concept_renderer import render_ai_concept_svg
 from .approved_presets import approved_zubrtrail_500
+from .hybrid_art_director import art_directed_layout
 from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
@@ -54,6 +56,7 @@ TTL_SECONDS=int(os.getenv('PROMO_JOB_TTL_SECONDS','7200'))
 LIMIT=int(os.getenv('PROMO_REQUESTS_PER_HOUR','20'))
 RATE=defaultdict(list)
 LOCK=threading.Lock()
+RENDER_LOG=logging.getLogger('uvicorn.error')
 # Bound 6-preview renders inside a worker, especially on the 2-GB VPS.
 CONCEPT_RENDER_SLOTS=threading.BoundedSemaphore(1)
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
@@ -299,27 +302,52 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id;folder.mkdir(mode=0o700)
+    clock=time.monotonic()
+    RENDER_LOG.info("Render started: mode=%s",generation_mode)
     try:
         hero=load_image(hero_raw)
         detail=load_image(detail_raw)
         logo=load_image(logo_raw)
         drawing=load_image(drawing_raw)
         user_backdrop=load_image(background_raw)
+        RENDER_LOG.info("Input images decoded: %.1fs",time.monotonic()-clock)
         if hero is None and use_demo and not use_openai:
             hero=_demo_hero()
+        if generation_mode == 'hybrid':
+            # OpenAI plans the placement and graphic hierarchy for BOTH
+            # formats. Technical facts are never accepted from the model.
+            if not hero_raw or not use_openai:
+                raise ValueError('Для AI-дизайна необходимо фото товара и OpenAI.')
+            if concept is not None:
+                raise ValueError('Гибридный арт-директор не принимает внешний концепт.')
+            concept=art_directed_layout(
+                brief, hero_raw, reference=reference_example_raw)
         visuals={}
         ai_product=False
         paid_cache=None
         scene_direction=concept['scene_prompt'] if concept else ''
+        regions=concept['layouts'] if concept is not None else None
+        if regions and generation_mode=='hybrid':
+            # Distinct visual cache for each AI-selected spatial composition.
+            scene_direction+=(' | product safe zones: '+
+                              json.dumps({k:v['hero'] for k,v in regions.items()},
+                                         sort_keys=True))
         if use_openai:
+            # A style reference can contain a different product. The hybrid
+            # art director may inspect it for graphic style, but the paid
+            # scene generator must NEVER edit that image: generate a clean
+            # independent background to avoid copying/duplicating the vehicle.
+            scene_references=[] if generation_mode=='hybrid' else references
             paid_cache=_default_visual_cache(
-                brief,hero is not None,references,model,quality,
+                brief,hero is not None,scene_references,model,quality,
                 design_prompt,scene_direction)
             visuals=generate_visuals(
-                brief,hero_present=(hero is not None),references=references,
+                brief,hero_present=(hero is not None),references=scene_references,
                 model=model,quality=quality,design_prompt=design_prompt,
                 scene_direction=scene_direction,cache_dir=paid_cache,
-                consume_cache=False)
+                consume_cache=False,hero_regions={
+                    k:v['hero'] for k,v in regions.items()
+                } if regions else None)
             ai_product=hero is None
         paths={};jpeg_paths={};corel_paths={}
         for key in ('4x3','9x16'):
@@ -338,7 +366,9 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                                           ai_product=ai_product)
             # The SVG is the master. PNG and JPEG are rendered from the SAME
             # vector scene, so opening the SVG in CorelDRAW has matching layout.
+            RENDER_LOG.info("SVG %s composed: %.1fs",key,time.monotonic()-clock)
             png,jpeg=rasterize_svg(svg)
+            RENDER_LOG.info("PNG/JPEG %s rasterized: %.1fs",key,time.monotonic()-clock)
             png_name=f'poster_{key}.png'
             jpg_name=f'poster_{key}.jpg'
             svg_name=f'corel_{key}.svg'
@@ -349,16 +379,20 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             jpeg_paths[key]=f'/files/{job_id}/{jpg_name}'
             corel_paths[key]=f'/files/{job_id}/{svg_name}'
         (folder/'promo_prompt.txt').write_text(design_prompt,encoding='utf-8')
+        effective_mode=('hybrid' if generation_mode == 'hybrid'
+                        else 'ai_pro' if concept is not None else generation_mode)
         if concept is not None:
             (folder/'layout_spec.json').write_text(
-                json.dumps({'generation_mode':'ai_pro','concept_set_id':concept_set_id,
+                json.dumps({'generation_mode':effective_mode,
+                            'concept_set_id':concept_set_id,
                             'selected_concept':concept},ensure_ascii=False,indent=2),
                 encoding='utf-8')
         (folder/'asset_selection.json').write_text(json.dumps(asset_report or {},ensure_ascii=False,indent=2),encoding='utf-8')
         briefing=dict(brief)
         briefing['_metadata']={
             'generator':'AI-directed editable SVG' if concept else 'PromoEditor SVG template',
-            'generation_mode':'ai_pro' if concept else generation_mode,
+            'generation_mode':effective_mode,
+            'art_director':'OpenAI Responses: geometry, palette and scene only' if generation_mode=='hybrid' else None,
             'concept_set_id':concept_set_id,
             'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
             'ai_product_visualization':ai_product,
@@ -435,21 +469,25 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             warnings.append('Габариты отсутствуют в форме: векторная схема размеров без данных не создавалась.')
         if not brief.get('price'):
             warnings.append('Цена не указана: вместо числа используется общий призыв запросить предложение.')
-        if len(brief.get('specs') or [])>7:
-            warnings.append('Горизонтальный макет содержит первые 7 подтверждённых ТТХ; весь список сохранён в JSON-брифе.')
+        visible_specs=8 if concept is not None else 7
+        if len(brief.get('specs') or [])>visible_specs:
+            warnings.append(
+                f'В плакате показаны первые {visible_specs} подтверждённых ТТХ из '
+                f'{len(brief.get("specs") or [])}; остальные сохранены в JSON-брифе.')
         if len(brief.get('dimensions') or [])>4:
             warnings.append('В макете используются первые 4 габарита; остальные сохранены в JSON-брифе.')
         if len(brief.get('benefits') or [])>5:
             warnings.append('В рекламной полосе показаны первые 5 преимуществ; остальные сохранены в JSON-брифе.')
         if brief.get('design_actions') and not use_openai:
             warnings.append('Дополнительные действия сохранены в промпте, но без OpenAI не применяются к AI-фону и произвольному изменению дизайна.')
+        RENDER_LOG.info("Both formats and ZIP ready: %.1fs",time.monotonic()-clock)
         return {
             'job_id':job_id,'images':paths,'jpeg':jpeg_paths,'corel':corel_paths,
             'prompt_file':f'/files/{job_id}/promo_prompt.txt',
             'zip':f'/files/{job_id}/promo_kit.zip','brief':f'/files/{job_id}/brief.json',
             'asset_selection':f'/files/{job_id}/asset_selection.json',
             'layout_spec':f'/files/{job_id}/layout_spec.json',
-            'generation_mode':'ai_pro' if concept else generation_mode,
+            'generation_mode':effective_mode,
             'selected_assets':(asset_report or {}).get('selected_assets',{}),
             'ai_used':use_openai,'visualization':ai_product,'warnings':warnings
         }
