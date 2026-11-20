@@ -89,6 +89,10 @@ def test_ai_zones_must_be_valid_and_not_overlap_trailer_or_each_other():
 def _overlapping_category_and_benefits():
     """Real 9:16 regression: both roles active, overlapping on the poster."""
     layouts=_layouts()
+    # The landscape artwork has its own already-valid active text regions.
+    # Repair must leave those untouched when only 9:16 is defective.
+    layouts["4x3"]["category"]={"x":40,"y":145,"w":250,"h":45}
+    layouts["4x3"]["benefits"]={"x":310,"y":145,"w":610,"h":50}
     portrait=layouts["9x16"]
     # Give AI art a generous empty editorial region between the product
     # and price strip. Only CATEGORY overlaps the longer BENEFITS region.
@@ -124,7 +128,7 @@ def test_ai_overlap_between_category_and_benefits_9x16_is_repaired_without_templ
     roles={element.get("data-verified-role"):element.get("data-exact-copy")
            for element in root.iter() if element.get("data-verified-role")}
     assert roles["category"]=="Самосвальный полуприцеп"
-    assert roles["benefits"]=="Надёжный кузов\\nУдобная разгрузка"
+    assert roles["benefits"]=="Надёжный кузов\nУдобная разгрузка"
     assert roles["model"]=="ZubrTrail 500"
 
 
