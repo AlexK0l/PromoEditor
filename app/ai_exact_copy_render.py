@@ -294,11 +294,22 @@ def render_exact_svg(brief: dict, fmt: str, artwork: Image.Image,
     ):
         if raw:
             box = slots[role]
+            target_w = box["w"]*scene.w/1000
+            target_h = box["h"]*scene.h/1000
+            # Only the actual display-size preview belongs in the SVG.
+            # A logo can be a 20 MiB, 100-megapixel source; converting it
+            # to RGBA BEFORE resizing could OOM the 800 MiB worker.
+            # Keep the untouched original bytes separately in the ZIP.
+            embed_w = min(2200,max(64,int(target_w*3)))
+            embed_h = min(2200,max(64,int(target_h*3)))
             with Image.open(io.BytesIO(raw)) as source:
+                source.draft("RGB",(embed_w,embed_h))
+                source.thumbnail(
+                    (embed_w,embed_h),Image.Resampling.LANCZOS)
                 source.load()
-                scene.bitmap(group, source, box["x"]*scene.w/1000,
+                scene.bitmap(group,source,
+                             box["x"]*scene.w/1000,
                              box["y"]*scene.h/1000,
-                             box["w"]*scene.w/1000,
-                             box["h"]*scene.h/1000,
+                             target_w,target_h,
                              "exact-uploaded-"+role)
     return scene.export()
