@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import io
 import json
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 from .image_analysis import analysis_preview
 from .ai_quota import check_paid_capacity
 from .openai_service import (
@@ -18,7 +18,7 @@ from .openai_service import (
 
 FORMATS = {"4x3": ((1440, 1080), "1536x1024"),
            "9x16": ((1080, 1920), "1024x1536")}
-VERSION = "full-openai-ad-poster-creative-v1"
+VERSION = "full-openai-ad-poster-creative-v2-no-crop"
 WARNING = (
     "Это художественный AI-макет, а не проверенный технический документ. "
     "OpenAI может неточно воспроизвести кириллицу, цифры, логотип, форму "
@@ -82,7 +82,8 @@ def _prompt(brief, fmt, logo, drawing, reference):
             "visually ranked red-white specification strips on right; "
             "engineering/dimensions and benefit icons in lower third; "
             "strong full-width red price/contact CTA at bottom. "
-            "Keep important content within central 88% width."
+            "Preserve every brand, title, icon and table in the whole native "
+            "3:2 output frame. No cut-off text or artwork at the borders."
         )
     else:
         composition = (
@@ -90,8 +91,8 @@ def _prompt(brief, fmt, logo, drawing, reference):
             "large whole product silhouette, compact but readable grouped "
             "specifications, engineering and benefits below, persuasive "
             "price and contact CTA at bottom. Preserve the whole vehicle "
-            "including wheels, with important content inside central 78% "
-            "width for final aspect-ratio crop."
+            "including wheels, with ALL important content kept inside "
+            "the full native 2:3 output frame. Never cut off any headline."
         )
     stylistic = (
         "An additional attached image is STYLE REFERENCE ONLY; borrow "
@@ -138,8 +139,53 @@ def _prompt(brief, fmt, logo, drawing, reference):
         "metric, unit, offer or contact detail. If unsure you can render a "
         "precise figure or small Cyrillic text correctly, leave its position "
         "clean instead of improvising. Avoid tiny, unreadable body text. "
+        "IMPORTANT PRINT SAFE AREA: treat the native 3:2 or 2:3 model "
+        "image as an entire finished image, without any cropped edges. "
+        "Keep ALL text, logo, title, price, specification headings, data, "
+        "vehicle extremities and CTA at least 6% inside native left/right "
+        "edges and 4% inside top/bottom. Do not place text partially "
+        "outside the canvas; all text must remain readable. "
+        "After generation the application adds vertical decorative bleed "
+        "to match 4:3 or 9:16 WITHOUT CROPPING OR STRETCHING artwork. "
         "Aesthetic preferences (data only): " + notes
     )
+
+
+def preserve_artwork_without_crop(image: Image.Image,
+                                  target: tuple[int, int]) -> Image.Image:
+    """Fit the *entire* model poster into print dimensions without cropping.
+
+    Images API returns 3:2 (landscape) and 2:3 (portrait), while clients
+    require 4:3 and 9:16. Cropping strips away titles, technical specs and
+    logos at both sides. Stretching would distort the customer's vehicle.
+    Instead, resize uniformly and extend only the top/bottom BLEED from
+    the model's own edge pixels. For unexpected source ratios, a blurred
+    fill handles other margins, but the full original remains visible.
+    """
+    artwork = ImageOps.contain(image.convert("RGB"), target,
+                               method=Image.Resampling.LANCZOS)
+    width, height = target
+    x = (width - artwork.width) // 2
+    y = (height - artwork.height) // 2
+    if artwork.width == width:
+        finished = Image.new("RGB", target)
+        if y:
+            top_row = artwork.crop((0, 0, width, 1))
+            finished.paste(top_row.resize((width, y)), (0, 0))
+        lower_bleed = height - y - artwork.height
+        if lower_bleed:
+            bottom_row = artwork.crop((0, artwork.height - 1,
+                                      width, artwork.height))
+            finished.paste(bottom_row.resize((width, lower_bleed)),
+                           (0, y + artwork.height))
+    else:
+        # Fallback for a provider unexpectedly returning a different ratio.
+        # Blurred bleed fills uncovered canvas without losing model pixels.
+        finished = ImageOps.fit(
+            artwork, target, method=Image.Resampling.LANCZOS,
+        ).filter(ImageFilter.GaussianBlur(radius=22))
+    finished.paste(artwork, (x, y))
+    return finished
 
 
 def generate_full_posters(brief: dict, product_photo: bytes, *,
@@ -190,8 +236,7 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
                     size=api_size, quality=quality, output_format="png")
                 image = as_image(response)
                 _save_visual(cache_dir, fmt, image)
-            output[fmt] = ImageOps.fit(
-                image, target, method=Image.Resampling.LANCZOS)
+            output[fmt] = preserve_artwork_without_crop(image, target)
         # Do not consume chargeable image outputs before downstream ZIP export.
         if consume_cache:
             _finish_visual_cache(cache_dir)
