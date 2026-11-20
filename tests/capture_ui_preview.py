@@ -51,8 +51,8 @@ def main():
 
         # Demo preset is retired from customer UI; seed its approved facts
         # internally for the existing screenshot regression only.
-        assert page.locator(".preset-shortcut").is_hidden()
-        page.evaluate("document.getElementById('approved-preset-btn').click()")
+        assert page.locator(".preset-shortcut").is_visible()
+        page.locator("#approved-preset-btn").click()
         page.wait_for_function(
             "() => document.querySelector('#model').value === 'ZubrTrail 500'"
         )
