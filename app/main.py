@@ -56,7 +56,7 @@ TTL_SECONDS=int(os.getenv('PROMO_JOB_TTL_SECONDS','7200'))
 LIMIT=int(os.getenv('PROMO_REQUESTS_PER_HOUR','20'))
 RATE=defaultdict(list)
 LOCK=threading.Lock()
-RENDER_LOG=logging.getLogger('promoeditor.render')
+RENDER_LOG=logging.getLogger('uvicorn.error')
 # Bound 6-preview renders inside a worker, especially on the 2-GB VPS.
 CONCEPT_RENDER_SLOTS=threading.BoundedSemaphore(1)
 ALLOWED_IMAGES={'.png','.jpg','.jpeg','.webp'}
