@@ -90,6 +90,10 @@ install -o root -g root -m 0600 /dev/null "$ENV_FILE"
 {
   printf 'PROMO_AUTH_ENABLED=0\n'
   printf 'PROMO_DATA_DIR=%s\n' "$JOBS"
+  # Presentation bitmaps are scaled to the 1440/1080px poster before SVG
+  # export; full uploaded originals remain in ZIP. Avoid 3200px RGBA
+  # layers and expensive Cairo image copies on the 1.9GiB shared host.
+  printf 'PROMO_RENDER_MAX_EDGE=1600\n'
   printf 'PYTHONDONTWRITEBYTECODE=1\n'
   printf 'PYTHONUNBUFFERED=1\n'
   if [[ "$MODE" == "paid" ]]; then
