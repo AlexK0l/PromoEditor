@@ -177,7 +177,7 @@
       $(id).closest('label').classList.toggle('is-disabled',!apiReady);
     }
     $('hybrid-mode-hint').textContent=apiReady?
-      'AI выберет ракурс, ребрендирует прицеп, нарисует два рекламных шаблона БЕЗ текста. Программа вставит точные слова/цифры в SVG, а AI выберет финальные стили шрифта. 3 Images + 2 платных текстово-визуальных AI-запроса, при нескольких фото возможен третий для выбора ракурса.':
+      'OpenAI выберет ракурс, нанесёт новый бренд только на выбранный прицеп и самостоятельно нарисует два ПОЛНЫХ рекламных постера, включая весь текст, цену, ТТХ и оформление. 3 платных вызова Images; при нескольких фото возможен ещё 1 платный запрос на выбор ракурса. Результат — PNG/JPEG, не SVG.':
       'Недоступно: на сервере не подключён OpenAI. Выберите бесплатный вариант.';
     refreshGenerationMode();
   }
@@ -193,8 +193,8 @@
   function refreshGenerationMode(){
     const ai=isAiPro();
     const hybrid=isHybrid();
-    // Primary AI path: full art without copy -> verified editable SVG
-    // text layers -> typography-only AI vision finish, no AI copy edits.
+    // Primary AI path uses complete OpenAI Images authored raster posters.
+    // There are NO algorithmic text zones, editable SVG or font-finishing AI calls.
     if(hybrid)$('use-openai').checked=true;
     $('use-openai').disabled=hybrid || !apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
@@ -207,7 +207,7 @@
       ?(ai
         ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
         :hybrid
-          ?'AI создаёт два постера без надписей, алгоритм вставляет ваши точные факты, затем AI гармонизирует шрифты. 3 платных Images + 2 текстово-визуальных AI-запроса, до 1 дополнительного при нескольких фото. PNG/JPEG/SVG.'
+          ?'AI полностью создаёт два рекламных постера 4:3 и 9:16 — фотографию, композицию, надписи, характеристики, цену и контакты. 3 платных вызова Images; при нескольких фото возможен 1 дополнительный AI-запрос для выбора ракурса. PNG/JPEG/ZIP. Текст в растре не редактируется.'
           :paidInTemplate
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
@@ -230,7 +230,7 @@
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
         setStatus(apiReady?'AI-постеры · 3 платных вызова OpenAI Images':'AI недоступен',
-          apiReady?'Цельные AI-дизайны с точными редактируемыми текстами; единый шрифт подбирает AI после вставки.':
+          apiReady?'Два готовых рекламных изображения целиком рисует OpenAI. Никаких дополнительных зон текста и SVG-вставки.':
             'Выберите бесплатный шаблон.');
       }else{
         setStatus(checked('use-openai')?'Шаблон с AI-фоном':'Без AI · бесплатно',
@@ -327,9 +327,9 @@
     }
     invalidateFullAiPosters();busy(true);
     $('openai-posters-status').textContent=
-      'OpenAI создаёт два текстless AI-макета, программа вставляет точные данные и AI подбирает единый стиль шрифтов. 3 Images + 2 платных AI-анализа, возможен дополнительный выбор фото.';
+      'OpenAI целиком рисует два рекламных постера вместе с надписями, ценой и характеристиками. 3 Images; при нескольких фото возможен ещё один AI-запрос для выбора ракурса. Проверяйте текст и логотип.';
     setStatus('Художественная генерация OpenAI',
-      'Готовим AI-оформление, точные SVG-тексты и AI-типографику для 4:3 и 9:16.','working');
+      'Готовим два полностью нарисованных AI-постера 4:3 и 9:16.','working');
     try{
       const form=new FormData();
       form.append('payload',JSON.stringify(formBrief()));
@@ -529,13 +529,13 @@
     }
     const paidRendering=isHybrid()||checked('use-openai');
     if(isHybrid()&&!window.confirm(
-      'OpenAI отредактирует только выбранное фото прицепа и создаст два цельных художественных макета без надписей. Алгоритм вставит ТОЧНЫЙ текст, цену, телефоны и характеристики в SVG. После вставки AI проанализирует оба макета и подберёт единый шрифт, цвета и масштаб, но НЕ изменит слова. Цена: 3 платных вызова Images + 2 платных текстово-визуальных AI-запроса, при нескольких фото возможен ещё 1 платный AI-запрос для выбора ракурса. Тексты SVG редактируются, фото и логотип проверьте. Продолжить?'
+      'OpenAI отредактирует только выбранный прицеп и ПОЛНОСТЬЮ нарисует два рекламных постера 4:3 и 9:16, включая композицию, заголовки, цену, характеристики и контакты. Цена: 3 платных вызова OpenAI Images; при нескольких фото возможен ещё 1 платный AI-запрос для выбора ракурса. Результат — растровые PNG/JPEG и ZIP, редактируемого SVG нет. AI может ошибаться в кириллице, числах и логотипе — перед публикацией всё проверьте. Продолжить?'
     ))return;
     invalidateResult();busy(true);
     setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
     const loadingMessage=$('loading').querySelector('small');
     loadingMessage.textContent=paidRendering
-      ?'AI рисует два рекламных макета без текста, программа вставляет ваши точные данные, а AI подбирает стиль шрифта. Оригиналы и SVG сохранятся в ZIP.'
+      ?'OpenAI целиком создаёт два рекламных изображения с текстом и оформлением. Исходные фото и ребрендированный прицеп сохраняются в ZIP.'
       :'Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
     const elapsed=$('generate-elapsed');
     const started=Date.now();
@@ -570,7 +570,7 @@
       if(isHybrid()&&window.PromoAssets?.hasFiles()&&!selected?.selected_assets?.primary_photo)
         throw new Error('Не найдено главное фото товара. Откройте проверку материалов и назначьте главный ракурс.');
       setStatus(paidRendering?'Создаём AI-постеры':'Создаём оба макета',
-        isHybrid()?'AI-дизайн 4:3 и 9:16, точные редактируемые тексты, AI-подбор единого шрифта.':
+        isHybrid()?'OpenAI рисует оба полных рекламных постера с надписями, ценой и контактами.':
           paidRendering?'Создаём макеты с OpenAI. Это платные вызовы.':
           'Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
       const prompt=isHybrid()?'':
@@ -588,7 +588,7 @@
       }
       form.append('model',get('image-model'));
       form.append('quality',get('image-quality'));
-      // A paid 3-Images + 2-vision workflow must NEVER depend on a single
+      // A paid 3-Images full-poster workflow must NEVER depend on a single
       // long HTTP request. The server accepts one private task immediately,
       // and this page polls its status without repeating any paid API call.
       const endpoint=isHybrid()?'/api/generate/start':'/api/generate';
