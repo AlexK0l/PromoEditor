@@ -80,7 +80,7 @@ FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16
 FILES.update({f'ai_poster_{fmt}.{ext}' for fmt in ('4x3','9x16') for ext in ('png','jpg')})
 FILES.update({'ai_posters.zip','rebranded_product.png',
               'ai_typographic_posters.zip','typography_layout.json',
-              'typography_style.json','verified_copy.json','selected_photo.json'})
+              'typography_style.json','verified_copy.json','poster_copy.json','selected_photo.json'})
 FILES.update({f'ai_template_{fmt}.png' for fmt in ('4x3','9x16')})
 JOB_ID=re.compile(r'^[a-f0-9]{32}$')
 
@@ -776,6 +776,8 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
             ('typography_layout.json',rendered['layout']),
             ('typography_style.json',rendered['typography']),
             ('verified_copy.json',rendered['verified_copy']),
+            ('poster_copy.json',rendered.get('poster_copy')
+                                 or rendered['verified_copy']),
             ('selected_photo.json',metadata),
         ):
             (folder/name).write_text(
@@ -793,7 +795,7 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
             archive.write(folder/'rebranded_product.png',
                           arcname='rebranded_product.png')
             for name in ('typography_layout.json','typography_style.json',
-                         'verified_copy.json','selected_photo.json'):
+                         'verified_copy.json','poster_copy.json','selected_photo.json'):
                 archive.write(folder/name,arcname=name)
             archive.writestr('brief.json',
                 json.dumps(brief,ensure_ascii=False,indent=2))
