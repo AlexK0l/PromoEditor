@@ -5,7 +5,20 @@ set -euo pipefail
 echo "=== PromoEditor service health (READ ONLY) ==="
 systemctl show promoeditor --no-pager \
   -p ActiveState -p SubState -p NRestarts \
+  -p Result -p ExecMainCode -p ExecMainStatus \
   -p MemoryCurrent -p MemoryPeak -p MemoryMax || true
+echo "=== PromoEditor memory cgroup events (OOM evidence, if present) ==="
+cg="$(systemctl show promoeditor --property=ControlGroup --value 2>/dev/null || true)"
+case "$cg" in
+  /system.slice/*|/user.slice/*)
+    if [ -r "/sys/fs/cgroup${cg}/memory.events" ]; then
+      cat "/sys/fs/cgroup${cg}/memory.events"
+    else
+      echo "cgroup memory.events not accessible"
+    fi
+    ;;
+  *) echo "cgroup path not available" ;;
+esac
 echo "=== Global memory ==="
 free -m
 echo "=== Local private-port HTTP status (200/302/401 may all be healthy with auth) ==="
