@@ -31,7 +31,8 @@ def test_file_and_brief_fields_are_preserved():
     script=(ROOT/'app.js').read_text(encoding='utf-8')
     for cid in CONTROLS:
         assert f'id="{cid}"' in html,cid
-    assert "fetch('/api/generate'" in script
+    assert "isHybrid()?'/api/generate/start':'/api/generate'" in script
+    assert "fetch(endpoint,{method:'POST',body:form})" in script
     assert "fetch('/api/inspect'" in script
     assert 'formBrief()' in script
     assert 'validateFiles()' in script
