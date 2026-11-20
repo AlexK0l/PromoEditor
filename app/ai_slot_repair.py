@@ -97,6 +97,9 @@ def _sizes(original: dict):
         (max(35,round(w*.88)), min(960,round(h*1.35))),
         (min(960,round(w*1.18)), min(960,round(h*1.8))),
         (min(960,round(w*1.45)), min(960,round(h*2.4))),
+        (max(w,280),max(h,90)),
+        (max(w,430),max(h,160)),
+        (max(w,590),max(h,220)),
     ]
     seen=set()
     for new_w, new_h in candidates:
