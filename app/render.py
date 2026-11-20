@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
-from .image_analysis import rendering_copy
+from .image_analysis import MAX_RENDER_EDGE, rendering_copy
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 FONT_REG = ['/usr/share/fonts/opentype/inter/Inter-Regular.otf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 'C:/Windows/Fonts/arial.ttf', 'DejaVuSans.ttf']
@@ -147,10 +147,15 @@ def gradient_bg(size,style,accent):
 def load_image(data: Optional[bytes]):
     if not data:return None
     try:
-        # Never decode a 58 MP original into several huge in-memory RGBA
-        # layers. This is only a high-quality layout copy (<=3200 px);
-        # the actual uploaded bytes stay unchanged and go into the ZIP.
-        return rendering_copy(data)
+        # The original upload remains byte-for-byte unchanged in ZIP.
+        # Preview rendering on small shared hosts may use smaller bounded
+        # bitmap layers while retaining the exact vector SVG layout.
+        requested=os.getenv('PROMO_RENDER_MAX_EDGE',str(MAX_RENDER_EDGE))
+        try:
+            edge=max(960,min(MAX_RENDER_EDGE,int(requested)))
+        except ValueError:
+            edge=MAX_RENDER_EDGE
+        return rendering_copy(data,max_edge=edge)
     except Exception:
         return None
 
