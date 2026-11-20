@@ -592,13 +592,16 @@ def _build_concept_previews_sync(brief, report, records, concepts,
 
 
 def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
-                       reference_raw, model, quality, selected_source=None):
+                       reference_raw, model, quality, selected_source=None,
+                       progress=None):
     """Rebrand ONLY the selected photo before authoring both full AI posters.
 
     The original photo is immutable. The one paid rebranding edit is cached
     by original bytes/logo/brand/model. Partial paid outputs survive ZIP
     failures. Other uploaded photos never enter either model call.
     """
+    if progress:
+        progress('Проверяем кэш и лимит платных AI-изображений')
     rebrand_dir = rebrand_cache_dir(brief, product_raw, logo_raw, model, quality)
     rebranded_raw = cached_rebrand_photo(rebrand_dir)
     if rebranded_raw is None:
@@ -614,6 +617,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                     for fmt in ('4x3','9x16'))
         check_paid_capacity('image',missing)
     if rebranded_raw is None:
+        if progress:
+            progress('AI заменяет маркировку только на выбранном полуприцепе')
         rebranded_raw = rebrand_selected_photo(
             brief, product_raw, logo=logo_raw, model=model, quality=quality,
             folder=rebrand_dir)
@@ -624,6 +629,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
     paid_cache=_default_visual_cache(
         brief,True,poster_sources,model,quality,
         AI_POSTER_VERSION,"complete-poster")
+    if progress:
+        progress('AI рисует оба готовых рекламных постера целиком, включая весь текст')
     posters = generate_full_posters(
         brief, rebranded_raw, logo=logo_raw, drawing=drawing_raw,
         reference=reference_raw, model=model, quality=quality,
@@ -634,6 +641,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
     folder=STORAGE/job_id
     folder.mkdir(mode=0o700)
     try:
+        if progress:
+            progress('Сохраняем готовые AI-постеры PNG/JPEG и оригиналы в ZIP')
         (folder/'rebranded_product.png').write_bytes(rebranded_raw)
         images={};jpegs={}
         for fmt in ('4x3','9x16'):
@@ -642,6 +651,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             posters[fmt].save(folder/png,format='PNG')
             posters[fmt].save(folder/jpg,format='JPEG',
                               quality=93,subsampling=0)
+            posters[fmt].close()
             images[fmt]=f'/files/{job_id}/{png}'
             jpegs[fmt]=f'/files/{job_id}/{jpg}'
         archive=folder/'ai_posters.zip'
@@ -1000,7 +1010,7 @@ def _run_generation_task(task_id: str):
         opened.clear()
         ai_job_queue.erase_uploads(folder)
         ai_job_queue.set_status(
-            folder,'complete',stage='Оба макета и редактируемые SVG готовы',
+            folder,'complete',stage='Готовые AI-постеры PNG/JPEG и ZIP созданы',
             result=result)
     except Exception as exc:
         if isinstance(exc,HTTPException):
@@ -1221,10 +1231,10 @@ async def _generate_from_form(form, progress=None):
         except ValueError as exc:raise HTTPException(400,detail=str(exc))
     try:
         if mode=='hybrid':
-            # Main mode is genuine AI-designed textless artwork, not a
-            # procedural template or old full-raster lettering attempt.
-            # Verified facts are drawn as editable SVG AFTER the art and
-            # stylistic finish only chooses typography parameters.
+            # Primary mode is FULL OpenAI-authored finished raster posters.
+            # The model composes all typography, prices, specifications and
+            # artwork in the same paid Images edit, no deterministic
+            # text rectangles, no SVGS, no separate typography vision call.
             selected_id=report['selected_assets']['primary_photo']
             selected_source={
                 'id':selected_id,
@@ -1238,7 +1248,7 @@ async def _generate_from_form(form, progress=None):
             import gc
             gc.collect()
             result=await asyncio.to_thread(
-                _exact_typography_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
+                _full_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
                 reference_example_raw,
                 str(form.get('model','gpt-image-2.5-flare')),
                 str(form.get('quality','medium')),
