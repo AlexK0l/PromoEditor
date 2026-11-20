@@ -2,7 +2,7 @@
 
 Legacy experiments remain in source for compatibility but are NOT visible
 to users. This test verifies the main button accepts the paid confirmation,
-routes to /api/generate and shows only raster output (not a fake SVG).
+starts a private long AI job, polls through one 502, shows real SVG.
 """
 from __future__ import annotations
 
@@ -36,22 +36,40 @@ def main():
             body=json.dumps({"openai_ready": True, "auth_enabled": False}),
         ))
 
-        def primary_reply(route):
+        completed = {
+            "generation_mode": "ai_template_exact_copy",
+            "ai_used": True,
+            "raster_only": False,
+            "images": {"4x3": "/static/demo_4x3.svg",
+                       "9x16": "/static/demo_9x16.svg"},
+            "jpeg": {"4x3": "/static/demo_4x3.svg",
+                     "9x16": "/static/demo_9x16.svg"},
+            "corel": {"4x3":"/static/demo_4x3.svg",
+                      "9x16":"/static/demo_9x16.svg"},
+            "zip": "/files/" + "a" * 32 + "/ai_typographic_posters.zip",
+            "warnings": [],
+        }
+        status_requests = []
+        def begin_reply(route):
             posts.append(route.request.url)
-            route.fulfill(status=200, content_type="application/json",
+            route.fulfill(status=202, content_type="application/json",
                           body=json.dumps({
-                "generation_mode": "ai_template_exact_copy",
-                "ai_used": True,
-                "raster_only": False,
-                "images": {"4x3": "/static/demo_4x3.svg",
-                           "9x16": "/static/demo_9x16.svg"},
-                "jpeg": {"4x3": "/static/demo_4x3.svg",
-                         "9x16": "/static/demo_9x16.svg"},
-                "corel": {"4x3":"/static/demo_4x3.svg","9x16":"/static/demo_9x16.svg"},
-                "zip": "/files/" + "a" * 32 + "/ai_typographic_posters.zip",
-                "warnings": [],
+                "task_id": "b" * 32, "status": "running",
+                "status_url": "/api/generate/status/" + "b" * 32,
             }))
-        page.route("**/api/generate", primary_reply)
+        def polling_reply(route):
+            status_requests.append(route.request.url)
+            # A one-off gateway failure must NOT cause a second paid POST.
+            if len(status_requests) == 1:
+                route.fulfill(status=502, body="Bad Gateway",
+                              content_type="text/plain")
+            else:
+                route.fulfill(status=200, content_type="application/json",
+                              body=json.dumps({
+                    "status": "complete", "result": completed,
+                }))
+        page.route("**/api/generate/start", begin_reply)
+        page.route("**/api/generate/status/**", polling_reply)
         page.goto(BASE, wait_until="domcontentloaded")
         page.wait_for_function(
             "() => document.querySelector('#mode-hybrid').checked"
@@ -111,6 +129,7 @@ def main():
             timeout=30000,
         )
         assert len(posts) == 1, posts
+        assert len(status_requests) == 2, status_requests
         assert page.locator("#generated-previews").is_visible()
         assert page.locator("#generated-preview-4x3").get_attribute("src") == "/static/demo_4x3.svg"
         assert page.locator("#generated-preview-9x16").get_attribute("src") == "/static/demo_9x16.svg"
