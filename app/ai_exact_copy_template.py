@@ -473,15 +473,23 @@ def generate_exact_typography_posters(
         art = generate_templates(brief,rebranded,reference=reference,
                                  model=model,quality=quality,folder=cache,
                                  progress=progress)
-        copy = poster_copy(brief)
-        if layout is None:
+        base_copy = poster_copy(brief)
+        if layout is None and layout_raw is None:
             if progress: progress('AI анализирует оба макета и ищет свободные зоны текста')
-            layout = _layout_plan(brief,art,has_logo=False,
-                                  has_drawing=False,folder=cache)
-            _save_json(cache,"layout.json",layout)
+            raw_layout = _layout_plan(
+                brief,art,has_logo=False,has_drawing=False,
+                folder=cache,return_raw=True)
         else:
-            layout = repair_ai_slots(layout,copy,has_logo=False,
-                                     has_drawing=False)
+            # Prefer the original paid layout over any previously repaired
+            # slots. Retrying after a specs collision performs ZERO new
+            # paid layout or artwork requests.
+            raw_layout = layout_raw if layout_raw is not None else layout
+        if progress:
+            progress('Подбираем читаемый объём рекламного текста без новых AI-запросов')
+        layout,copy = _fit_layout_with_adaptive_copy(
+            raw_layout,base_copy,protect_product=False)
+        _save_json(cache,"layout.json",layout)
+        _save_json(cache,"poster_copy.json",copy)
         if styles is None:
             if progress: progress('Вставляем утверждённые данные в редактируемый SVG')
             # FIRST insert exact copy with provisional font/ink; THEN AI
@@ -642,26 +650,31 @@ def _generate_file_backed_posters(
         api = None
         gc.collect()
 
-        copy = poster_copy(brief)
-        if layout is None:
+        base_copy = poster_copy(brief)
+        if layout is None and layout_raw is None:
             if progress:
                 progress("AI определяет свободные текстовые области двух макетов")
             previews = {fmt:_open_thumb(template_files[fmt])
                         for fmt in FORMATS}
             try:
-                layout = _layout_plan(
+                raw_layout = _layout_plan(
                     brief,previews,has_logo=False,
                     has_drawing=False,folder=cache,
-                    protect_product=True)
+                    protect_product=True,return_raw=True)
             finally:
                 for frame in previews.values():
                     frame.close()
                 previews.clear()
-            _save_json(cache,"layout.json",layout)
         else:
-            layout = repair_ai_slots(
-                layout,copy,has_logo=False,
-                has_drawing=False,protect_product=True)
+            # Raw paid JSON is authoritative; use it even when a prior
+            # process crashed halfway through geometric validation.
+            raw_layout = layout_raw if layout_raw is not None else layout
+        if progress:
+            progress("Сокращаем необязательные характеристики, чтобы текст читался")
+        layout,copy = _fit_layout_with_adaptive_copy(
+            raw_layout,base_copy,protect_product=True)
+        _save_json(cache,"layout.json",layout)
+        _save_json(cache,"poster_copy.json",copy)
         if styles is None:
             if progress:
                 progress("Вставляем точные надписи и готовим эскизы для AI")
