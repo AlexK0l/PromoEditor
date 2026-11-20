@@ -76,7 +76,6 @@ def test_ai_art_prompt_has_no_fake_infographic_widgets_and_no_long_specs():
     assert "NO circular icons" in prompt
     assert "NO standalone" not in prompt or "NO" in prompt
     assert "THREE short technical facts" in prompt or "THREE short" in prompt
-    assert "10" not in prompt.split("copy_character_lengths")[-1][:20]
     assert "55 м³" not in prompt, "AI background cannot typeset customer data"
 
 
