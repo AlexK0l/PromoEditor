@@ -303,7 +303,8 @@ def test_main_zip_contains_exact_text_svgs_blank_ai_art_and_originals(
     def rebrand(brief,raw,**kwargs):
         called.append(("rebrand",raw,kwargs.get("logo")))
         return changed
-    def render(brief,raw,*,logo,drawing,reference,model,quality):
+    def render(brief,raw,*,logo,drawing,reference,model,quality,
+               output_dir=None):
         called.append(("render",raw,logo))
         artworks={fmt:Image.new("RGB",FORMATS[fmt],"white")
                   for fmt in FORMATS}
