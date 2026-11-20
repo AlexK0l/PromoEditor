@@ -175,7 +175,7 @@ def main():
             dialog.dismiss()
         paid.once("dialog",decline_charge)
         paid.locator("#generate-btn").click()
-        assert dialogs and "3 платных запрос" in dialogs[0]
+        assert dialogs and "3 платных вызова" in dialogs[0]
         assert not request_count,request_count
         assert paid.locator("#loading").is_hidden()
         assert paid.locator("#generate-btn").is_enabled()
