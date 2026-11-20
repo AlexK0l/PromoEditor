@@ -818,12 +818,15 @@ async def generate(request:Request):
     if mode not in ('ai_pro','template','hybrid'):
         raise HTTPException(400,detail='Неподдерживаемый режим создания.')
     if mode=='hybrid':
+        # Compatibility value for the primary checkbox. The main button must
+        # use the SAME full Images poster engine as /api/ai-posters, never the
+        # geometry-overlay hybrid renderer or its fallback rectangle layout.
         if not hero_raw:
-            raise HTTPException(400,detail='Для гибридного режима выберите оригинальное фото товара.')
+            raise HTTPException(400,detail='Для полной AI-генерации выберите оригинальное фото товара.')
         if not use_openai:
-            raise HTTPException(400,detail='Гибридный режим требует AI-фон. Для бесплатной сборки выберите шаблон.')
+            raise HTTPException(400,detail='Полная AI-генерация требует OpenAI. Для бесплатной сборки выберите шаблон.')
         if not os.getenv('OPENAI_API_KEY'):
-            raise HTTPException(400,detail='Для гибридного режима необходим OPENAI_API_KEY.')
+            raise HTTPException(400,detail='Для полной AI-генерации необходим OPENAI_API_KEY.')
     concept=None
     concept_set_id=None
     if mode=='ai_pro':
@@ -853,12 +856,24 @@ async def generate(request:Request):
         try:drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
         except ValueError as exc:raise HTTPException(400,detail=str(exc))
     try:
-        image_references=([reference_example_raw] if reference_example_raw else [])+references
-        result=await asyncio.to_thread(
-            _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
-            image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
-            str(form.get('quality','medium')),design_prompt,report,background_raw,
-            concept,concept_set_id,reference_example_raw,mode)
+        if mode=='hybrid':
+            # The UI's primary OpenAI action is deliberately identical to the
+            # full-raster creative endpoint that produces ai_posters.zip.
+            # Do not call art_directed_layout() / generate_complete_artworks()
+            # here: those produce text-zone designs and can fall back to a
+            # procedural layout, unlike the customer's requested output.
+            result=await asyncio.to_thread(
+                _full_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
+                reference_example_raw,
+                str(form.get('model','gpt-image-2.5-flare')),
+                str(form.get('quality','medium')))
+        else:
+            image_references=([reference_example_raw] if reference_example_raw else [])+references
+            result=await asyncio.to_thread(
+                _generate_sync,brief,hero_raw,detail_raw,logo_raw,drawing_raw,
+                image_references,use_demo,use_openai,str(form.get('model','gpt-image-2.5-flare')),
+                str(form.get('quality','medium')),design_prompt,report,background_raw,
+                concept,concept_set_id,reference_example_raw,mode)
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
