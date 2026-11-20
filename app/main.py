@@ -36,6 +36,8 @@ from .ai_layout import generate_concepts, STYLES, GOALS
 from .ai_concept_renderer import render_ai_concept_svg
 from .approved_presets import approved_zubrtrail_500
 from .hybrid_art_director import art_directed_layout
+from .ai_full_artwork_service import generate_complete_artworks, VERSION as FULL_ARTWORK_VERSION
+from .ai_full_poster import render_ai_full_poster_svg
 from .asset_selection import analyze_project, chosen_bytes
 from .auth import enabled as auth_enabled, guard as password_guard, login_get, login_post, logout_post, issue_form_token
 
@@ -333,22 +335,33 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
                               json.dumps({k:v['hero'] for k,v in regions.items()},
                                          sort_keys=True))
         if use_openai:
-            # A style reference can contain a different product. The hybrid
-            # art director may inspect it for graphic style, but the paid
-            # scene generator must NEVER edit that image: generate a clean
-            # independent background to avoid copying/duplicating the vehicle.
-            scene_references=[] if generation_mode=='hybrid' else references
-            paid_cache=_default_visual_cache(
-                brief,hero is not None,scene_references,model,quality,
-                design_prompt,scene_direction)
-            visuals=generate_visuals(
-                brief,hero_present=(hero is not None),references=scene_references,
-                model=model,quality=quality,design_prompt=design_prompt,
-                scene_direction=scene_direction,cache_dir=paid_cache,
-                consume_cache=False,hero_regions={
-                    k:v['hero'] for k,v in regions.items()
-                } if regions else None)
-            ai_product=hero is None
+            if generation_mode=='hybrid':
+                # AI makes the ENTIRE poster artwork, not a background.
+                # The deterministic pass below overlays ONLY verified facts
+                # and customer's unchanged product, logo and drawing.
+                artwork_direction=json.dumps(
+                    concept, ensure_ascii=False, sort_keys=True)
+                paid_cache=_default_visual_cache(
+                    brief, True, [], model, quality,
+                    FULL_ARTWORK_VERSION, artwork_direction)
+                visuals=generate_complete_artworks(
+                    brief, concept, model=model, quality=quality,
+                    cache_dir=paid_cache, consume_cache=False)
+            else:
+                # Expert AI-PRO and optional template backgrounds retain their
+                # previous explicitly chosen behavior.
+                scene_references=references
+                paid_cache=_default_visual_cache(
+                    brief, hero is not None, scene_references, model, quality,
+                    design_prompt, scene_direction)
+                visuals=generate_visuals(
+                    brief,hero_present=(hero is not None),
+                    references=scene_references,model=model,quality=quality,
+                    design_prompt=design_prompt,scene_direction=scene_direction,
+                    cache_dir=paid_cache,consume_cache=False,hero_regions={
+                        k:v['hero'] for k,v in regions.items()
+                    } if regions else None)
+                ai_product=hero is None
         paths={};jpeg_paths={};corel_paths={}
         for key in ('4x3','9x16'):
             visual=visuals.get(key)
@@ -357,7 +370,11 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
             # the customer's own licensed industrial photo is used as the
             # separate scene layer beneath the unchanged product bitmap.
             scene=None if ai_product else (visual if visual is not None else user_backdrop)
-            if concept is None:
+            if generation_mode=='hybrid':
+                svg=render_ai_full_poster_svg(
+                    brief,key,concept,artwork=visual,hero=hero,
+                    detail=detail,logo=logo,drawing=drawing)
+            elif concept is None:
                 svg=create_editable_svg(brief,key,hero=photo,detail=detail,logo=logo,
                                         drawing=drawing,backdrop=scene,ai_product=ai_product)
             else:
@@ -390,16 +407,19 @@ def _generate_sync(brief,hero_raw,detail_raw,logo_raw,drawing_raw,references,
         (folder/'asset_selection.json').write_text(json.dumps(asset_report or {},ensure_ascii=False,indent=2),encoding='utf-8')
         briefing=dict(brief)
         briefing['_metadata']={
-            'generator':'AI-directed editable SVG' if concept else 'PromoEditor SVG template',
+            'generator':('Full OpenAI-authored poster with exact SVG data overlays'
+                         if generation_mode=='hybrid' else
+                         'AI-directed editable SVG' if concept else 'PromoEditor SVG template'),
             'generation_mode':effective_mode,
-            'art_director':'OpenAI Responses: geometry, palette and scene only' if generation_mode=='hybrid' else None,
+            'art_director':('OpenAI Responses: layout and placement; OpenAI Images: complete illustrated poster artwork; server: exact facts and source assets only'
+                            if generation_mode=='hybrid' else None),
             'concept_set_id':concept_set_id,
             'image_source':'OpenAI API' if use_openai else 'Исходное фото / демо',
             'ai_product_visualization':ai_product,
             'verified_specs':False,
             'design_actions_sent_to_ai':bool(use_openai and brief.get('design_actions')),
-            'editable_source':'CorelDRAW-compatible SVG; each text/shape is a vector object',
-            'bitmap_limit':'A photo or AI-generated image remains one individually replaceable bitmap, not editable vector parts.',
+            'editable_source':'CorelDRAW-compatible SVG; exact factual text and images are separate editable objects; AI-created decorative artwork is one raster layer',
+            'bitmap_limit':'Full AI artwork is one bitmap; original photos/logos/drawings are independent bitmaps; approved text remains editable SVG text.',
             'prompt_file':'promo_prompt.txt',
             'asset_selection_file':'asset_selection.json',
             'note':'Проверяйте технические данные, цены и права на иллюстрации перед публикацией.'

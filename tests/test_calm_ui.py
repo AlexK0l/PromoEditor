@@ -54,7 +54,7 @@ def test_essential_first_view_is_one_form_one_switch_one_button():
     assert "Создать рекламный макет" in html
     assert "Оформить с помощью OpenAI" in html
     assert "Создать промо" in html
-    assert "1 платный запрос на план + 2 на изображения" in html
+    assert "1 запрос на арт-план + 2 на полный дизайн" in html
     assert "pro-workspace" in parser.closed_by_default
     assert "generated-previews" in parser.parents
     assert "editing-suite" in parser.closed_by_default

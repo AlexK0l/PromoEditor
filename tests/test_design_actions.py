@@ -26,7 +26,7 @@ def test_field_is_accessible_in_disclosed_expert_controls_and_submitted_by_brows
     assert 'id="design-actions"' in html
     assert 'maxlength="1200"' in html
     assert 'id="creative-notes"' in html
-    assert 'Дополнительные инструкции для AI-фона' in html
+    assert 'Дополнительные инструкции для AI-дизайна' in html
     assert "design_actions:get('design-actions').trim()" in script
     assert "set('design-actions',data.design_actions)" in script
     assert "'design-actions','claims'" in script
