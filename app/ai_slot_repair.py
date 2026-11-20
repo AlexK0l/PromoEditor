@@ -14,7 +14,7 @@ from itertools import product
 
 from .ai_exact_copy_render import (
     BASE_PX, MIN_PX, DEFAULT_STYLE, FORMATS, ROLES, _size_and_lines,
-    validate_slots,
+    validate_slots, normalize_inactive_slots,
 )
 from .ai_layout import _intersection
 
@@ -167,9 +167,12 @@ def repair_ai_slots(geometry: dict, copy: dict, *,
     Reject invalid schemas outright. Preserve every AI box if it was already
     valid; never silently replace AI artwork with a procedural design.
     """
-    # Empty copy checks the full JSON shape, geometry values and canvas
-    # containment before attempting any repair on model-supplied input.
-    validate_slots(geometry,{})
+    # The Responses schema includes many unused roles. An irrelevant
+    # dimensions/benefits slot can have bad coordinates and must not make
+    # the entire paid result unusable. The PRODUCT and active text slots
+    # remain strict. Do not change the raw cached AI response in place.
+    geometry = normalize_inactive_slots(
+        geometry,copy,has_logo=has_logo,has_drawing=has_drawing)
     try:
         validated=validate_slots(
             geometry,copy,has_logo=has_logo,has_drawing=has_drawing)
