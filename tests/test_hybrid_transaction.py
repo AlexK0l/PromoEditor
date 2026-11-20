@@ -178,7 +178,7 @@ def test_completed_hybrid_response_reports_actual_mode(monkeypatch, tmp_path):
                     "accent": "#E31B26"},
         "layouts": {fmt: _safe_layout(fmt, 0) for fmt in ("4x3", "9x16")},
     })
-    monkeypatch.setattr(main, "generate_visuals", lambda *args, **kwargs: {
+    monkeypatch.setattr(main, "generate_complete_artworks", lambda *args, **kwargs: {
         "4x3": Image.new("RGB", (128, 96)),
         "9x16": Image.new("RGB", (96, 128)),
     })
