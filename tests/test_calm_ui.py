@@ -178,5 +178,5 @@ def test_production_screen_hides_all_retired_demo_and_experimental_controls():
     assert "'openai-posters-workflow','prompt-workflow','expert-prompt'" in js
     assert "for(const id of ['ai-creative-settings','ai-concepts-workflow'" in js
     assert '<div class="preset-shortcut">' in html
-    assert "Заполнить по эталону ZubrTrail 500" in html
+    assert "Заполнить пример ZubrTrail 500" in html
     assert "Проверяем режим" in html
