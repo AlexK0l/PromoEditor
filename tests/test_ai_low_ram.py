@@ -102,6 +102,71 @@ def test_file_backed_ai_outputs_and_cache_resume(monkeypatch,tmp_path):
     assert len(list(Path(result["cache_dir"]).glob("*.png")))==2
 
 
+def test_paid_cached_art_with_impossible_specs_still_exports_without_new_api(
+        monkeypatch,tmp_path):
+    """Reproduce reported 4x3 specs collision from an ALREADY PAID layout.
+
+    Two paid Images files, the paid raw Responses layout and finished font
+    styling are cached. Retry must locally remove optional specs and produce
+    both editable posters, with ZERO extra paid image/vision calls.
+    """
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","0")
+    monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY","0")
+    values=brief()
+    values["specs"]=[
+        ["Грузоподъёмность","44 т"],
+        ["Объём кузова","55 м³"],
+        ["Собственный вес","8,3 т"],
+    ]
+    selected=png()
+    cache=pipeline._cache_dir(
+        values,selected,None,None,None,"gpt-image-2.5-flare","medium")
+    cache.mkdir(parents=True,exist_ok=True)
+    for fmt,size in (
+        ("4x3",(1536,1024)),("9x16",(1024,1536)),
+    ):
+        with Image.new("RGB",size,"white") as art:
+            art.save(cache/(fmt+".png"),format="PNG")
+    raw={fmt:zones(fmt) for fmt in FORMATS}
+    raw["4x3"]["specs"]={"x":720,"y":260,"w":75,"h":30}
+    pipeline._save_json(cache,"layout_raw.json",raw)
+    pipeline._save_json(cache,"typography.json",{
+        fmt:dict(DEFAULT_STYLE) for fmt in FORMATS
+    })
+    monkeypatch.setattr(
+        pipeline,"client",
+        lambda:pytest.fail("Cached artwork and layout must not pay OpenAI"),
+    )
+    original=pipeline.repair_ai_slots
+    seen=[]
+    def simulate_no_fit(geometry,copy,**kwargs):
+        seen.append(len(copy["specs"]))
+        if copy["specs"]:
+            raise ValueError(
+                "AI не оставил достаточно свободного места "
+                "для «specs» (4x3).")
+        return original(geometry,copy,**kwargs)
+    monkeypatch.setattr(pipeline,"repair_ai_slots",simulate_no_fit)
+    finished=pipeline.generate_exact_typography_posters(
+        values,selected,logo=None,drawing=None,reference=None,
+        model="gpt-image-2.5-flare",quality="medium",
+        output_dir=tmp_path/"recovered",
+    )
+    assert seen==[3,2,1,0],seen
+    assert finished["poster_copy"]["specs"]==[]
+    assert len(finished["verified_copy"]["specs"])==3
+    assert finished["poster_copy"]["model"]==["ZubrTrail 500"]
+    assert finished["poster_copy"]["price"]
+    assert finished["poster_copy"]["phones"]
+    for fmt in FORMATS:
+        assert finished["svg"][fmt].is_file()
+        assert finished["png"][fmt].is_file()
+        assert finished["jpeg"][fmt].is_file()
+    assert pipeline._load_json(cache,"layout_raw.json")==raw
+    assert pipeline._load_json(cache,"poster_copy.json")==finished["poster_copy"]
+
+
 def test_native_raster_worker_oom_failure_is_reported(monkeypatch,tmp_path):
     monkeypatch.setattr(pipeline.subprocess,"run",
         lambda *args,**kw:SimpleNamespace(returncode=-9))
