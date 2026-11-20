@@ -1,8 +1,8 @@
 """AI art director for the ordinary hybrid workflow.
 
-An OpenAI Responses design call chooses layouts, palette and scene mood,
-but cannot author any text or alter customer assets. The existing validated
-SVG compositor then typesets facts from the approved user brief.
+OpenAI Responses chooses compositions and clean data regions. OpenAI Images
+paints the COMPLETE advertising artwork. The trusted SVG pass overlays only
+approved source photographs, logo, technical drawing and factual copy.
 
 The private content-addressed plan cache prevents billing for a repeated
 layout request when a later paid Images call or the final ZIP export fails.
@@ -66,8 +66,8 @@ def _pick_sales_concept(concepts: list[dict], brief: dict) -> dict:
         return (wide["w"] * wide["h"] * 2 + tall["w"] * tall["h"])
 
     chosen = dict(max(valid, key=score))
-    # All normal hybrid posters use the energetic cinematic artwork, even if
-    # the most generous layout came from another of the three candidates.
+    # The AI-selected concept and its own creative language remain intact.
+    # No fixed server style is imposed; only reserve a stable primary mode id.
     chosen["id"] = "hybrid_sales"
     # The original customer-approved brand accent always overrides AI colors.
     accent = str(brief.get("accent") or "")
