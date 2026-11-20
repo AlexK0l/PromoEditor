@@ -34,12 +34,11 @@ def test_ai_prompts_request_complete_illustrated_ad_not_background_only():
     for fmt in ("4x3","9x16"):
         prompt=service._prompt(brief,_concept(),fmt)
         assert "ACTUAL FINISHED VISUAL DESIGN" in prompt
-        assert "not just a background generator" in prompt
+        assert "not a generic background generator" in prompt
         assert "all_reserved_regions" in prompt
         assert "No pseudo-text" in prompt
         assert "No watermarks" in prompt
         assert "No digits" in prompt
-        assert "source product" not in prompt.lower() or "product" in prompt.lower()
     # Exact model-output coordinate system differs from final crop.
     wide=service._output_box("4x3",{"x":0,"y":0,"w":1000,"h":1000})
     portrait=service._output_box("9x16",{"x":0,"y":0,"w":1000,"h":1000})
