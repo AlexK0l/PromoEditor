@@ -20,6 +20,7 @@ from .ai_exact_copy_render import (
     ALL_SLOTS, DEFAULT_STYLE, FONTS, FORMATS, verified_copy,
     validate_slots, validate_style, render_exact_svg,
 )
+from .ai_slot_repair import repair_ai_slots
 from .ai_poster_service import _input_png, preserve_artwork_without_crop
 from .ai_quota import check_paid_capacity
 from .editable_export import rasterize_svg
@@ -226,8 +227,17 @@ def generate_templates(brief: dict, rebranded: bytes, *,
 
 
 def _layout_plan(brief: dict, art: dict, *,
-                 has_logo: bool, has_drawing: bool) -> dict:
+                 has_logo: bool, has_drawing: bool,
+                 folder: Path | None = None) -> dict:
     copy = verified_copy(brief)
+    # A completed vision layout can be geometrically inconsistent. Cache
+    # the original PAID JSON first, then reconcile its regions locally.
+    # A retry after a category/benefits collision should pay ZERO extra
+    # vision requests and reuse the same two already generated art PNGs.
+    original = _load_json(folder,"layout_raw.json") if folder else None
+    if original is not None:
+        return repair_ai_slots(
+            original,copy,has_logo=has_logo,has_drawing=has_drawing)
     lengths = {
         role:{"lines":len(values),"characters":[len(s) for s in values]}
         for role,values in copy.items()
@@ -256,8 +266,11 @@ def _layout_plan(brief: dict, art: dict, *,
         "adequate width and height for Cyrillic. Follow the actual creative "
         "composition: do not force standard cards or a generic template. "
         "Zones with zero lines are inactive and may use any harmless small "
-        "in-bounds rectangle. Active regions must NOT overlap EACH OTHER "
-        "or the product, must stay 2% inside each canvas edge. "
+        "in-bounds rectangle. IMPORTANT: CATEGORY and BENEFITS have distinct "
+        "non-overlapping text boxes if both have content, and neither may "
+        "overlap price, phones, specs, product or any other active area. "
+        "Active regions must NOT overlap EACH OTHER or the product; "
+        "reserve at least a 2% outer page margin. "
         "Do not invent text, model numbers or coordinates outside the image. "
         "If the source imagery has no clear labeled slot, choose its widest "
         "unobstructed negative space. Never return prose or Markdown. "
@@ -278,11 +291,13 @@ def _layout_plan(brief: dict, art: dict, *,
     if not getattr(result,"output_text",None):
         raise ValueError("OpenAI не определил пустые зоны для точного текста.")
     try:
-        return validate_slots(
-            json.loads(result.output_text)["layouts"],copy,
-            has_logo=has_logo,has_drawing=has_drawing)
+        original=json.loads(result.output_text)["layouts"]
     except (KeyError,TypeError,json.JSONDecodeError) as exc:
         raise ValueError("OpenAI вернул некорректные зоны текста.") from exc
+    if folder is not None:
+        _save_json(folder,"layout_raw.json",original)
+    return repair_ai_slots(
+        original,copy,has_logo=has_logo,has_drawing=has_drawing)
 
 
 def _finish_typography(previews: dict[str,Image.Image]) -> dict:
@@ -348,9 +363,12 @@ def generate_exact_typography_posters(
     cache = _cache_dir(brief,rebranded,logo,drawing,reference,model,quality)
     with _visual_lock(cache):
         layout = _load_json(cache,"layout.json")
+        layout_raw = _load_json(cache,"layout_raw.json")
         styles = _load_json(cache,"typography.json")
-        # Check BOTH text requests before spending an Images credit.
-        check_paid_capacity("text", (0 if layout is not None else 1)
+        # The raw paid vision output is reusable even if it contained a
+        # collision; no additional Responses credit is needed to repair it.
+        check_paid_capacity("text", (0 if layout is not None or
+                                         layout_raw is not None else 1)
                             + (0 if styles is not None else 1))
         art = generate_templates(brief,rebranded,reference=reference,
                                  model=model,quality=quality,folder=cache,
@@ -359,11 +377,11 @@ def generate_exact_typography_posters(
         if layout is None:
             if progress: progress('AI анализирует оба макета и ищет свободные зоны текста')
             layout = _layout_plan(brief,art,has_logo=bool(logo),
-                                  has_drawing=bool(drawing))
+                                  has_drawing=bool(drawing),folder=cache)
             _save_json(cache,"layout.json",layout)
         else:
-            layout = validate_slots(layout,copy,has_logo=bool(logo),
-                                    has_drawing=bool(drawing))
+            layout = repair_ai_slots(layout,copy,has_logo=bool(logo),
+                                     has_drawing=bool(drawing))
         if styles is None:
             if progress: progress('Вставляем утверждённые данные в редактируемый SVG')
             # FIRST insert exact copy with provisional font/ink; THEN AI
