@@ -7,6 +7,7 @@ repainting of the final lettering. The final SVG remains CorelDRAW editable.
 """
 from __future__ import annotations
 
+import base64
 import io
 import re
 import xml.etree.ElementTree as ET
@@ -15,7 +16,7 @@ from PIL import Image, ImageFont
 
 from .ai_layout import _intersection
 from .campaign_layout import _format_price
-from .editable_export import NS, Scene, _font
+from .editable_export import NS, XLINK, Scene, _font
 from .render import compute_roi
 
 ROLES = (
@@ -239,8 +240,18 @@ def render_exact_svg(brief: dict, fmt: str, artwork: Image.Image,
     scene = Scene(fmt, brief.get("accent"), brief.get("style"))
     scene.groups["background"].clear()
     scene.groups["decor"].clear()
-    scene.bitmap("background", artwork, 0, 0, scene.w, scene.h,
-                 "ai-authored-empty-template")
+    # The full photo illustration is already rasterized. Embedding it as a
+    # print-quality JPEG instead of PNG+RGBA drastically reduces transient
+    # CairoSVG allocations and SVG size on the 800 MiB production worker.
+    # All genuine customer text remains vector SVG ABOVE this image.
+    encoded = io.BytesIO()
+    artwork.save(encoded, format="JPEG", quality=88, subsampling=0)
+    scene.el("background", "image", "ai-authored-empty-template", {
+        "x":0, "y":0, "width":scene.w, "height":scene.h,
+        "preserveAspectRatio":"xMidYMid meet",
+        f"{{{XLINK}}}href":"data:image/jpeg;base64,"
+        +base64.b64encode(encoded.getvalue()).decode("ascii"),
+    })
     fonts = styling["font_family"]
     for role in ROLES:
         values = copy.get(role) or []
