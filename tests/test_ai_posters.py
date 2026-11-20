@@ -167,6 +167,10 @@ def test_quota_error_for_full_poster_is_429_without_network(monkeypatch,tmp_path
     def quota(*a,**kw):
         raise QuotaExceeded("CI: quota blocked")
     monkeypatch.setattr(main,"generate_full_posters",quota)
+    # The separate paid rebranding edit is mocked too: this test only
+    # checks conversion of a poster-stage quota error to HTTP 429.
+    monkeypatch.setattr(main,"rebrand_selected_photo",
+                        lambda *args,**kwargs:_png())
     with TestClient(main.app) as client:
         response=client.post(
             "/api/ai-posters",data={
