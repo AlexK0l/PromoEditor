@@ -428,16 +428,33 @@
     if(!checked('use-openai')&&!isHybrid()&&!$('hero').files.length&&!$('detail').files.length&&!checked('use-demo')){
       showError('Сначала добавьте фото товара или нажмите «Заполнить пример» для пробного комплекта.');return;
     }
+    const paidRendering=isHybrid()||checked('use-openai');
+    if(isHybrid()&&!window.confirm(
+      'Для создания этой рекламы OpenAI выполнит до 3 платных запросов: 1 план композиции + 2 фона. Продолжить?'
+    ))return;
     invalidateResult();busy(true);
     setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
     const loadingMessage=$('loading').querySelector('small');
-    loadingMessage.textContent='Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
+    loadingMessage.textContent=paidRendering
+      ?'OpenAI создаёт композицию и два фона. Затем соберём точные SVG, PNG и JPEG.'
+      :'Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
+    const elapsed=$('generate-elapsed');
+    const started=Date.now();
+    const updateElapsed=()=>{
+      const seconds=Math.floor((Date.now()-started)/1000);
+      elapsed.textContent='Прошло: '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
+    };
+    elapsed.hidden=false;
+    updateElapsed();
+    const elapsedClock=window.setInterval(updateElapsed,1000);
     const slowWarning=window.setTimeout(()=>{
       // A stalled HTTP request may still be rendering on the server. Avoid
-      // pretending it was cancelled or encouraging expensive duplicate jobs.
+      // pretending it was cancelled or encouraging costly duplicate jobs.
       if(!isBusy)return;
-      loadingMessage.textContent='Сервер отвечает необычно долго. Не нажимайте повторно: проверьте нагрузку и журнал тестовой службы.';
-      if(!isHybrid()&&!checked('use-openai'))
+      loadingMessage.textContent=paidRendering
+        ?'OpenAI всё ещё выполняет запросы. Это может занимать несколько минут. Не запускайте генерацию повторно.'
+        :'Создание макета затянулось. Не нажимайте повторно; проверьте нагрузку тестовой службы на VPS.';
+      if(!paidRendering)
         setStatus('Бесплатная сборка затянулась',
           'Возможна нехватка оперативной памяти на VPS. Не запускайте второй раз.','working');
     },90000);
@@ -453,7 +470,9 @@
       const selected=window.PromoAssets?.getReport?.();
       if(isHybrid()&&window.PromoAssets?.hasFiles()&&!selected?.selected_assets?.primary_photo)
         throw new Error('Не найдено главное фото товара. Откройте проверку материалов и назначьте главный ракурс.');
-      setStatus('Создаём оба макета','Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
+      setStatus(paidRendering?'Создаём AI-дизайн':'Создаём оба макета',
+        paidRendering?'1 план + 2 фона, затем точные SVG/PNG/JPEG. Это платные вызовы OpenAI.':
+          'Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
       const prompt=(promptDirty||!get('promo-prompt').trim())?await buildPrompt():get('promo-prompt').trim();
       const form=new FormData();form.append('payload',JSON.stringify(formBrief()));
       form.append('prompt',prompt);
@@ -504,6 +523,8 @@
       showError(error.message||'Не удалось завершить генерацию.');
     }finally{
       window.clearTimeout(slowWarning);
+      window.clearInterval(elapsedClock);
+      elapsed.hidden=true;
       busy(false);
     }
   }
