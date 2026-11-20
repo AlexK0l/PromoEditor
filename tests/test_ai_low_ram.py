@@ -108,3 +108,58 @@ def test_native_raster_worker_oom_failure_is_reported(monkeypatch,tmp_path):
     with pytest.raises(RuntimeError,match="нехватка памяти"):
         pipeline._rasterize_in_worker(
             tmp_path/"test.svg",tmp_path/"test.png",tmp_path/"test.jpg")
+
+
+def test_main_zip_uses_disk_backed_exports_without_reloading_pngs(
+        monkeypatch,tmp_path):
+    """Primary route archives files rather than accumulating six byte blobs."""
+    import zipfile
+    from app import main
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","0")
+    monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY","0")
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"rebrand_selected_photo",
+                        lambda brief,raw,**kw:png())
+    seen=[]
+    def fake_file_backed(brief,rebranded,*,logo,drawing,reference,
+                         model,quality,output_dir,progress=None):
+        seen.append((rebranded,output_dir))
+        outputs={"svg":{},"png":{},"jpeg":{},"artwork_paths":{}}
+        for fmt in FORMATS:
+            outputs["svg"][fmt]=output_dir/("corel_"+fmt+".svg")
+            outputs["svg"][fmt].write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg"/>')
+            outputs["png"][fmt]=output_dir/("ai_poster_"+fmt+".png")
+            outputs["png"][fmt].write_bytes(png())
+            outputs["jpeg"][fmt]=output_dir/("ai_poster_"+fmt+".jpg")
+            Image.new("RGB",(40,24),"white").save(
+                outputs["jpeg"][fmt],format="JPEG")
+            outputs["artwork_paths"][fmt]=output_dir/(
+                "ai_template_"+fmt+".png")
+            outputs["artwork_paths"][fmt].write_bytes(png())
+        return {
+            **outputs,"file_backed":True,
+            "layout":{fmt:zones(fmt) for fmt in FORMATS},
+            "typography":{fmt:dict(DEFAULT_STYLE) for fmt in FORMATS},
+            "verified_copy":{"model":["ZubrTrail 500"]},
+            "cache_dir":tmp_path/"fake_paid_cache",
+        }
+    monkeypatch.setattr(
+        main,"generate_exact_typography_posters",fake_file_backed)
+    source=png()
+    result=main._exact_typography_posters_sync(
+        brief(),source,None,None,None,
+        "gpt-image-2.5-flare","medium",
+        selected_source={"id":"photo_1","name":"selected.png"})
+    assert len(seen)==1 and seen[0][0]==png()
+    assert result["raster_only"] is False
+    output=tmp_path/result["job_id"]/"ai_typographic_posters.zip"
+    with zipfile.ZipFile(output) as archive:
+        files=archive.namelist()
+        assert "originals/product_photo.png" in files
+        assert archive.read("originals/product_photo.png")==source
+        for fmt in FORMATS:
+            assert archive.read("corel_"+fmt+".svg").startswith(b"<svg")
+            assert archive.read("ai_poster_"+fmt+".png")==png()
+            assert "ai_template_"+fmt+".png" in files
