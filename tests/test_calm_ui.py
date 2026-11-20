@@ -144,3 +144,17 @@ def test_advanced_paid_background_switch_must_agree_with_primary_ai_switch():
     assert "Бесплатная сборка затянулась" in js
     assert "window.clearTimeout(slowWarning)" in js
     assert "2 платных запроса, без AI-арт-директора" in js
+
+
+def test_paid_progress_is_explicit_and_cancelling_confirmation_sends_nothing():
+    html, parser = parse_page()
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "generate-elapsed" in parser.parents
+    assert "if(isHybrid()&&!window.confirm(" in js
+    assert "3 платных запроса" in js
+    assert "window.setInterval(updateElapsed,1000)" in js
+    assert "window.clearInterval(elapsedClock)" in js
+    assert "elapsed.hidden=true" in js
+    assert "OpenAI всё ещё выполняет запросы" in js
+    assert "проверьте нагрузку тестовой службы" in js
+    assert 'class="asset-intro"' not in html, "Keep initial screen uncluttered"
