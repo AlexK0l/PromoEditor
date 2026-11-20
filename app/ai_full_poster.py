@@ -126,7 +126,7 @@ def _benefits(scene, brief, rect, ink, accent):
     # Benefits must not silently disappear when hero_claims is absent.
     claims=[]
     seen=set()
-    for item in list(brief.get("benefits") or [])+list(brief.get("hero_claims") or []):
+    for item in list(brief.get("hero_claims") or [])+list(brief.get("benefits") or []):
         value=str(item).strip()
         if value and value.casefold() not in seen:
             claims.append(value)
