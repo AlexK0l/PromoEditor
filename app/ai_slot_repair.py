@@ -13,7 +13,7 @@ from __future__ import annotations
 from itertools import product
 
 from .ai_exact_copy_render import (
-    BASE_PX, DEFAULT_STYLE, FORMATS, ROLES, _size_and_lines,
+    BASE_PX, MIN_PX, DEFAULT_STYLE, FORMATS, ROLES, _size_and_lines,
     validate_slots,
 )
 from .ai_layout import _intersection
@@ -30,6 +30,21 @@ GAP = 5
 EDGE = 16
 
 
+def _protected_product(box: dict, fmt: str) -> dict:
+    """Conservative visual safety margin for truck wheels, ground shadows.
+
+    AI frequently labels only the yellow trailer BODY. The real wheels and
+    chassis extend BELOW its reported bbox. Marketing text must not be set
+    directly over wheels, mudguards or the undercarriage.
+    """
+    left=max(0,box["x"]-24)
+    top=max(0,box["y"]-20)
+    right=min(1000,box["x"]+box["w"]+24)
+    bottom=min(1000,box["y"]+box["h"]+
+               (140 if fmt=="4x3" else 85))
+    return {"x":left,"y":top,"w":right-left,"h":bottom-top}
+
+
 def _fits_copy(role: str, box: dict, fmt: str, copy: dict) -> bool:
     if role not in ROLES or not copy.get(role):
         return True
@@ -44,7 +59,7 @@ def _fits_copy(role: str, box: dict, fmt: str, copy: dict) -> bool:
     bold = role in ("brand", "model", "slogan", "price", "claims")
     ideal = min(int(BASE_PX[role]*DEFAULT_STYLE["scale_percent"]/100),
                 int(height*.72))
-    minimum = 19 if role in ("model", "price") else 12
+    minimum = MIN_PX[role]
     if ideal < minimum:
         return False
     try:
@@ -80,6 +95,8 @@ def _sizes(original: dict):
         (min(960, round(w*1.18)), min(960, round(h*1.20))),
         (min(960, round(w*1.34)), min(960, round(h*1.35))),
         (max(35,round(w*.88)), min(960,round(h*1.35))),
+        (min(960,round(w*1.18)), min(960,round(h*1.8))),
+        (min(960,round(w*1.45)), min(960,round(h*2.4))),
     ]
     seen=set()
     for new_w, new_h in candidates:
@@ -140,7 +157,8 @@ def _relocate(role: str, original: dict, fmt: str, copy: dict,
 
 def repair_ai_slots(geometry: dict, copy: dict, *,
                     has_logo: bool = False,
-                    has_drawing: bool = False) -> dict:
+                    has_drawing: bool = False,
+                    protect_product: bool = False) -> dict:
     """Return only collision-free text boxes based on AI-generated regions.
 
     Reject invalid schemas outright. Preserve every AI box if it was already
@@ -152,8 +170,12 @@ def repair_ai_slots(geometry: dict, copy: dict, *,
     try:
         validated=validate_slots(
             geometry,copy,has_logo=has_logo,has_drawing=has_drawing)
-        if all(_fits_copy(role,validated[fmt][role],fmt,copy)
-               for fmt in FORMATS for role in ROLES if copy.get(role)):
+        if (all(_fits_copy(role,validated[fmt][role],fmt,copy)
+                for fmt in FORMATS for role in ROLES if copy.get(role))
+                and (not protect_product or all(
+                    _intersection(validated[fmt][role],
+                                  _protected_product(validated[fmt]["product"],fmt))==0
+                    for fmt in FORMATS for role in ROLES if copy.get(role)))):
             return validated
     except ValueError:
         pass
@@ -165,7 +187,8 @@ def repair_ai_slots(geometry: dict, copy: dict, *,
     for fmt, ai in geometry.items():
         repaired={role:dict(rect) for role,rect in ai.items()}
         product_box=ai["product"]
-        occupied=[product_box]
+        occupied=[_protected_product(product_box,fmt)
+                  if protect_product else product_box]
         for role in PRIORITY:
             if role not in active:
                 continue
