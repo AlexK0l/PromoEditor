@@ -1214,16 +1214,25 @@ async def _generate_from_form(form, progress=None):
             # procedural template or old full-raster lettering attempt.
             # Verified facts are drawn as editable SVG AFTER the art and
             # stylistic finish only chooses typography parameters.
+            selected_id=report['selected_assets']['primary_photo']
+            selected_source={
+                'id':selected_id,
+                'name':records[selected_id]['name'],
+                'sha256':records[selected_id]['sha256'],
+            }
+            # Keep ONLY the AI-selected trailer + optional logo/drawing/style
+            # photo in RAM during the long, paid multi-stage pipeline. Other
+            # uploaded photos may consume up to 68 MiB unnecessarily.
+            del groups,records,report,detail_raw,background_raw,references
+            import gc
+            gc.collect()
             result=await asyncio.to_thread(
                 _exact_typography_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
                 reference_example_raw,
                 str(form.get('model','gpt-image-2.5-flare')),
                 str(form.get('quality','medium')),
-                selected_source={
-                    'id':report['selected_assets']['primary_photo'],
-                    'name':records[report['selected_assets']['primary_photo']]['name'],
-                    'sha256':records[report['selected_assets']['primary_photo']]['sha256'],
-                }, **({'progress':progress} if progress else {}))
+                selected_source=selected_source,
+                **({'progress':progress} if progress else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references
             result=await asyncio.to_thread(
