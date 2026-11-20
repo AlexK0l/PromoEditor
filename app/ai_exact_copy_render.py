@@ -12,7 +12,7 @@ import io
 import re
 import xml.etree.ElementTree as ET
 
-from PIL import Image, ImageFont
+from PIL import Image, ImageFont, ImageStat
 
 from .ai_layout import _intersection
 from .campaign_layout import _format_price
@@ -38,9 +38,14 @@ DEFAULT_STYLE = {
     "scale_percent": 100,
 }
 BASE_PX = {
-    "brand": 34, "model": 66, "category": 24, "slogan": 31,
-    "specs": 23, "dimensions": 22, "benefits": 24,
-    "claims": 23, "proofs": 20, "price": 48, "phones": 29, "roi": 21,
+    "brand": 39, "model": 68, "category": 25, "slogan": 36,
+    "specs": 29, "dimensions": 25, "benefits": 26,
+    "claims": 29, "proofs": 24, "price": 56, "phones": 34, "roi": 27,
+}
+MIN_PX = {
+    "brand": 27, "model": 43, "category": 22, "slogan": 28,
+    "specs": 25, "dimensions": 23, "benefits": 24,
+    "claims": 26, "proofs": 23, "price": 43, "phones": 29, "roi": 25,
 }
 GROUPS = {
     "brand": "heading", "model": "heading", "category": "heading",
@@ -77,7 +82,7 @@ def verified_copy(brief: dict) -> dict[str, list[str]]:
         if values and values.get("annual") is not None:
             roi = [
                 "Дополнительная выручка за год: "
-                + _format_price(str(values["annual"]))
+                + _format_money(values["annual"])
                 + " " + str(brief.get("currency") or "").strip(),
             ]
     return {
@@ -94,6 +99,51 @@ def verified_copy(brief: dict) -> dict[str, list[str]]:
         "phones": entries("phones"),
         "roi": roi,
     }
+
+
+def _format_money(value) -> str:
+    """Preserve the precise calculated value, without ugly '.0' endings."""
+    from decimal import Decimal, InvalidOperation
+    try:
+        decimal=Decimal(str(value))
+        if not decimal.is_finite():
+            return str(value)
+        rendered=format(decimal,"f")
+        integer,_,fraction=rendered.partition(".")
+        grouped=f"{int(integer):,}".replace(","," ")
+        fraction=fraction.rstrip("0")
+        return grouped+("."+fraction if fraction else "")
+    except (ValueError,TypeError,InvalidOperation):
+        return str(value)
+
+
+def poster_copy(brief: dict) -> dict[str, list[str]]:
+    """Select factual AD COPY; preserve the full source in verified_copy().
+
+    A photographed product advert is not a specification sheet. Never cram
+    all dimensions, 10 long specs, six benefits and ROI proofs into one ad;
+    no invented text, arithmetic or silent truncation of a selected line.
+    The full facts still accompany the ZIP in verified_copy.json/brief.json.
+    """
+    full=verified_copy(brief)
+    chosen={role:[] for role in ROLES}
+    for role in ("brand","model","category","slogan","price","roi"):
+        chosen[role]=list(full[role][:1])
+    chosen["phones"]=list(full["phones"][:2])
+    # Keep a concise, legible technical strip. Prefer commercially relevant
+    # figures already approved by the customer, then fill remaining slots.
+    priority=("грузоподъёмность","объём кузова","собственный вес",
+              "полная масса","вместимость","полезная нагрузка")
+    specs=list(full["specs"])
+    ranked=sorted(enumerate(specs),key=lambda item:(
+        next((index for index,word in enumerate(priority)
+              if item[1].casefold().startswith(word)) ,len(priority)),
+        item[0]))
+    chosen["specs"]=[value for _,value in ranked
+                     if len(value)<=44][:3]
+    chosen["claims"]=[value for value in full["claims"]
+                      if len(value)<=56][:2]
+    return chosen
 
 
 def validate_slots(geometry: dict, copy: dict, *,
@@ -232,11 +282,12 @@ def _color_near(colors: dict, role: str, art: Image.Image, pixel_box: tuple):
 def render_exact_svg(brief: dict, fmt: str, artwork: Image.Image,
                      slots: dict, styling: dict,
                      *, logo: bytes | None = None,
-                     drawing: bytes | None = None) -> bytes:
+                     drawing: bytes | None = None,
+                     copy_override: dict | None = None) -> bytes:
     """A full AI bitmap PLUS only exact customer-supplied SVG copy layers."""
     if fmt not in FORMATS or artwork.size != FORMATS[fmt]:
         raise ValueError("Размер художественного AI-макета не соответствует формату.")
-    copy = verified_copy(brief)
+    copy = copy_override if copy_override is not None else verified_copy(brief)
     scene = Scene(fmt, brief.get("accent"), brief.get("style"))
     scene.groups["background"].clear()
     scene.groups["decor"].clear()
@@ -268,7 +319,7 @@ def render_exact_svg(brief: dict, fmt: str, artwork: Image.Image,
         bold = role in ("brand", "model", "slogan", "price", "claims")
         ideal = min(int(BASE_PX[role]*styling["scale_percent"]/100),
                     int(h*.72))
-        minimum = 12 if role not in ("model", "price") else 19
+        minimum = MIN_PX[role]
         if ideal < minimum:
             raise ValueError(f"Недостаточно места для {role} в AI-макете.")
         try:
