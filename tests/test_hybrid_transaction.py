@@ -71,7 +71,7 @@ def test_hybrid_rejects_faux_no_ai_mode(monkeypatch, tmp_path):
             "use_openai": "false",
         }, files={"hero": ("real.png", _png(), "image/png")})
     assert response.status_code == 400
-    assert "AI-фон" in response.json()["detail"]
+    assert "Полная AI-генерация" in response.json()["detail"]
 
 
 def test_paid_hybrid_renders_survive_failed_zip_and_retry_without_cost(
