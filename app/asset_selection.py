@@ -168,7 +168,8 @@ def _choose(rows,kind,maximum):
     auto=sorted((x for x in choices if x['preference'] not in ('include','drawing')),key=lambda x:(-x['score'],x['index']))
     return (forced+auto)[:maximum]
 
-def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,requirements=''):
+def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,requirements='',
+                    rank_photos_with_ai=False):
     """Return (JSON-serializable report, dict of raw source records).
 
     A cached paid AI rating is reusable only when both the asset ID and
@@ -314,6 +315,33 @@ def analyze_project(groups,preferences=None,*,cached_report=None,use_ai=False,re
             warnings.append('Состав файлов изменился; прежние AI-оценки больше не используются.')
     elif isinstance(cached_report,dict) and cached_report.get('analysis_method')=='ai':
         warnings.append('Недостоверный или устаревший отчёт AI: оценки проигнорированы.')
+    if rank_photos_with_ai:
+        # The main AI-poster route uses ONE targeted paid vision ranking only
+        # when several eligible trailer photos compete for the hero slot.
+        # Never pay for logos, drawings, reference images or document parsing
+        # here. Explicit user photo selection always overrides AI scores.
+        competing = [r for r in records if r['kind']=='photo'
+                     and r['preference']!='exclude'
+                     and not r.get('duplicate_of')]
+        manually_chosen = any(r['preference']=='include' for r in competing)
+        previously_ranked = {r.get('id') for r in
+                             (score_data or {}).get('ratings',[])
+                             if isinstance(r,dict) and isinstance(r.get('score'),(int,float))
+                             and not isinstance(r.get('score'),bool)
+                             and 0<=r['score']<=100}
+        if (len(competing)>1 and not manually_chosen and
+                any(r['id'] not in previously_ranked for r in competing)):
+            from .openai_service import assess_asset_images
+            score_data=assess_asset_images(
+                competing,
+                'Выбери ОДИН лучший ракурс ПОЛНОГО рекламируемого полуприцепа: '
+                'целые колёса и борта, четкость, перспектива, пригодность '
+                'боковины для нового логотипа, без перекрывающих объектов. '
+                'Это только оценка фотографий, не редактирование. '
+                +str(requirements)[:700],
+                '')
+            actual_ai=True
+            method='ai'
     _ai_scoring(records,score_data)
     for r in records:
         if r['preference']=='exclude':r['score']=0
