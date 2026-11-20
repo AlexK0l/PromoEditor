@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const fileIds = ['hero','documents','logo','detail','drawing','references','background','reference_example'];
   const briefIds = ['model','slogan','design-notes','design-actions','brand','category','claims','specs','benefits','proof-points','dimensions','price','currency','vat','phones','show-roi','extra-payload','distance','rate','trips','years','baseline-price','style','accent','use-openai','image-model','image-quality','use-demo','design-style','design-goal'];
-  const placeholders = {documents:'Документы с характеристиками',logo:'Оригинальное изображение',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Референсы (необязательно)',background:'Свой фон (необязательно)',reference_example:'Пример оформления (необязательно)'};
+  const placeholders = {documents:'Документы с характеристиками',logo:'Логотип для выбранного прицепа',detail:'Дополнительный ракурс',drawing:'PNG, JPG или PDF',references:'Референсы (необязательно)',background:'Свой фон (необязательно)',reference_example:'Пример оформления (необязательно)'};
   let latest = null;
   let apiReady = false;
   let isBusy = false;
@@ -92,7 +92,7 @@
     const heroFiles=Array.from($('hero').files);
     const hero=heroFiles[0];
     $('hero-label').textContent=heroFiles.length>1?`${heroFiles.length} фотографий товара`:hero?(hero.name.length>45?hero.name.slice(0,42)+'…':hero.name):'Загрузите фото товара';
-    $('hero-hint').textContent=hero?'Можно добавить ещё фотографии':'Выберите фото, можно несколько.';
+    $('hero-hint').textContent=hero?'Можно добавить другие ракурсы: OpenAI выберет главный.':'Загрузите несколько ракурсов: OpenAI выберет главный.';
     $('hero-drop').classList.toggle('has-file',Boolean(hero));
     $('clear-hero').hidden=!hero;
     for(const id of fileIds.filter(v=>v!=='hero')){
@@ -105,7 +105,7 @@
     $('inspect-btn').disabled=isBusy||!$('documents').files.length;
     $('inspect-btn').hidden=!$('documents').files.length;
     const count=fileIds.reduce((total,id)=>total+$(id).files.length,0);
-    $('file-feedback').textContent=count?`Файлов: ${count}. Лучший ракурс будет выбран автоматически при создании макета.`:'Изображения сохранятся в ZIP без изменений.';
+    $('file-feedback').textContent=count?`Файлов: ${count}. При нескольких фото OpenAI выберет главный ракурс для ребрендинга.`:'Изображения сохранятся в ZIP без изменений.';
   }
   function refreshStyle(){
     document.querySelectorAll('[data-style]').forEach(button=>{
@@ -125,7 +125,7 @@
       $(id).closest('label').classList.toggle('is-disabled',!apiReady);
     }
     $('hybrid-mode-hint').textContent=apiReady?
-      'OpenAI Images целиком рисует плакаты 4:3 и 9:16: 2 платных вызова. Перед публикацией проверьте цифры, текст, логотип и технику.':
+      'OpenAI выберет лучшее из нескольких фото, затем выполнит один ребрендинг выбранного прицепа и два полных постера: 3 платных Images вызова; при нескольких фото возможен 1 платный визуальный AI-анализ. Проверяйте тексты и логотип.':
       'Недоступно: на сервере не подключён OpenAI. Выберите бесплатный вариант.';
     refreshGenerationMode();
   }
@@ -155,7 +155,7 @@
       ?(ai
         ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
         :hybrid
-          ?'OpenAI Images создаёт два полных рекламных постера. 2 платных вызова. Все надписи и характеристики требуют проверки.'
+          ?'Выбранный прицеп получит новый логотип/бренд/модель; затем OpenAI создаст два постера. 3 платных Images вызова и до 1 визуального AI-запроса при нескольких фото. Проверяйте надписи.'
           :paidInTemplate
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
@@ -177,7 +177,7 @@
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
-        setStatus(apiReady?'AI-постеры · 2 платных вызова':'AI недоступен',
+        setStatus(apiReady?'AI-постеры · 3 платных Images вызова':'AI недоступен',
           apiReady?'2 полных AI-постера от OpenAI Images. Проверьте текст, цифры, логотип и геометрию техники.':
             'Выберите бесплатный шаблон.');
       }else{
@@ -275,9 +275,9 @@
     }
     invalidateFullAiPosters();busy(true);
     $('openai-posters-status').textContent=
-      'OpenAI Images создаёт два полных рекламных постера. Это два платных запроса; не закрывайте страницу.';
+      'OpenAI ребрендирует выбранный прицеп и создаёт два постера: 3 платных вызова Images, плюс визуальный AI-выбор при нескольких фото.';
     setStatus('Художественная генерация OpenAI',
-      'Создаём два платных изображения: 4:3 и 9:16.','working');
+      'Создаём ребрендированное фото и два постера 4:3 и 9:16.','working');
     try{
       const form=new FormData();
       form.append('payload',JSON.stringify(formBrief()));
@@ -431,13 +431,13 @@
     }
     const paidRendering=isHybrid()||checked('use-openai');
     if(isHybrid()&&!window.confirm(
-      'OpenAI Images создаст два полных растровых рекламных постера. Это 2 платных вызова. AI может ошибаться в тексте, логотипе и характеристиках; SVG с редактируемым текстом в этом режиме нет. Продолжить?'
+      'OpenAI отредактирует ТОЛЬКО выбранное главное фото прицепа: удалит старые маркировки и нанесёт загруженный логотип, бренд и модель. Затем создаст два постера. Это 3 платных вызова OpenAI Images, а при нескольких фото — дополнительно до 1 платного текстово-визуального запроса на выбор ракурса (если нет сохранённой оценки). AI может ошибаться в тексте, логотипе и геометрии; SVG в этом режиме нет. Продолжить?'
     ))return;
     invalidateResult();busy(true);
     setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
     const loadingMessage=$('loading').querySelector('small');
     loadingMessage.textContent=paidRendering
-      ?'OpenAI Images рисует оба рекламных постера целиком. Получите PNG, JPEG и ZIP; проверьте надписи, числа и технику.'
+      ?'OpenAI выбирает лучший ракурс, меняет маркировки только на выбранном прицепе и создаёт два постера. Оригинал сохранится в ZIP.'
       :'Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
     const elapsed=$('generate-elapsed');
     const started=Date.now();
@@ -472,7 +472,7 @@
       if(isHybrid()&&window.PromoAssets?.hasFiles()&&!selected?.selected_assets?.primary_photo)
         throw new Error('Не найдено главное фото товара. Откройте проверку материалов и назначьте главный ракурс.');
       setStatus(paidRendering?'Создаём AI-постеры':'Создаём оба макета',
-        isHybrid()?'OpenAI Images рисует два цельных постера: 4:3 и 9:16. Это 2 платных вызова.':
+        isHybrid()?'Ребрендинг выбранного фото и два цельных постера: 4:3 и 9:16. 3 платных вызова Images.':
           paidRendering?'Создаём макеты с OpenAI. Это платные вызовы.':
           'Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
       const prompt=isHybrid()?'':
@@ -524,13 +524,13 @@
         ?'Скачать отдельные PNG или JPEG'
         :'Скачать отдельные PNG, JPEG или SVG';
       document.querySelector('.prompt-download-note').textContent=rasterOnly
-        ?'ZIP содержит два полных AI-постера в PNG/JPEG и ваши исходные материалы. Редактируемых SVG нет.'
+        ?'ZIP содержит два AI-постера, исходное выбранное фото и отдельно ребрендированный прицеп (rebranded_product.png). Остальные фото не изменяются. SVG нет.'
         :'ZIP содержит оба формата, редактируемые SVG для CorelDRAW и ваши оригиналы.';
       document.querySelector('.result-disclaimer').textContent=rasterOnly
-        ?'OpenAI может ошибиться в цене, телефонах, характеристиках, логотипе и деталях техники. Сверьте изображения перед публикацией. Текст в растре не редактируется.'
+        ?'AI изменил фото выбранного прицепа, а не реальную технику. Проверьте точность нового логотипа, бренда, модели, цены, характеристик и геометрии перед публикацией; остальные фото не изменялись. Текст растра не редактируется.'
         :'Перед публикацией проверьте данные и права на изображения. Для правок откройте SVG в CorelDRAW.';
       setStatus('Готово',rasterOnly
-        ?'Два полных AI-постера (4:3 и 9:16): PNG, JPEG и ZIP готовы. Проверьте данные.'
+        ?('Созданы два постера 4:3 и 9:16; ребрендирован только прицеп на фото «'+(latest.selected_photo?.name||'выбранное главное')+'». Проверьте логотип и ТТХ.')
         :(isAiPro()?'Выбранный AI-дизайн':'Шаблон')+': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){
