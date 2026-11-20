@@ -125,7 +125,7 @@
       $(id).closest('label').classList.toggle('is-disabled',!apiReady);
     }
     $('hybrid-mode-hint').textContent=apiReady?
-      'AI рисует два атмосферных фона для обычного шаблона. Два платных запроса.':
+      'OpenAI создаёт полное художественное оформление 4:3 и 9:16 (1 арт-план + 2 Images). Техника, логотип и данные подставляются точно.':
       'Недоступно: на сервере не подключён OpenAI. Выберите бесплатный вариант.';
     refreshGenerationMode();
   }
