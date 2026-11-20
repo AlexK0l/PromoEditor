@@ -105,7 +105,9 @@ def test_one_click_free_asset_selection_precedes_any_potentially_paid_generation
     body = script[begin:script.index("  async function inspect(){", begin)]
     assert "window.PromoAssets.analyze(formBrief(),{freeOnly:true})" in body
     assert "window.PromoAssets.isReady()" in body
-    assert body.index("window.PromoAssets.analyze(") < body.index("fetch('/api/generate'")
+    assert body.index("window.PromoAssets.analyze(") < body.index("fetch(endpoint,")
+    assert "isHybrid()?'/api/generate/start':'/api/generate'" in body
+    assert "pollAiGeneration(result.task_id)" in body
     assert "isHybrid()" in body
     assert "const selected=window.PromoAssets?.getReport?.()" in body
     assert "if(isBusy)return;" in body
