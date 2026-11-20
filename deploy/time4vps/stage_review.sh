@@ -2,9 +2,10 @@
 set -Eeuo pipefail
 umask 077
 
-# Isolated PR preview for the shared Time4VPS host. No main checkout,
+# Isolated preview of an exact reviewed main SHA on the shared Time4VPS host.
+# No production main checkout,
 # Caddy, RegionalResearch, or production jobs are modified.
-# Usage (root): bash stage_review.sh <exact-reviewed-sha> [free|paid]
+# Usage (root): bash stage_review.sh <exact-reviewed-main-sha> [free|paid]
 # Stop: systemctl stop promoeditor-preview
 die(){ printf 'PR preview BLOCKED: %s\n' "$*" >&2; exit 1; }
 info(){ printf 'PR preview: %s\n' "$*"; }
@@ -23,7 +24,7 @@ CACHE="$STAGE/cache"
 ENV_FILE=/run/promoeditor-preview.env
 PROD_ENV=/etc/promoeditor/promoeditor.env
 UNIT=promoeditor-preview
-BRANCH=feat/art-directed-one-screen-20261119
+BRANCH=main
 PORT=18081
 
 for binary in ss git curl systemd-run runuser; do
