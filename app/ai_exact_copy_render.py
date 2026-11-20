@@ -279,6 +279,25 @@ def _color_near(colors: dict, role: str, art: Image.Image, pixel_box: tuple):
     return value.upper()
 
 
+def _needs_readability_backdrop(art: Image.Image, box: tuple) -> bool:
+    """Busy photographs cannot be used as direct type surfaces.
+
+    Inspect local image texture, not a single background pixel. Real product
+    photos, shiny aluminium, sand and diagonal artwork need a consistent
+    translucent type panel, even when the center sample looks dark.
+    """
+    x,y,w,h=box
+    left=max(0,int(x)); top=max(0,int(y))
+    right=min(art.width,int(x+w)); bottom=min(art.height,int(y+h))
+    if left>=right or top>=bottom:
+        return True
+    crop=art.crop((left,top,right,bottom))
+    crop.thumbnail((70,45),Image.Resampling.BILINEAR)
+    lum=ImageStat.Stat(crop.convert("L"))
+    lo,hi=crop.convert("L").getextrema()
+    return bool(lum.stddev[0]>22 or hi-lo>100)
+
+
 def render_exact_svg(brief: dict, fmt: str, artwork: Image.Image,
                      slots: dict, styling: dict,
                      *, logo: bytes | None = None,
@@ -326,7 +345,17 @@ def render_exact_svg(brief: dict, fmt: str, artwork: Image.Image,
             size, rows = _size_and_lines(values,w,h,fonts,bold,ideal,minimum)
         except ValueError as exc:
             raise ValueError(f"{fmt}, {role}: {exc}") from exc
-        color = _color_near(styling,role,artwork,(x,y,w,h))
+        protect = role in ("price","phones") or _needs_readability_backdrop(
+            artwork,(x,y,w,h))
+        if protect:
+            scene.rect(GROUPS[role],x-7,y-5,w+14,h+10,
+                       "#08111B",rad=10,opacity=0.85,
+                       ident="readability-underlay-"+role)
+            if role=="price":
+                scene.rect(GROUPS[role],x-7,y-5,5,h+10,
+                           "#E31B26",rad=2,ident="price-accent-rule")
+        color = "#FFFFFF" if protect else _color_near(
+            styling,role,artwork,(x,y,w,h))
         el = scene.el(GROUPS[role],"text","verified-"+role,{
             "x":x,"y":y+size,"fill":color,
             "font-family":fonts,
