@@ -86,15 +86,18 @@ def read_status(storage: Path, task_id: str) -> dict | None:
     if not isinstance(content,dict):
         return None
     if content.get("status") == "running" and content.get("instance") != PROCESS_ID:
-        # Worker process exited or was OOM-killed. Do not pretend that its
-        # paid image request can be safely restarted automatically.
+        # Preserve the last completed process' real stage instead of hiding
+        # it on restart. This distinguishes a failed AI call from memory
+        # pressure during SVG export, although it cannot prove OOM by itself.
+        last = str(content.get("stage") or "этап не определён")[:150]
         return {
-            "status":"failed", "stage":"",
+            "status":"failed", "stage":last,
             "error":(
                 "PromoEditor перезапустился до завершения AI-генерации. "
-                "Возможна нехватка RAM или обрыв процесса. "
-                "Проверьте журнал сервиса. Платный запрос автоматически "
-                "НЕ повторялся."
+                "Последний этап: "+last+". "
+                "Возможна нехватка RAM или перезапуск службы. "
+                "Проверьте журнал promoeditor и события OOM ядра. "
+                "Платный запрос автоматически НЕ повторялся."
             ),
             "http_status":503, "result":None,
         }
