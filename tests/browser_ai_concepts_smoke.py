@@ -56,7 +56,7 @@ def main():
                     "raster_only":True,"reference_used":False}))
         page.route("**/api/ai-posters",poster_reply)
         page.goto(BASE,wait_until="domcontentloaded")
-        # AI credentials make the exact editable hybrid workflow primary.
+        # AI credentials make the complete Images-authored poster workflow primary.
         assert page.locator("#mode-hybrid").is_checked()
         assert page.locator("#use-openai").is_checked()
         assert page.locator("#use-openai").is_disabled()
@@ -175,7 +175,7 @@ def main():
             dialog.dismiss()
         paid.once("dialog",decline_charge)
         paid.locator("#generate-btn").click()
-        assert dialogs and "3 платных вызова" in dialogs[0]
+        assert dialogs and "2 платных вызова" in dialogs[0]
         assert not request_count,request_count
         assert paid.locator("#loading").is_hidden()
         assert paid.locator("#generate-btn").is_enabled()
