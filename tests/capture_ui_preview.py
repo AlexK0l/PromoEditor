@@ -49,7 +49,10 @@ def main():
         page.locator("section.composer").screenshot(
             path=OUTPUT / "02-desktop-create-form.png", animations="disabled")
 
-        page.locator("#approved-preset-btn").click()
+        # Demo preset is retired from customer UI; seed its approved facts
+        # internally for the existing screenshot regression only.
+        assert page.locator(".preset-shortcut").is_hidden()
+        page.evaluate("document.getElementById('approved-preset-btn').click()")
         page.wait_for_function(
             "() => document.querySelector('#model').value === 'ZubrTrail 500'"
         )
@@ -107,14 +110,14 @@ def main():
         browser.close()
 
     (OUTPUT / "README.txt").write_text(
-        "PromoEditor - интерфейс PR #58 (предварительный просмотр)\n"
+        "PromoEditor - снимки тестирования интерфейса main\n"
         "01 - полная стартовая страница, desktop\n"
         "02 - основная форма, desktop\n"
         "03 - подтверждённые характеристики ZubrTrail 500\n"
         "04 - мобильный вид 390px\n"
-        "05 - включённый AI-арт-директор: ТОЛЬКО визуальная имитация ключа, "
+        "05 - основной AI-постер: ТОЛЬКО визуальная имитация ключа, "
         "без API-генерации и платежей\n"
-        "Снимки автоматически получены настоящим Chromium из ветки PR.\n"
+        "Снимки автоматически получены Chromium при проверках main.\n"
         "Это не публичный работающий сервер и не гарантия платного AI-рендера.\n",
         encoding="utf-8",
     )
