@@ -258,4 +258,4 @@ def test_primary_create_uses_exact_copy_ai_template_not_full_raster(
     assert result.json()["zip"].endswith("ai_typographic_posters.zip")
     assert result.json()["corel"]["4x3"].endswith(".svg")
     assert called and called[0][0] == "typed_poster"
-    assert len(called) == 1 and called[0][0] == "full_poster"
+    assert len(called) == 1 and called[0][0] == "typed_poster"
