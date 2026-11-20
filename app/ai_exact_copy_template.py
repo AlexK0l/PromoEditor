@@ -144,17 +144,25 @@ def _art_prompt(brief: dict, fmt: str, reference: bool) -> str:
         "style_reference_provided":reference,
         "copy_character_lengths": {
             role:[len(line) for line in values]
-            for role,values in verified_copy(brief).items()
+            for role,values in poster_copy(brief).items()
         },
     }
     composition = (
-        "LANDSCAPE 4:3: make the full rebranded trailer dominant in the "
-        "central left/lower region. Keep header/logo space top-left, a "
-        "well-lit right editorial facts region and a bold lower CTA area. "
+        "LANDSCAPE 4:3 PREMIUM AD: one calm dark header occupying the top "
+        "20 percent for the big model name and short headline. The "
+        "rebranded trailer dominates the center left. Preserve a "
+        "clean upper-right area for THREE short technical numbers. "
+        "Keep the wheels free of all content. The bottom 20 percent "
+        "is one large uninterrupted bold red/dark price, ROI and "
+        "contact strip, with enough space for LARGE readable type. "
         if fmt=="4x3" else
-        "VERTICAL 9:16: reserve a full-width clean header, hero trailer "
-        "in the upper-middle, technical copy and benefits in lower-middle, "
-        "clear CTA area at bottom. Preserve the whole trailer. "
+        "VERTICAL 9:16 PREMIUM AD: calm unified branded header in top "
+        "17 percent. The complete trailer dominates the central "
+        "20-60 percent of height, with every wheel unobstructed. "
+        "Below the trailer is one large dark, quiet editorial "
+        "surface for THREE short technical facts and TWO brief "
+        "marketing claims. Bottom 15 percent is a SINGLE clear "
+        "price and contact CTA, not an infographic grid. "
     )
     return (
         "GENERATE AN EXCEPTIONALLY BEAUTIFUL, COMPLETE, AWARD-QUALITY "
@@ -166,8 +174,7 @@ def _art_prompt(brief: dict, fmt: str, reference: bool) -> str:
         "semi-trailer: preserve its physical shape, color, wheel count, "
         "perspective and on-vehicle logo/model decals, do not replace it. "
         "Integrate this real product as the hero of the poster; preserve "
-        "a clear protected brand area where a precise original customer "
-        "logo will later be pasted by a separate vector engine. "
+        "the accurate customer logo and model already on its actual body. "
         "OpenAI must paint professional industrial photography, red/black/"
         "white graphic flourishes, visual storytelling, dramatic studio "
         "lighting, editorial photo composition, seamless surfaces and "
@@ -175,15 +182,19 @@ def _art_prompt(brief: dict, fmt: str, reference: bool) -> str:
         "be composited LATER. Blank content surfaces should feel like a "
         "creative art director deliberately reserved them: can be elegant "
         "dark open strips, subtly lit color gradients, dramatic diagonals, "
-        "and integrated paper-like negative space. Not boxed tables. "
+        "and integrated paper-like negative space. NO circular icons, "
+        "NO empty red icon bars, NO decorative buttons, NO standalone "
+        "technical drawings, NO cluttered little information cards. "
         "CRITICAL: do NOT draw ANY display headline, product model name "
         "outside the vehicle, specification characters, pseudo-glyphs, "
         "digits, pricing, telephone numbers, letters, word-shaped texture, "
         "or captions. NO fake or placeholder text anywhere. "
         "Preserve existing decals only on the real trailer itself. "
-        "A separate server will add ALL exact texts, approved numbers, "
-        "contact details and an unchanged logo later. Keep the photo and "
-        "brand header protected and all reserved text surfaces empty, "
+        "A separate engine will add only essential approved text, figures "
+        "and contact details; all other long technical specifications "
+        "remain in the separate technical dossier. Do NOT draw a "
+        "secondary logo outside the trailer or a technical drawing. "
+        "Keep the product and text surfaces empty, "
         "unoccluded and large enough for the lengths in the context. "
         "The final poster dimensions are 4:3 and 9:16, but Images uses "
         "native 3:2 or 2:3. Preserve all important features inside the "
