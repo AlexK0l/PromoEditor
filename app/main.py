@@ -767,10 +767,10 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
             archive.writestr('brief.json',
                 json.dumps(brief,ensure_ascii=False,indent=2))
             archive.writestr('REVIEW_BEFORE_PUBLICATION.txt',
-                EXACT_COPY_WARNING+'\\n'+REBRAND_WARNING+'\\n'
+                EXACT_COPY_WARNING+'\n'+REBRAND_WARNING+'\n'
                 'SVG содержит редактируемые текстовые слои. '
                 'AI не исправляет содержание текстов; он выбирает '
-                'лишь гарнитуру и цвет. Перепроверьте визуально макеты.\\n')
+                'лишь гарнитуру и цвет. Перепроверьте визуально макеты.\n')
             for name,raw in (
                 ('product_photo',product_raw),('customer_logo',logo_raw),
                 ('drawing_preview',drawing_raw),
