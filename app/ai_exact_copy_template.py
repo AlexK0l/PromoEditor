@@ -196,13 +196,16 @@ def _art_prompt(brief: dict, fmt: str, reference: bool) -> str:
 
 def generate_templates(brief: dict, rebranded: bytes, *,
                        reference: bytes | None, model: str, quality: str,
-                       folder: Path) -> dict[str,Image.Image]:
+                       folder: Path, progress=None) -> dict[str,Image.Image]:
     """Persist each paid textless art format before any more calls."""
     cached = {fmt:_cached_visual(folder,fmt) for fmt in FORMATS}
     check_paid_capacity("image", sum(x is None for x in cached.values()))
     images = {}
     api = None
     for fmt in FORMATS:
+        if progress:
+            progress('Создаём художественный макет '+fmt+
+                     ' (кэш используется, если доступен)')
         art = cached[fmt]
         if art is None:
             inputs = [_input_png(rebranded, "01_selected_rebranded_trailer")]
@@ -335,7 +338,7 @@ def _preview_image(svg: bytes, fmt: str) -> Image.Image:
 def generate_exact_typography_posters(
     brief: dict, rebranded: bytes, *, logo: bytes | None,
     drawing: bytes | None, reference: bytes | None,
-    model: str, quality: str,
+    model: str, quality: str, progress=None,
 ) -> dict:
     """Return render data without deleting any paid cache until ZIP succeeds."""
     if model not in IMAGE_MODELS or quality not in IMAGE_QUALITIES:
@@ -350,9 +353,11 @@ def generate_exact_typography_posters(
         check_paid_capacity("text", (0 if layout is not None else 1)
                             + (0 if styles is not None else 1))
         art = generate_templates(brief,rebranded,reference=reference,
-                                 model=model,quality=quality,folder=cache)
+                                 model=model,quality=quality,folder=cache,
+                                 progress=progress)
         copy = verified_copy(brief)
         if layout is None:
+            if progress: progress('AI анализирует оба макета и ищет свободные зоны текста')
             layout = _layout_plan(brief,art,has_logo=bool(logo),
                                   has_drawing=bool(drawing))
             _save_json(cache,"layout.json",layout)
@@ -360,6 +365,7 @@ def generate_exact_typography_posters(
             layout = validate_slots(layout,copy,has_logo=bool(logo),
                                     has_drawing=bool(drawing))
         if styles is None:
+            if progress: progress('Вставляем утверждённые данные в редактируемый SVG')
             # FIRST insert exact copy with provisional font/ink; THEN AI
             # inspects these real previews and chooses final typography.
             previews = {}
@@ -368,6 +374,7 @@ def generate_exact_typography_posters(
                     brief,fmt,art[fmt],layout[fmt],DEFAULT_STYLE,
                     logo=logo,drawing=drawing)
                 previews[fmt] = _preview_image(provisional,fmt)
+            if progress: progress('AI подбирает общий стиль шрифта и цветов без изменения текста')
             styles = _finish_typography(previews)
             _save_json(cache,"typography.json",styles)
         else:
@@ -376,6 +383,7 @@ def generate_exact_typography_posters(
                   "layout":layout,"typography":styles,
                   "verified_copy":copy,"cache_dir":cache}
         for fmt in FORMATS:
+            if progress: progress('Выполняем финальный рендер '+fmt+' и экспорт SVG/PNG/JPEG')
             svg = render_exact_svg(
                 brief,fmt,art[fmt],layout[fmt],styles[fmt],
                 logo=logo,drawing=drawing)
