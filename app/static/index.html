@@ -7,7 +7,7 @@
   <script src="/static/theme.js?v=20261113-smooth-1"></script>
   <meta name="description" content="PromoEditor — фото товара, описание и один клик до двух редактируемых рекламных макетов.">
   <title>PromoEditor — новый промо-материал</title>
-  <link rel="stylesheet" href="/static/app.css?v=20261119-art-directed-1">
+  <link rel="stylesheet" href="/static/app.css?v=20261120-ui-polish-1">
   <link rel="stylesheet" href="/static/editor.css?v=20261113-v1">
   <link rel="stylesheet" href="/static/theme.css?v=20261113-smooth-1">
   <link rel="stylesheet" href="/static/assets.css?v=20261113-multifiles-1">
@@ -68,7 +68,6 @@
           
           <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="background" hidden>Убрать фон-сцену</button><button type="button" data-clear="reference_example" hidden>Убрать эталон</button></div>
           <button type="button" id="inspect-btn" class="quick-extract" hidden>Извлечь характеристики из документов <span aria-hidden="true">→</span></button>
-          <p class="asset-intro">Фото и логотип останутся исходными. При нескольких ракурсах программа выберет главный автоматически.</p>
           <p id="file-feedback" class="file-feedback" role="status" aria-live="polite">Файлы не загружены.</p>
           
         </div>
@@ -307,7 +306,7 @@
       </div>
     </section>
 
-    <div id="loading" class="loading" hidden role="status" aria-live="polite"><span class="loader" aria-hidden="true"></span><div><strong>Создаём промоматериалы…</strong><small>Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.</small></div></div>
+    <div id="loading" class="loading" hidden role="status" aria-live="polite"><span class="loader" aria-hidden="true"></span><div class="loading-copy"><strong>Создаём промоматериалы…</strong><small>Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.</small><span id="generate-elapsed" class="loading-elapsed" aria-label="Время генерации" hidden></span></div></div>
 
     <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
       <span class="success-icon" aria-hidden="true">✓</span>
@@ -435,7 +434,7 @@
     <footer class="footer">PromoEditor · Фото и логотипы встроены в SVG внутри ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261120-lowram-feedback-1" defer></script>
+  <script src="/static/app.js?v=20261120-safe-paid-review-1" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>
