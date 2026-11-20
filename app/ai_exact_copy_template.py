@@ -396,12 +396,12 @@ def generate_exact_typography_posters(
         copy = poster_copy(brief)
         if layout is None:
             if progress: progress('AI анализирует оба макета и ищет свободные зоны текста')
-            layout = _layout_plan(brief,art,has_logo=bool(logo),
-                                  has_drawing=bool(drawing),folder=cache)
+            layout = _layout_plan(brief,art,has_logo=False,
+                                  has_drawing=False,folder=cache)
             _save_json(cache,"layout.json",layout)
         else:
-            layout = repair_ai_slots(layout,copy,has_logo=bool(logo),
-                                     has_drawing=bool(drawing))
+            layout = repair_ai_slots(layout,copy,has_logo=False,
+                                     has_drawing=False)
         if styles is None:
             if progress: progress('Вставляем утверждённые данные в редактируемый SVG')
             # FIRST insert exact copy with provisional font/ink; THEN AI
@@ -410,7 +410,7 @@ def generate_exact_typography_posters(
             for fmt in FORMATS:
                 provisional = render_exact_svg(
                     brief,fmt,art[fmt],layout[fmt],DEFAULT_STYLE,
-                    logo=logo,drawing=drawing)
+                    logo=None,drawing=None,copy_override=copy)
                 previews[fmt] = _preview_image(provisional,fmt)
             if progress: progress('AI подбирает общий стиль шрифта и цветов без изменения текста')
             styles = _finish_typography(previews)
@@ -419,12 +419,12 @@ def generate_exact_typography_posters(
             styles = validate_style(styles)
         result = {"svg":{},"png":{},"jpeg":{},"artwork":art,
                   "layout":layout,"typography":styles,
-                  "verified_copy":copy,"cache_dir":cache}
+                  "verified_copy":verified_copy(brief),"poster_copy":copy,"cache_dir":cache}
         for fmt in FORMATS:
             if progress: progress('Выполняем финальный рендер '+fmt+' и экспорт SVG/PNG/JPEG')
             svg = render_exact_svg(
                 brief,fmt,art[fmt],layout[fmt],styles[fmt],
-                logo=logo,drawing=drawing)
+                logo=None,drawing=None,copy_override=copy)
             png,jpeg = rasterize_svg(svg)
             result["svg"][fmt] = svg
             result["png"][fmt] = png
@@ -570,8 +570,8 @@ def _generate_file_backed_posters(
                         for fmt in FORMATS}
             try:
                 layout = _layout_plan(
-                    brief,previews,has_logo=bool(logo),
-                    has_drawing=bool(drawing),folder=cache)
+                    brief,previews,has_logo=False,
+                    has_drawing=False,folder=cache)
             finally:
                 for frame in previews.values():
                     frame.close()
@@ -579,8 +579,8 @@ def _generate_file_backed_posters(
             _save_json(cache,"layout.json",layout)
         else:
             layout = repair_ai_slots(
-                layout,copy,has_logo=bool(logo),
-                has_drawing=bool(drawing))
+                layout,copy,has_logo=False,
+                has_drawing=False)
         if styles is None:
             if progress:
                 progress("Вставляем точные надписи и готовим эскизы для AI")
@@ -589,7 +589,7 @@ def _generate_file_backed_posters(
                 with Image.open(template_files[fmt]) as art:
                     provisional = render_exact_svg(
                         brief,fmt,art,layout[fmt],DEFAULT_STYLE,
-                        logo=logo,drawing=drawing)
+                        logo=None,drawing=None,copy_override=copy)
                 try:
                     preview_images[fmt] = _preview_image(provisional,fmt)
                 finally:
@@ -615,7 +615,7 @@ def _generate_file_backed_posters(
             with Image.open(template_files[fmt]) as art:
                 svg = render_exact_svg(
                     brief,fmt,art,layout[fmt],styles[fmt],
-                    logo=logo,drawing=drawing)
+                    logo=None,drawing=None,copy_override=copy)
             path.write_bytes(svg)
             del svg
             gc.collect()
@@ -629,6 +629,6 @@ def _generate_file_backed_posters(
         return {
             **files, "artwork_paths":template_files,
             "layout":layout, "typography":styles,
-            "verified_copy":copy, "cache_dir":cache,
+            "verified_copy":verified_copy(brief), "poster_copy":copy, "cache_dir":cache,
             "file_backed":True,
         }
