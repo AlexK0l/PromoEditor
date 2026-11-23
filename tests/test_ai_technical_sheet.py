@@ -221,7 +221,7 @@ def test_main_paid_zip_includes_user_drawing_and_full_technical_sheet(
                   "technical_sheet.jpg","originals/drawing_preview.png"}
         assert required.issubset(z.namelist())
         assert z.read("originals/drawing_preview.png")==source
-        assert z.read("technical_sheet.png").startswith(b"\\x89PNG")
+        assert z.read("technical_sheet.png").startswith(bytes([137,80,78,71]))
         root=ET.fromstring(z.read("technical_sheet.svg"))
         facts=[el for el in root.iter()
                if el.get("data-verified-role") in ("specs","dimensions")]
