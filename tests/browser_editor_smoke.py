@@ -31,6 +31,8 @@ def main():
         # SVG icons even though the VPS returned HTTP 200 for all CSS files.
         # Validate ACTUAL computed layout, not just an asset response status.
         assert page.locator("#stylesheet-error").is_hidden()
+        # The page does not make blocking external CSS requests at all.
+        assert page.locator('link[rel="stylesheet"]').count()==0
         assert page.locator(".composer-grid").evaluate(
             "(el)=>getComputedStyle(el).display") == "grid"
         assert page.locator(".brand-symbol svg").evaluate(
