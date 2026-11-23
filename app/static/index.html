@@ -74,7 +74,7 @@
           <button type="button" id="clear-hero" class="remove-link" hidden>Убрать фотографию</button>
           <div class="mini-uploads core-uploads">
             <label for="logo" class="mini-upload"><span class="mini-icon" aria-hidden="true">◇</span><span><strong>Логотип</strong><small id="file-logo">Логотип для нанесения на выбранный прицеп</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="logo" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Логотипы и бренд-материалы, можно выбрать несколько"></label>
-            <label class="mini-upload" for="drawing"><span class="mini-icon" aria-hidden="true">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">PNG, JPG или PDF · участвует в AI-дизайне и техническом листе</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf" aria-label="Загрузить технический чертёж"></label>
+            <label class="mini-upload" for="drawing"><span class="mini-icon" aria-hidden="true">⌗</span><span><strong>Чертёж</strong><small id="file-drawing">PNG, JPG или PDF · исходный чертёж будет внутри обоих рекламных плакатов</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="drawing" type="file" accept="image/png,image/jpeg,image/webp,.pdf" aria-label="Загрузить технический чертёж"></label>
           </div>
           
           <div class="remove-uploads"><button type="button" id="clear-documents" hidden>Убрать документы</button><button type="button" id="clear-logo" hidden>Убрать логотип</button><button type="button" data-clear="drawing" hidden>Убрать чертёж</button><button type="button" data-clear="background" hidden>Убрать фон-сцену</button><button type="button" data-clear="reference_example" hidden>Убрать эталон</button></div>
@@ -97,7 +97,7 @@
       </div>
 
       <details id="data-facts" class="data-group technical-main" open>
-            <summary><span><strong>Технические характеристики и габариты</strong><small>Все введённые ТТХ и размеры включаются в отдельный технический лист; ключевые значения — в оба рекламных постера</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+            <summary><span><strong>Технические характеристики и габариты</strong><small>Ключевые ТТХ, габариты и оригинальный чертёж — внутри ОБОИХ плакатов. Полный список — дополнительно в SVG-листе</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
             <div class="data-group-body">
               <label class="field" for="claims"><span>Короткие преимущества <span class="field-hint">одно на строку, до 4</span></span><textarea id="claims" rows="3" placeholder="Легче на 2,5 т&#10;Больше полезной нагрузки"></textarea></label>
           <label class="field" for="specs"><span>Технические характеристики <span class="field-hint">Название | Значение</span></span><textarea id="specs" class="monospace" rows="5" placeholder="Грузоподъёмность | 44 т&#10;Объём кузова | 55 м³"></textarea></label>
