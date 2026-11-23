@@ -124,8 +124,13 @@
       }
       if(state.status==='failed'){
         try{window.sessionStorage.removeItem('promoeditor-ai-task');}catch{}
-        throw new Error((state.error||'Не удалось создать AI-макет.')+
+        const error=new Error((state.error||'Не удалось создать AI-макет.')+
           ' (задача '+taskId+'). Повторный запрос не запускался.');
+        // Only allow the exact, private recovery archive route.
+        if(typeof state.recovery_zip==='string'&&
+           /^\/files\/[a-f0-9]{32}\/ai_failed_generation\.zip$/.test(state.recovery_zip))
+          error.recoveryZip=state.recovery_zip;
+        throw error;
       }
       if(state.status!=='running')
         throw new Error('Неизвестное состояние AI-задачи: '+taskId);
@@ -608,6 +613,15 @@
         $('asset-files-details').open=true;
       }
       showError(error.message||'Не удалось завершить генерацию.');
+      if(error.recoveryZip){
+        const note=document.createElement('p');
+        const link=document.createElement('a');
+        link.href=error.recoveryZip;
+        link.download='ai_failed_generation.zip';
+        link.textContent='Скачать сохранённые материалы неудачной генерации (ZIP)';
+        note.appendChild(link);
+        $('error-box').appendChild(note);
+      }
     }finally{
       window.clearTimeout(slowWarning);
       window.clearInterval(elapsedClock);
