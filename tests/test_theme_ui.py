@@ -16,10 +16,11 @@ def test_theme_switcher_and_early_stylesheet_in_compact_editor():
         assert r.status_code==200
         html=r.text
         assert '<script src="/static/theme.js?v=' in html
-        assert '<link rel="stylesheet" href="/static/theme.css?v=' in html
+        assert '<style id="promoeditor-embedded-styles">' in html
+        assert ':root[data-theme="dark"]{' in html
         assert 'data-theme-toggle' in html
         assert 'data-theme-icon' in html and 'data-theme-label' in html
-        assert html.index('<script src="/static/theme.js')<html.index('<link rel="stylesheet" href="/static/app.css')
+        assert html.index('<script src="/static/theme.js')<html.index('<style id="promoeditor-embedded-styles">')
         for path in ('/static/theme.js','/static/theme.css'):
             assert client.get(path).status_code==200
 
