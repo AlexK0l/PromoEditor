@@ -69,6 +69,15 @@ LIMIT=int(os.getenv('PROMO_REQUESTS_PER_HOUR','20'))
 RATE=defaultdict(list)
 LOCK=threading.Lock()
 RENDER_LOG=logging.getLogger('uvicorn.error')
+
+class PartialPosterFailure(RuntimeError):
+    """A paid generation failed but its already created images were preserved."""
+
+    def __init__(self, recovery_zip: str, cause: Exception):
+        super().__init__("Partially generated artwork was preserved")
+        self.recovery_zip = recovery_zip
+        self.cause_type = type(cause).__name__
+
 # Bound 6-preview renders inside a worker, especially on the 2-GB VPS.
 CONCEPT_RENDER_SLOTS=threading.BoundedSemaphore(1)
 # One expensive paid image workflow at a time on an 800 MiB VPS.
@@ -78,7 +87,7 @@ FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
        'corel_4x3.svg','corel_9x16.svg','promo_prompt.txt','promo_kit.zip','brief.json','asset_selection.json','layout_spec.json','edit.png'}
 FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16')})
 FILES.update({f'ai_poster_{fmt}.{ext}' for fmt in ('4x3','9x16') for ext in ('png','jpg')})
-FILES.update({'ai_posters.zip','rebranded_product.png',
+FILES.update({'ai_posters.zip','ai_failed_generation.zip','rebranded_product.png',
               'ai_typographic_posters.zip','typography_layout.json',
               'typography_style.json','verified_copy.json','poster_copy.json','selected_photo.json'})
 FILES.update({f'ai_template_{fmt}.png' for fmt in ('4x3','9x16')})
@@ -829,7 +838,47 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
             'verified_typography':True,
             'warnings':[EXACT_COPY_WARNING,REBRAND_WARNING],
         }
-    except Exception:
+    except Exception as exc:
+        # Preserve already paid images when a late SVG or ZIP stage fails.
+        # Recovery assets are private and not valid completed adverts.
+        try:
+            (folder/'rebranded_product.png').write_bytes(chosen)
+            allowed = (
+                'rebranded_product.png',
+                'ai_template_4x3.png', 'ai_template_9x16.png',
+                'corel_4x3.svg', 'corel_9x16.svg',
+                'ai_poster_4x3.png', 'ai_poster_9x16.png',
+                'ai_poster_4x3.jpg', 'ai_poster_9x16.jpg',
+                'typography_layout.json', 'typography_style.json',
+                'verified_copy.json', 'poster_copy.json',
+            )
+            available = [folder/name for name in allowed
+                         if (folder/name).is_file()]
+            if available:
+                archive_path = folder/'ai_failed_generation.zip'
+                with zipfile.ZipFile(
+                    archive_path,'w',compression=zipfile.ZIP_STORED,
+                ) as archive:
+                    for source in available:
+                        archive.write(source,arcname=source.name)
+                    archive.writestr(
+                        'READ_ME_FIRST.txt',
+                        'Генерация НЕ завершена. Промежуточные материалы '
+                        'не предназначены для публикации.\n'
+                        'Сохранены только успешно выполненные этапы.\n'
+                        'Тип ошибки: '+type(exc).__name__+'.\n'
+                        'Оплаченные изображения по возможности также '
+                        'хранятся в закрытом кэше сервера.\n',
+                    )
+                raise PartialPosterFailure(
+                    f'/files/{job_id}/ai_failed_generation.zip',exc
+                ) from exc
+        except PartialPosterFailure:
+            raise
+        except (OSError, ValueError, RuntimeError):
+            # A full disk can prevent even the recovery ZIP from being saved.
+            # Retain the independent paid cache and report the original error.
+            pass
         shutil.rmtree(folder,ignore_errors=True)
         raise
 
@@ -1006,6 +1055,13 @@ def _run_generation_task(task_id: str):
         if isinstance(exc,HTTPException):
             code=int(exc.status_code)
             detail=str(exc.detail)
+        elif isinstance(exc,PartialPosterFailure):
+            code=502
+            detail=(
+                'Сборка постеров прервалась ('+exc.cause_type+'). '
+                'Созданные материалы сохранены в диагностическом ZIP. '
+                'Оплаченные этапы не запускаются повторно автоматически.'
+            )
         elif isinstance(exc,QuotaExceeded):
             code,detail=429,str(exc)
         elif isinstance(exc,QuotaStoreUnavailable):
@@ -1030,7 +1086,9 @@ def _run_generation_task(task_id: str):
         try:
             ai_job_queue.set_status(
                 folder,'failed',error='Этап: '+last_stage+'. '+detail,
-                http_status=code)
+                http_status=code,
+                recovery_zip=(exc.recovery_zip if isinstance(
+                    exc,PartialPosterFailure) else None))
         except OSError:
             RENDER_LOG.exception(
                 'PromoEditor AI task %s failed writing status',task_id)
@@ -1255,6 +1313,9 @@ async def _generate_from_form(form, progress=None):
         raise HTTPException(status_code=429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from exc
+    except PartialPosterFailure:
+        # The async runner publishes the private recovery URL in task status.
+        raise
     except ValueError as exc:
         raise HTTPException(400,detail=str(exc))
     except Exception as exc:
