@@ -246,10 +246,17 @@ def generate_templates(brief: dict, rebranded: bytes, *,
 
 
 _OPTIONAL_COPY_ROLES = (
-    "specs", "claims", "category", "slogan", "roi",
-    "benefits", "dimensions", "proofs",
+    "claims", "roi", "proofs", "benefits", "slogan", "category",
+    "specs", "dimensions",
 )
 _MANDATORY_COPY_ROLES = ("brand", "model", "price", "phones")
+# The earlier algorithm silently deleted ALL technical facts on a space
+# failure and still returned a completed poster. Preserve at least one of
+# each approved technical role, preferring factual data over marketing copy.
+_TECHNICAL_COPY_ROLES = ("specs", "dimensions")
+_LOW_PRIORITY_COPY_ROLES = (
+    "claims", "roi", "proofs", "benefits", "slogan", "category",
+)
 
 
 def _fit_layout_with_adaptive_copy(
@@ -257,11 +264,11 @@ def _fit_layout_with_adaptive_copy(
 ) -> tuple[dict, dict]:
     """Fit only actual approved ad copy into the already-paid AI artwork.
 
-    A background/vision response cannot promise that three specs fit beside
-    the photographed vehicle. On a role-specific space failure, remove ONLY
-    that role's last optional line, retry locally, and never call OpenAI.
-    Text is never abbreviated or reworded; all original facts remain in
-    verified_copy.json. Mandatory branding, price and contact text survive.
+    A background/vision response cannot guarantee that all candidate copy
+    fits beside the vehicle. Reduce low-priority advertising copy first and
+    retain at least one specification and one dimension when provided.
+    Never return a successful poster with all technical information deleted.
+    No paid API calls are made for this local reconciliation.
     """
     selected = {role:list(values) for role,values in copy.items()}
     maximum = 1 + sum(len(selected.get(role) or [])
@@ -288,18 +295,33 @@ def _fit_layout_with_adaptive_copy(
                     "изменены; оплаченные изображения сохранены."
                 ) from exc
             if requested in _OPTIONAL_COPY_ROLES and selected.get(requested):
-                selected[requested] = selected[requested][:-1]
-                continue
-            # If the requested role was already empty, or is an auxiliary
-            # zone, shrink the next available optional block cumulatively.
-            fallback = next((role for role in _OPTIONAL_COPY_ROLES
-                             if selected.get(role)),None)
+                # Never silently remove the LAST key specification or size.
+                minimum = (1 if requested in _TECHNICAL_COPY_ROLES else 0)
+                if len(selected[requested]) > minimum:
+                    selected[requested].pop()
+                    continue
+            # Reclaim decorative copy before sacrificing the last approved
+            # technical value. This repairs existing paid layouts locally.
+            fallback = next(
+                (role for role in _LOW_PRIORITY_COPY_ROLES
+                 if selected.get(role)),None,
+            )
             if fallback is not None:
-                selected[fallback] = selected[fallback][:-1]
+                selected[fallback].pop()
+                continue
+            # A large spec block can still shrink to one line while the
+            # mandatory measurement remains, and vice versa.
+            fallback = next(
+                (role for role in _TECHNICAL_COPY_ROLES
+                 if len(selected.get(role) or []) > 1),None,
+            )
+            if fallback is not None:
+                selected[fallback].pop()
                 continue
             raise ValueError(
-                "AI-макет не вмещает даже минимальный обязательный текст. "
-                "Он не обрезан; оплаченные изображения сохранены."
+                "AI-макет не вмещает обязательные технические характеристики "
+                "и размеры вместе с ценой и контактами. ТТХ НЕ удалены; "
+                "оплаченные AI-изображения сохранены для исправления макета."
             ) from exc
     raise ValueError(
         "Не удалось согласовать рекламный текст с макетом без нарушения "
