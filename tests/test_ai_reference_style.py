@@ -186,3 +186,97 @@ def test_old_dark_paid_art_cannot_force_black_inset_into_bright_reference():
     assert "rebranded-customer-product" in photos
     assert "source-vehicle-detail" in photos
     assert "secondary-photo-or-paid-ai-scene" not in photos
+
+
+
+def test_actual_paid_zip_benefit_sentences_fit_with_wider_server_font(monkeypatch):
+    """Regression for 23 Nov VPS failure: user's EXACT six benefit strings.
+
+    The first reference renderer passed on CI's condensed font metrics but
+    failed during real VPS recompose when six 62-character sentences were
+    squeezed into six ~120px-wide columns. Force the wider full Sans font to
+    expose renderer regressions even when CI has the condensed face.
+    """
+    from PIL import ImageFont
+    from app import ai_exact_copy_render as exact
+
+    source=_brief()["benefits"]
+    assert len(source)==6
+    assert len(source[0])==62
+    assert len(source[-1])==62
+    wide_regular="/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    wide_bold="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    monkeypatch.setattr(
+        exact,"_font_for",
+        lambda _family,size,bold: ImageFont.truetype(
+            wide_bold if bold else wide_regular,size,
+        ),
+    )
+    for fmt in ("4x3","9x16"):
+        root,svg=_root(fmt)
+        printed=[
+            n.get("data-exact-copy") for n in root.iter()
+            if n.get("data-verified-role")=="benefits"
+        ]
+        assert printed==source
+        # Exact value is in editable SVG text, not raster or metadata alone.
+        assert svg.startswith(b"<?xml")
+
+
+def test_full_customer_reference_paid_zip_recomposes_offline(tmp_path,monkeypatch):
+    """Rebuild BOTH posters from paid-art ZIP fixture, with all 17 facts.
+
+    No OpenAI, no user data uploaded to CI: synthetic image bytes and
+    customer-approved exact strings from the existing fixture.
+    """
+    import json
+    import zipfile
+    from scripts.recompose_paid_zip import recompose
+    from app import ai_exact_copy_template
+
+    monkeypatch.setattr(
+        ai_exact_copy_template,"client",
+        lambda: pytest.fail("No paid OpenAI calls in local ZIP recompose"),
+    )
+    source=tmp_path/"already_paid.zip"
+    result=tmp_path/"customer_review.zip"
+    expected=_brief()
+    with zipfile.ZipFile(source,"w",zipfile.ZIP_STORED) as archive:
+        archive.writestr(
+            "brief.json",json.dumps(expected,ensure_ascii=False))
+        archive.writestr(
+            "typography_layout.json",
+            json.dumps({
+                "4x3":{"product":{"x":55,"y":195,"w":650,"h":540}},
+                "9x16":{"product":{"x":40,"y":270,"w":760,"h":360}},
+            }),
+        )
+        archive.writestr(
+            "rebranded_product.png",_img((950,520),"#EEF0F1"))
+        archive.writestr(
+            "originals/drawing_preview.jpg",_img((920,600),"white"))
+        archive.writestr(
+            "originals/customer_logo.jpg",_img((450,370),"white"))
+        for fmt in FORMATS:
+            archive.writestr(
+                "ai_template_"+fmt+".png",_img(FORMATS[fmt],"#EBEDF1"))
+    recompose(source,result)
+    assert source.is_file() and result.is_file()
+    with zipfile.ZipFile(result) as archive:
+        assert archive.testzip() is None
+        assert len(archive.namelist())>=12
+        for fmt in FORMATS:
+            root=ET.fromstring(archive.read("corel_"+fmt+".svg"))
+            data=[
+                n.get("data-exact-copy") for n in root.iter()
+                if n.get("data-verified-role")=="benefits"
+            ]
+            assert data==expected["benefits"]
+            assert sum(n.get("data-verified-role")=="specs"
+                       for n in root.iter())==10
+            assert sum(n.get("data-verified-role")=="dimensions"
+                       for n in root.iter())==7
+            assert sum(n.get("data-source")=="original-customer-drawing"
+                       for n in root.iter())==1
+            assert archive.read("ai_poster_"+fmt+".png").startswith(
+                bytes((137,80,78,71)))
