@@ -25,6 +25,7 @@ from app.ai_exact_copy_render import (
     DEFAULT_STYLE, FORMATS, validate_style,
 )
 from app.ai_integrated_render import integrated_copy, render_integrated_svg
+from app.ai_reference_render import reference_poster_copy, render_reference_svg
 from app.ai_exact_copy_template import _rasterize_in_worker
 
 _REQUIRED = (
@@ -39,6 +40,10 @@ _REPLACE = {
 }
 _DRAWING = tuple("originals/drawing_preview"+ext
                  for ext in (".png",".jpg",".jpeg",".webp"))
+_LOGO = tuple("originals/customer_logo"+ext
+              for ext in (".png",".jpg",".jpeg",".webp"))
+_SECONDARY = tuple("originals/secondary_photo"+ext
+                   for ext in (".png",".jpg",".jpeg",".webp"))
 
 
 def _safe_read(z: zipfile.ZipFile, name: str, limit: int) -> bytes:
@@ -84,7 +89,16 @@ def recompose(paid_zip: Path, destination_zip: Path) -> None:
                     or "\\" in name):
                 raise ValueError("Небезопасное имя файла в ZIP.")
         brief,layout,styles,drawing=_input_facts(original)
-        copy=integrated_copy(brief,drawing=bool(drawing))
+        reference_style=str(brief.get("style") or "")=="reference_pro"
+        logo_name=next((n for n in _LOGO if n in original.namelist()),None)
+        detail_name=next((n for n in _SECONDARY if n in original.namelist()),None)
+        logo=_safe_read(original,logo_name,25_000_000) if logo_name else None
+        detail=_safe_read(original,detail_name,25_000_000) if detail_name else None
+        hero=(_safe_read(original,"rebranded_product.png",30_000_000)
+              if "rebranded_product.png" in original.namelist() else None)
+        copy=(reference_poster_copy(brief,drawing=bool(drawing))
+              if reference_style else integrated_copy(
+                  brief,drawing=bool(drawing)))
         # Use ONLY the source artwork the customer already paid for.
         # This script never imports or creates an OpenAI client.
         with tempfile.TemporaryDirectory(prefix="promo-recompose-") as temp:
@@ -94,9 +108,15 @@ def recompose(paid_zip: Path, destination_zip: Path) -> None:
                     original,"ai_template_"+fmt+".png",30_000_000)
                 with Image.open(io.BytesIO(art_raw)) as art:
                     art.load()
-                    svg=render_integrated_svg(
-                        brief,fmt,art,layout[fmt],styles[fmt],
-                        drawing=drawing,copy_override=copy)
+                    if reference_style:
+                        svg=render_reference_svg(
+                            brief,fmt,art,layout[fmt],styles[fmt],
+                            hero=hero,detail=detail,logo=logo,drawing=drawing,
+                            copy_override=copy)
+                    else:
+                        svg=render_integrated_svg(
+                            brief,fmt,art,layout[fmt],styles[fmt],
+                            drawing=drawing,copy_override=copy)
                 svg_path=work/("corel_"+fmt+".svg")
                 svg_path.write_bytes(svg)
                 _rasterize_in_worker(
