@@ -792,7 +792,7 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
         render_options={'logo':logo_raw,'drawing':drawing_raw,
                         'reference':reference_raw,'model':model,'quality':quality,
                         'output_dir':folder}
-        if detail_raw:
+        if detail_raw and str(brief.get('style') or '')=='reference_pro':
             render_options['detail']=detail_raw
         if progress is not None:
             render_options['progress']=progress
@@ -1376,7 +1376,10 @@ async def _generate_from_form(form, progress=None):
                 reference_example_raw,
                 str(form.get('model','gpt-image-2.5-flare')),
                 str(form.get('quality','medium')),
-                selected_source=selected_source,detail_raw=detail_raw,
+                selected_source=selected_source,
+                **({'detail_raw':detail_raw}
+                   if detail_raw and brief.get('style')=='reference_pro'
+                   else {}),
                 **({'progress':progress} if progress else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references
