@@ -925,14 +925,14 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
                         'Генерация НЕ завершена. Промежуточные материалы '
                         'не предназначены для публикации.\n'
                         'Сохранены только успешно выполненные этапы.\n'
-                        'Тип ошибки: '+type(exc).__name__+'.\\n'
-                        + ('Безопасная диагностика: '+exc.public_reason+'\\n'
+                        'Тип ошибки: '+type(exc).__name__+'.\n'
+                        + ('Безопасная диагностика: '+exc.public_reason+'\n'
                            if isinstance(exc,OpenAIImageConnectionFailure)
                            else '') +
                         'Оплаченные изображения по возможности также '
-                        'хранятся в закрытом кэше сервера.\\n'
+                        'хранятся в закрытом кэше сервера.\n'
                         'Если запрос был принят OpenAI, списание за него '
-                        'может произойти даже без полученного ответа.\\n',
+                        'может произойти даже без полученного ответа.\n',
                     )
                 raise PartialPosterFailure(
                     f'/files/{job_id}/ai_failed_generation.zip',exc
