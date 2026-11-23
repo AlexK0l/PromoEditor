@@ -266,7 +266,8 @@ def _paint_landscape(scene: Scene, data: dict, drawing: bytes | None,
 
 
 def _paint_portrait(scene: Scene, data: dict, drawing: bytes | None,
-                    family: str, palette: dict, panel_y: int) -> None:
+                    family: str, palette: dict, panel_y: int,
+                    product_bottom: int) -> None:
     """Independent portrait hierarchy; never reframe the 4:3 composition."""
     accent=palette["accent"];ink=palette["ink"]
     scene.rect("decor",0,0,1080,325,_DARK,opacity=.93,
@@ -285,7 +286,10 @@ def _paint_portrait(scene: Scene, data: dict, drawing: bytes | None,
                   x=x,y=y,w=w,h=h,size=size,minimum=minimum,
                   color=color,family=family,bold=bold)
     # Hide any AI-generated placeholder icon strip without covering wheels.
-    slate_y=max(1218,panel_y-60)
+    # Do not paint the technical backdrop over low wheel/chassis pixels.
+    # The old first draft used panel_y-60, which can move ABOVE the actual
+    # product bottom when a trailer sits lower than the example photo.
+    slate_y=max(1218,product_bottom+14)
     scene.rect("decor",0,slate_y,1080,1920-slate_y,_DARK,
                ident="portrait-technical-stage")
     scene.rect("decor",0,slate_y,1080,5,accent,
@@ -373,5 +377,7 @@ def render_integrated_svg(
     if fmt=="4x3":
         _paint_landscape(scene,copy,drawing,family,palette,panel_y)
     else:
-        _paint_portrait(scene,copy,drawing,family,palette,panel_y)
+        _,product_bottom=_product_edges(fmt,slots["product"])
+        _paint_portrait(
+            scene,copy,drawing,family,palette,panel_y,product_bottom)
     return scene.export()
