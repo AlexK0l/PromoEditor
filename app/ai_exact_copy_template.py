@@ -28,7 +28,9 @@ from .ai_exact_copy_render import (
 )
 from .ai_slot_repair import repair_ai_slots
 from .ai_transport import OpenAIImageConnectionFailure, connection_report
-from .ai_integrated_render import render_integrated_svg, _safe_overlay_zones
+from .ai_integrated_render import (
+    integrated_copy, render_integrated_svg, _safe_overlay_zones,
+)
 from .ai_poster_service import _input_png, preserve_artwork_without_crop
 from .ai_quota import check_paid_capacity
 from .editable_export import rasterize_svg
@@ -607,7 +609,8 @@ def _safe_final_typography(layout: dict, copy: dict, styles: dict) -> dict:
 
 
 
-def _integrated_layout_copy(raw_layout: dict, brief: dict) -> tuple[dict,dict]:
+def _integrated_layout_copy(raw_layout: dict, brief: dict, *,
+                            has_drawing: bool = False) -> tuple[dict,dict]:
     """Use only the paid AI product envelope; design real format-specific ad zones.
 
     Arbitrary AI rectangles previously removed exact facts and produced
@@ -620,7 +623,7 @@ def _integrated_layout_copy(raw_layout: dict, brief: dict) -> tuple[dict,dict]:
         if not isinstance(plan,dict):
             raise ValueError("AI вернул некорректную композицию "+fmt)
         _safe_overlay_zones(fmt,plan.get("product"))
-    return raw_layout,poster_copy(brief)
+    return raw_layout,integrated_copy(brief,drawing=has_drawing)
 
 
 def _integrated_typography(styles: dict) -> dict:
@@ -685,7 +688,8 @@ def generate_exact_typography_posters(
             raw_layout = layout_raw if layout_raw is not None else layout
         if progress:
             progress('Подбираем читаемый объём рекламного текста без новых AI-запросов')
-        layout,copy = _integrated_layout_copy(raw_layout,brief)
+        layout,copy = _integrated_layout_copy(
+            raw_layout,brief,has_drawing=bool(drawing))
         _save_json(cache,"layout.json",layout)
         _save_json(cache,"poster_copy.json",copy)
         if styles is None:
@@ -885,7 +889,8 @@ def _generate_file_backed_posters(
             raw_layout = layout_raw if layout_raw is not None else layout
         if progress:
             progress("Сокращаем необязательные характеристики, чтобы текст читался")
-        layout,copy = _integrated_layout_copy(raw_layout,brief)
+        layout,copy = _integrated_layout_copy(
+            raw_layout,brief,has_drawing=bool(drawing))
         _save_json(cache,"layout.json",layout)
         _save_json(cache,"poster_copy.json",copy)
         if styles is None:
