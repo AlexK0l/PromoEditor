@@ -582,3 +582,24 @@ def test_corrupt_cached_typography_is_locally_repaired():
     repaired = workflow._safe_final_typography(
         layout, copy, {"4x3": {"font_family": "Unknown"}})
     assert repaired == {fmt: dict(DEFAULT_STYLE) for fmt in FORMATS}
+
+
+def test_other_approved_benefits_are_not_lost_when_claims_are_blank():
+    brief=_brief()
+    brief["hero_claims"]=[]
+    brief["benefits"]=["Гарантия 24 месяца","Усиленная рама"]
+    copy=poster_copy(brief)
+    assert copy["claims"]==["Гарантия 24 месяца","Усиленная рама"]
+    assert copy["price"]==["6 527 000 ₽"]
+    assert copy["phones"]==["+7 (951) 704-30-42"]
+    brief["hero_claims"]=["Под заказ за 14 дней"]
+    copy=poster_copy(brief)
+    assert copy["claims"]==["Под заказ за 14 дней","Гарантия 24 месяца"]
+
+
+def test_discarded_optional_benefits_stay_in_verified_copy():
+    brief=_brief()
+    brief["benefits"]=["Сервисное обслуживание", "Гарантия",
+                       "Дополнительный длинный рекламный тезис"]
+    assert len(poster_copy(brief)["claims"])==2
+    assert len(verified_copy(brief)["benefits"])==3
