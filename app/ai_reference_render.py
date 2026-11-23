@@ -367,10 +367,10 @@ def _body_wide(scene: Scene, brief: dict, data: dict,
     _kv_rows(scene,"specs",spec,29,454,405,337,
              label_share=.47,font=17,min_font=12)
     if drawing:
-        _photo(scene,drawing,466,456,420,198,
+        _photo(scene,drawing,466,456,420,178,
                ident="ref-original-drawing-wide",
                provenance="original-customer-drawing")
-    _kv_rows(scene,"dimensions",dims,463,664,421,126,
+    _kv_rows(scene,"dimensions",dims,463,640,421,157,
              label_share=.62,font=15,min_font=12)
     _proof(scene,data["proofs"][:4],921,455,488,217,font=18)
 
