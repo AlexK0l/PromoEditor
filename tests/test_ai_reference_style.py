@@ -167,3 +167,22 @@ def test_poster_fails_closed_instead_of_truncating_excess_specs():
     b["specs"].append(["Extra approved line","Real user text"])
     with pytest.raises(ValueError,match="10 ТТХ"):
         reference_poster_copy(b,drawing=True)
+
+
+def test_old_dark_paid_art_cannot_force_black_inset_into_bright_reference():
+    d=_brief()
+    with Image.new("RGB",FORMATS["4x3"],"#11151B") as old_paid:
+        svg=render_reference_svg(
+            d,"4x3",old_paid,{},DEFAULT_STYLE,
+            hero=_img((1200,800),"#F1F1F0"),detail=None,
+            logo=None,drawing=_img((900,540),"white"),
+            copy_override=reference_poster_copy(d,drawing=True),
+        )
+    root=ET.fromstring(svg)
+    photos=[
+        n.get("data-source") for n in root.iter()
+        if n.get("data-source")
+    ]
+    assert "rebranded-customer-product" in photos
+    assert "source-vehicle-detail" in photos
+    assert "secondary-photo-or-paid-ai-scene" not in photos
