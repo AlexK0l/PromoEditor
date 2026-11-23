@@ -28,6 +28,7 @@ from .ai_exact_copy_render import (
 )
 from .ai_slot_repair import repair_ai_slots
 from .ai_transport import OpenAIImageConnectionFailure, connection_report
+from .ai_integrated_render import render_integrated_svg, _safe_overlay_zones
 from .ai_poster_service import _input_png, preserve_artwork_without_crop
 from .ai_quota import check_paid_capacity
 from .editable_export import rasterize_svg
@@ -590,6 +591,34 @@ def _safe_final_typography(layout: dict, copy: dict, styles: dict) -> dict:
     )
 
 
+
+def _integrated_layout_copy(raw_layout: dict, brief: dict) -> tuple[dict,dict]:
+    """Use only the paid AI product envelope; design real format-specific ad zones.
+
+    Arbitrary AI rectangles previously removed exact facts and produced
+    mismatched black boxes. The editorial renderer now owns exact placement
+    of key facts, price, contacts and uploaded drawing IN the finished ads.
+    """
+    if not isinstance(raw_layout,dict) or set(raw_layout) != set(FORMATS):
+        raise ValueError("Нет отдельных областей техники для 4:3 и 9:16.")
+    for fmt, plan in raw_layout.items():
+        if not isinstance(plan,dict):
+            raise ValueError("AI вернул некорректную композицию "+fmt)
+        _safe_overlay_zones(fmt,plan.get("product"))
+    return raw_layout,poster_copy(brief)
+
+
+def _integrated_typography(styles: dict) -> dict:
+    """Retain the AI font choice; verify ink/accent against real surfaces later."""
+    try:
+        checked=validate_style(styles)
+        if checked["4x3"]["font_family"] != checked["9x16"]["font_family"]:
+            raise ValueError("Несогласованные шрифты")
+        return checked
+    except (TypeError,ValueError,KeyError):
+        return {fmt:dict(DEFAULT_STYLE) for fmt in FORMATS}
+
+
 def _preview_image(svg: bytes, fmt: str) -> Image.Image:
     """Low-resolution preview for the final paid typography vision pass."""
     import cairosvg
@@ -641,8 +670,7 @@ def generate_exact_typography_posters(
             raw_layout = layout_raw if layout_raw is not None else layout
         if progress:
             progress('Подбираем читаемый объём рекламного текста без новых AI-запросов')
-        layout,copy = _fit_layout_with_adaptive_copy(
-            raw_layout,base_copy,protect_product=False)
+        layout,copy = _integrated_layout_copy(raw_layout,brief)
         _save_json(cache,"layout.json",layout)
         _save_json(cache,"poster_copy.json",copy)
         if styles is None:
@@ -651,23 +679,23 @@ def generate_exact_typography_posters(
             # inspects these real previews and chooses final typography.
             previews = {}
             for fmt in FORMATS:
-                provisional = render_exact_svg(
+                provisional = render_integrated_svg(
                     brief,fmt,art[fmt],layout[fmt],DEFAULT_STYLE,
-                    logo=None,drawing=None,copy_override=copy)
+                    drawing=drawing,copy_override=copy)
                 previews[fmt] = _preview_image(provisional,fmt)
             if progress: progress('AI подбирает общий стиль шрифта и цветов без изменения текста')
             styles = _finish_typography(previews)
             _save_json(cache,"typography.json",styles)
-        styles = _safe_final_typography(layout, copy, styles)
+        styles = _integrated_typography(styles)
         _save_json(cache, "typography.json", styles)
         result = {"svg":{},"png":{},"jpeg":{},"artwork":art,
                   "layout":layout,"typography":styles,
                   "verified_copy":verified_copy(brief),"poster_copy":copy,"cache_dir":cache}
         for fmt in FORMATS:
             if progress: progress('Выполняем финальный рендер '+fmt+' и экспорт SVG/PNG/JPEG')
-            svg = render_exact_svg(
+            svg = render_integrated_svg(
                 brief,fmt,art[fmt],layout[fmt],styles[fmt],
-                logo=None,drawing=None,copy_override=copy)
+                drawing=drawing,copy_override=copy)
             png,jpeg = rasterize_svg(svg)
             result["svg"][fmt] = svg
             result["png"][fmt] = png
@@ -842,8 +870,7 @@ def _generate_file_backed_posters(
             raw_layout = layout_raw if layout_raw is not None else layout
         if progress:
             progress("Сокращаем необязательные характеристики, чтобы текст читался")
-        layout,copy = _fit_layout_with_adaptive_copy(
-            raw_layout,base_copy,protect_product=True)
+        layout,copy = _integrated_layout_copy(raw_layout,brief)
         _save_json(cache,"layout.json",layout)
         _save_json(cache,"poster_copy.json",copy)
         if styles is None:
@@ -852,9 +879,9 @@ def _generate_file_backed_posters(
             preview_images={}
             for fmt in FORMATS:
                 with Image.open(template_files[fmt]) as art:
-                    provisional = render_exact_svg(
+                    provisional = render_integrated_svg(
                         brief,fmt,art,layout[fmt],DEFAULT_STYLE,
-                        logo=None,drawing=None,copy_override=copy)
+                        drawing=drawing,copy_override=copy)
                 try:
                     preview_images[fmt] = _preview_image(provisional,fmt)
                 finally:
@@ -871,7 +898,7 @@ def _generate_file_backed_posters(
             _save_json(cache,"typography.json",styles)
         else:
             styles = validate_style(styles)
-        styles = _safe_final_typography(layout, copy, styles)
+        styles = _integrated_typography(styles)
         _save_json(cache, "typography.json", styles)
         files={"svg":{},"png":{},"jpeg":{}}
         for fmt in FORMATS:
@@ -880,9 +907,9 @@ def _generate_file_backed_posters(
                          " в отдельном процессе с ограниченной памятью")
             path = output_dir/("corel_"+fmt+".svg")
             with Image.open(template_files[fmt]) as art:
-                svg = render_exact_svg(
+                svg = render_integrated_svg(
                     brief,fmt,art,layout[fmt],styles[fmt],
-                    logo=None,drawing=None,copy_override=copy)
+                    drawing=drawing,copy_override=copy)
             path.write_bytes(svg)
             del svg
             gc.collect()
