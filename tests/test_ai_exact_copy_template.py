@@ -532,3 +532,53 @@ def test_main_zip_contains_exact_text_svgs_blank_ai_art_and_originals(
         assert "verified_copy.json" in names
         assert "REVIEW_BEFORE_PUBLICATION.txt" in names
     assert selected==_png((500,310),"gold")
+
+
+def test_final_ai_font_cannot_break_paid_exact_copy_export():
+    """Reproduce a font wider than the provisional condensed SVG preview."""
+    layout = _layouts()
+    layout["4x3"]["model"]["w"] = 220
+    layout["9x16"]["model"]["w"] = 290
+    copy = poster_copy(_brief())
+    ai = {fmt: dict(DEFAULT_STYLE, font_family="DejaVu Sans",
+                    scale_percent=112, accent="#12AABB")
+          for fmt in FORMATS}
+    assert workflow._typography_fits(layout, copy, {
+        fmt: dict(DEFAULT_STYLE) for fmt in FORMATS
+    })
+    assert not workflow._typography_fits(layout, copy, ai)
+    corrected = workflow._safe_final_typography(layout, copy, ai)
+    assert workflow._typography_fits(layout, copy, corrected)
+    assert corrected["4x3"]["font_family"] == "DejaVu Sans Condensed"
+    assert corrected["9x16"]["font_family"] == "DejaVu Sans Condensed"
+    assert corrected["4x3"]["accent"] == "#12AABB"
+    for fmt in FORMATS:
+        with Image.new("RGB", FORMATS[fmt], "white") as art:
+            svg = render_exact_svg(_brief(), fmt, art, layout[fmt],
+                                   corrected[fmt], copy_override=copy)
+            assert b'data-verified-role="model"' in svg
+
+
+def test_invalid_optional_typography_response_keeps_paid_artwork(monkeypatch):
+    """An invalid paid styling JSON must not defeat exact text export."""
+    class Responses:
+        def create(self, **kwargs):
+            return type("Result", (), {"output_text": '{"styles": {}}'})()
+    monkeypatch.setattr(workflow, "client",
+                        lambda: type("API", (), {"responses": Responses()})())
+    art = {fmt: Image.new("RGB", (320, 320), "white") for fmt in FORMATS}
+    try:
+        assert workflow._finish_typography(art) == {
+            fmt: dict(DEFAULT_STYLE) for fmt in FORMATS
+        }
+    finally:
+        for image in art.values():
+            image.close()
+
+
+def test_corrupt_cached_typography_is_locally_repaired():
+    layout = _layouts()
+    copy = poster_copy(_brief())
+    repaired = workflow._safe_final_typography(
+        layout, copy, {"4x3": {"font_family": "Unknown"}})
+    assert repaired == {fmt: dict(DEFAULT_STYLE) for fmt in FORMATS}
