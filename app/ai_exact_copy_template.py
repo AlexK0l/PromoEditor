@@ -31,6 +31,7 @@ from .ai_transport import OpenAIImageConnectionFailure, connection_report
 from .ai_integrated_render import (
     integrated_copy, render_integrated_svg, _safe_overlay_zones,
 )
+from .ai_reference_render import render_reference_svg, reference_poster_copy
 from .ai_poster_service import _input_png, preserve_artwork_without_crop
 from .ai_quota import check_paid_capacity
 from .editable_export import rasterize_svg
@@ -646,18 +647,44 @@ def _preview_image(svg: bytes, fmt: str) -> Image.Image:
         return image.convert("RGB")
 
 
+
+
+def _is_reference_pro(brief: dict) -> bool:
+    return str(brief.get("style") or "").strip() == "reference_pro"
+
+
+def _reference_layout() -> dict:
+    """Fixed content zones from customer's examples, no paid Vision required."""
+    return {
+        "4x3": {"product":{"x":15,"y":140,"w":700,"h":260}},
+        "9x16":{"product":{"x":16,"y":95,"w":640,"h":270}},
+    }
+
+
+def _reference_render(brief: dict, fmt: str, artwork: Image.Image,
+                      layout: dict, styling: dict, *,
+                      hero: bytes, detail: bytes | None,
+                      logo: bytes | None, drawing: bytes | None,
+                      copy: dict) -> bytes:
+    return render_reference_svg(
+        brief,fmt,artwork,layout,styling,hero=hero,
+        detail=detail,logo=logo,drawing=drawing,copy_override=copy,
+    )
+
+
 def generate_exact_typography_posters(
     brief: dict, rebranded: bytes, *, logo: bytes | None,
     drawing: bytes | None, reference: bytes | None,
     model: str, quality: str, progress=None,
     output_dir: Path | None = None,
+    detail: bytes | None = None,
 ) -> dict:
     """Return render data without deleting any paid cache until ZIP succeeds."""
     if output_dir is not None:
         return _generate_file_backed_posters(
             brief,rebranded,logo=logo,drawing=drawing,
             reference=reference,model=model,quality=quality,
-            progress=progress,output_dir=Path(output_dir))
+            progress=progress,output_dir=Path(output_dir),detail=detail)
     if model not in IMAGE_MODELS or quality not in IMAGE_QUALITIES:
         raise ValueError("Недопустимая модель или качество OpenAI.")
     if not rebranded:
@@ -792,6 +819,7 @@ def _generate_file_backed_posters(
     brief: dict, rebranded: bytes, *, logo: bytes | None,
     drawing: bytes | None, reference: bytes | None,
     model: str, quality: str, progress, output_dir: Path,
+    detail: bytes | None = None,
 ) -> dict:
     """Low-RAM production path; never retain both print posters in memory.
 
