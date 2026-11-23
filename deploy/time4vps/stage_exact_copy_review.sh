@@ -86,14 +86,14 @@ if [[ "$MODE" == "paid" ]]; then
     --connect-timeout 10 --max-time 20 --output /dev/null \
     --write-out '%{http_code}' \
     https://api.openai.com/v1/models || true)"
-  if [[ ! "$api_status" =~ ^[1-4][0-9][0-9]$ ]]; then
+  if [[ "$api_status" != "401" ]]; then
     api_status="$(curl --ipv6 --noproxy '*' --silent --show-error \
       --connect-timeout 10 --max-time 20 --output /dev/null \
       --write-out '%{http_code}' \
       https://api.openai.com/v1/models || true)"
   fi
-  [[ "$api_status" =~ ^[1-4][0-9][0-9]$ ]] ||
-    die "Cannot establish HTTPS to OpenAI API over IPv4 or IPv6. No paid requests made. Run diagnose_openai_network.sh."
+  [[ "$api_status" == "401" ]] ||
+    die "OpenAI unauthenticated models endpoint did not return expected HTTP 401 (last status $api_status). DNS/TLS, proxy or API edge access may be blocked. No paid requests made. Run diagnose_openai_network.sh."
   info "Zero-cost OpenAI HTTPS connectivity preflight passed (HTTP $api_status; no API key sent)."
 fi
 
