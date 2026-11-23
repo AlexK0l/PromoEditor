@@ -148,7 +148,8 @@ def test_staging_preflight_rejects_no_outbound_https_without_using_key():
     script=stage.read_text(encoding="utf-8")
     assert "api.openai.com/v1/models" in script
     assert "No paid requests made" in script
-    assert script.index("Cannot establish HTTPS to OpenAI")<script.index(
+    assert '[[ "$api_status" == "401" ]]' in script
+    assert script.index("did not return expected HTTP 401")<script.index(
         'install -d -o promoeditor -g promoeditor -m 0700 "$STAGE"'
     )
     free=check.read_text(encoding="utf-8")
