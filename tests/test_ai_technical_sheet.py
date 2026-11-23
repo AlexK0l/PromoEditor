@@ -131,3 +131,42 @@ def test_paid_image_creation_uses_uploaded_drawing_as_reference(monkeypatch,tmp_
     assert len(seen)==2
     for image in result.values():
         image.close()
+
+
+def test_repair_using_customer_zip_actual_failed_geometry_never_drops_all_tth():
+    """Real 4:3 / 9:16 geometry extracted from the uploaded failed promo ZIP."""
+    from app.ai_exact_copy_render import ALL_SLOTS, FORMATS, validate_slots
+    empty={"x":20,"y":20,"w":40,"h":30}
+    boxes={
+        "4x3":{
+            "brand":(170,25,180,60),"model":(370,25,230,72),
+            "category":(70,90,290,60),"slogan":(36,880,762,60),
+            "specs":(310,790,260,145),"claims":(20,790,270,145),
+            "price":(610,40,180,110),"phones":(808,788,158,196),
+            "roi":(20,950,760,35),"product":(75,180,700,550),
+        },
+        "9x16":{
+            "brand":(320,20,280,55),"model":(640,20,310,55),
+            "category":(20,20,291,55),"slogan":(20,106,900,60),
+            "specs":(20,600,960,90),"claims":(20,840,390,135),
+            "price":(740,840,220,110),"phones":(430,840,280,135),
+            "roi":(20,735,650,55),"product":(0,195,950,400),
+        },
+    }
+    raw={}
+    for fmt in FORMATS:
+        raw[fmt]={role:dict(empty) for role in ALL_SLOTS}
+        for role,rect in boxes[fmt].items():
+            raw[fmt][role]=dict(zip(("x","y","w","h"),rect))
+    planned=poster_copy(_brief())
+    try:
+        fixed,chosen=pipeline._fit_layout_with_adaptive_copy(
+            raw,planned,protect_product=True)
+    except ValueError as exc:
+        # If old paid art cannot be repacked, a visible failure is better
+        # than a paid SUCCESS with zero technical facts.
+        assert "ТТХ НЕ удалены" in str(exc)
+    else:
+        assert chosen["specs"], "Customer ZIP previously printed zero specs"
+        assert chosen["dimensions"], "Customer ZIP printed zero dimensions"
+        assert validate_slots(fixed,chosen)==fixed
