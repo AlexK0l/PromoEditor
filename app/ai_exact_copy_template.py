@@ -225,6 +225,35 @@ def _art_prompt(brief: dict, fmt: str, reference: bool,
         "drawing, verified technical values, price and contacts can be "
         "placed there without covering the vehicle. "
     )
+    if brief.get("style")=="reference_pro":
+        # The user provided a DETAILED marketing reference in both aspect
+        # ratios: light gray/white field, red trapezoid bands, complete
+        # yellow trailer and wheat-themed industrial product photography.
+        # The local vector pass adds ALL rows, dimensions, economics and
+        # contacts, so leave these readable surfaces free of AI-generated
+        # placeholder text. Portrait must be composed independently.
+        composition = (
+            "REFERENCE-PRO LANDSCAPE 4:3: clean bright white/silver-gray "
+            "commercial agricultural machinery photography, yellow "
+            "semi-trailer full length with wheels, precise real customer "
+            "decals and warm natural lighting. Premium crisp red/black "
+            "diagonal graphic accents, subtle wheat illustration, LARGE "
+            "unobstructed photographic hero and an elegant inset-capable "
+            "area. Leave bottom half visually calm for the separately "
+            "composited full verified engineering drawing, ALL technical "
+            "specifications, benefits, ROI, price and contacts. "
+            if fmt=="4x3" else
+            "REFERENCE-PRO PORTRAIT 9:16: an independently composed upright "
+            "bright industrial photo, NOT a cropped landscape layout. "
+            "Preserve FULL four-axle trailer including all wheels and "
+            "customer branding, warm grain/wheat context, cool WHITE "
+            "metallic background, red/black diagonals and readable "
+            "visual hierarchy. The bottom two thirds will be overlaid "
+            "later with full customer technical info, engineering drawing, "
+            "benefits, real financial scenario and contact ribbon: keep "
+            "these zones clean. NO tiny floating icon cards, NO random "
+            "yellow text and NO fake specifications. "
+        )
     return (
         "GENERATE AN EXCEPTIONALLY BEAUTIFUL, COMPLETE, AWARD-QUALITY "
         "INDUSTRIAL AD POSTER DESIGN **WITHOUT ANY PRINTED TEXT**. "
