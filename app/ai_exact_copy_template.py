@@ -10,11 +10,13 @@ import base64
 import gc
 import io
 import json
+import logging
 import os
 import secrets
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -25,6 +27,7 @@ from .ai_exact_copy_render import (
     validate_style, render_exact_svg,
 )
 from .ai_slot_repair import repair_ai_slots
+from .ai_transport import OpenAIImageConnectionFailure, connection_report
 from .ai_poster_service import _input_png, preserve_artwork_without_crop
 from .ai_quota import check_paid_capacity
 from .editable_export import rasterize_svg
@@ -35,6 +38,49 @@ from .openai_service import (
 
 VERSION = "ai-full-design-verified-text-ai-typography-v2-editorial"
 IMAGE_SIZES = {"4x3": "1536x1024", "9x16": "1024x1536"}
+_LOG = logging.getLogger("uvicorn.error")
+
+
+def _artwork_timeout_seconds() -> int:
+    """Image edits can take longer than the original 180-second SDK timeout.
+
+    Bound any override: do not let a hung paid request occupy the shared
+    1.9-GB VPS indefinitely. Never automatically retry uncertain requests.
+    """
+    try:
+        value = int(os.getenv("PROMO_OPENAI_ART_TIMEOUT_SECONDS", "480"))
+    except (TypeError, ValueError):
+        value = 480
+    return max(180, min(value, 600))
+
+
+def _edit_artwork(api, fmt: str, *, output_dir: Path | None = None,
+                  **options):
+    """One Images call only. Preserve a sanitized failure report when needed."""
+    started = time.monotonic()
+    try:
+        return api.images.edit(
+            timeout=_artwork_timeout_seconds(), **options,
+        )
+    except Exception as exc:
+        report = connection_report(exc, format_name=fmt, started_at=started)
+        if report is None:
+            raise
+        if output_dir is not None:
+            # The recovery ZIP includes this structured explanation, without
+            # raw SDK error messages, source file names or private API data.
+            try:
+                _save_json(Path(output_dir),
+                           "openai_connection_diagnostic.json", report)
+            except OSError:
+                pass
+        _LOG.warning(
+            "PromoEditor image transport %s: %s after %.1fs (%s)",
+            fmt,report["reason_code"],report["elapsed_seconds"],
+            report["sdk_exception"],
+        )
+        raise OpenAIImageConnectionFailure(report) from exc
+
 AI_WARNING = (
     "OpenAI создал художественный фон и ребрендировал выбранную технику. "
     "На двух рекламных постерах алгоритм размещает точные ключевые "
@@ -243,7 +289,8 @@ def generate_templates(brief: dict, rebranded: bytes, *,
                 inputs.append(_input_png(reference,"03_style_reference_only"))
             if api is None:
                 api = client()
-            result = api.images.edit(
+            result = _edit_artwork(
+                api,fmt,
                 model=model,image=inputs,prompt=_art_prompt(
                     brief,fmt,bool(reference),bool(drawing)),
                 size=IMAGE_SIZES[fmt],quality=quality,output_format="png",
@@ -742,7 +789,8 @@ def _generate_file_backed_posters(
                 try:
                     if api is None:
                         api = client()
-                    reply = api.images.edit(
+                    reply = _edit_artwork(
+                        api,fmt,output_dir=output_dir,
                         model=model,image=inputs,
                         prompt=_art_prompt(brief,fmt,bool(reference),bool(drawing)),
                         size=IMAGE_SIZES[fmt],
