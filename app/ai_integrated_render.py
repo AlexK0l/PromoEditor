@@ -56,8 +56,18 @@ def _palette(brief: dict, styling: dict) -> dict:
     is deliberately LIGHT, so the actual contrast must be checked there.
     """
     accent = str(brief.get("accent") or "#C51629").upper()
-    if not HEX.fullmatch(accent) or _contrast(accent, _LIGHT) < 4.5:
+    if not HEX.fullmatch(accent):
         accent = "#C51629"
+    # Keep the EXACT customer color for graphic lines. If it is too bright
+    # to serve as small text on ivory, darken ONLY the caption text tint.
+    caption_accent = accent
+    for _ in range(16):
+        if _contrast(caption_accent, _LIGHT) >= 4.5:
+            break
+        channels = [int(caption_accent[i:i+2],16)
+                    for i in (1,3,5)]
+        caption_accent = "#" + "".join(
+            f"{round(v*.92):02X}" for v in channels)
     proposed_ink = str(styling.get("ink") or "")
     proposed_muted = str(styling.get("muted") or "")
     ink = (proposed_ink.upper()
@@ -68,7 +78,8 @@ def _palette(brief: dict, styling: dict) -> dict:
              if HEX.fullmatch(proposed_muted)
              and _contrast(proposed_muted, _LIGHT) >= 4.5
              else _MUTED)
-    return {"accent":accent, "ink":ink, "muted":muted, "white":_WHITE}
+    return {"accent":accent, "accent_text":caption_accent,
+            "ink":ink, "muted":muted, "white":_WHITE}
 
 
 def _line(scene: Scene, x1: float, y1: float, x2: float, y2: float,
@@ -217,7 +228,7 @@ def _paint_landscape(scene: Scene, data: dict, drawing: bytes | None,
                ident="integrated-tech-accent-wide")
     for x in (363,758,1041):
         _line(scene,x,panel_y+30,x,panel_y+panel_h-26)
-    _label(scene,"ЧЕРТЁЖ · ОРИГИНАЛ",60,panel_y+9,270,accent,family,
+    _label(scene,"ЧЕРТЁЖ · ОРИГИНАЛ",60,panel_y+9,270,palette["accent_text"],family,
            size=16,h=25)
     if drawing:
         scene.rect("decor",56,panel_y+39,275,panel_h-62,"#FFFFFF",
@@ -227,7 +238,7 @@ def _paint_landscape(scene: Scene, data: dict, drawing: bytes | None,
         _type(scene,value=data["slogan"][0],role="slogan",group="claims",
               x=63,y=panel_y+52,w=270,h=panel_h-82,
               size=25,minimum=18,family=family,color=ink,bold=True)
-    _label(scene,"КЛЮЧЕВЫЕ ТТХ",387,panel_y+9,346,accent,family,
+    _label(scene,"КЛЮЧЕВЫЕ ТТХ",387,panel_y+9,346,palette["accent_text"],family,
            size=21,h=31)
     specs=(data.get("specs") or [])[:3]
     spec_step=min(52,int((panel_h-65)/max(3,len(specs) or 1)))
@@ -236,7 +247,7 @@ def _paint_landscape(scene: Scene, data: dict, drawing: bytes | None,
               x=390,y=panel_y+53+i*spec_step,
               w=341,h=spec_step-2,
               size=22,minimum=17,family=family,color=ink)
-    _label(scene,"ГАБАРИТЫ",783,panel_y+9,233,accent,family,
+    _label(scene,"ГАБАРИТЫ",783,panel_y+9,233,palette["accent_text"],family,
            size=21,h=31)
     dims=(data.get("dimensions") or [])[:2]
     dim_step=min(67,int((panel_h-65)/max(2,len(dims) or 1)))
@@ -244,7 +255,7 @@ def _paint_landscape(scene: Scene, data: dict, drawing: bytes | None,
         _type(scene,value=value,role="dimensions",group="dimensions",
               x=787,y=panel_y+53+i*dim_step,w=235,h=dim_step-3,
               size=21,minimum=16,family=family,color=ink)
-    _label(scene,"КОНТАКТЫ",1065,panel_y+9,305,accent,family,
+    _label(scene,"КОНТАКТЫ",1065,panel_y+9,305,palette["accent_text"],family,
            size=21,h=31)
     phones=(data.get("phones") or [])[:2]
     phone_step=min(66,int((panel_h-65)/max(2,len(phones) or 1)))
@@ -285,7 +296,7 @@ def _paint_portrait(scene: Scene, data: dict, drawing: bytes | None,
     scene.rect("decor",42,panel_y,996,7,accent,
                ident="integrated-tech-accent-portrait")
     _line(scene,499,panel_y+44,499,panel_y+card_h-22)
-    _label(scene,"ИНЖЕНЕРНАЯ СХЕМА",74,panel_y+15,390,accent,family,
+    _label(scene,"ИНЖЕНЕРНАЯ СХЕМА",74,panel_y+15,390,palette["accent_text"],family,
            size=19,h=28)
     if drawing:
         scene.rect("decor",66,panel_y+54,410,card_h-93,"#FFFFFF",
@@ -295,7 +306,7 @@ def _paint_portrait(scene: Scene, data: dict, drawing: bytes | None,
         _type(scene,value=data["slogan"][0],role="slogan",group="claims",
               x=75,y=panel_y+79,w=390,h=card_h-124,
               size=26,minimum=19,family=family,color=ink,bold=True)
-    _label(scene,"ТЕХНИКА В ЦИФРАХ",532,panel_y+15,461,accent,family,
+    _label(scene,"ТЕХНИКА В ЦИФРАХ",532,panel_y+15,461,palette["accent_text"],family,
            size=23,h=35)
     specs=(data.get("specs") or [])[:3]
     # Adaptive row rhythm: the AI may extend the vehicle lower in the
