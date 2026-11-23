@@ -20,8 +20,9 @@ from pathlib import Path
 from PIL import Image
 
 from .ai_exact_copy_render import (
-    ALL_SLOTS, DEFAULT_STYLE, FONTS, FORMATS, verified_copy, poster_copy,
-    validate_slots, validate_style, render_exact_svg,
+    ALL_SLOTS, BASE_PX, DEFAULT_STYLE, FONTS, FORMATS, MIN_PX, ROLES,
+    _size_and_lines, verified_copy, poster_copy, validate_slots,
+    validate_style, render_exact_svg,
 )
 from .ai_slot_repair import repair_ai_slots
 from .ai_poster_service import _input_png, preserve_artwork_without_crop
@@ -32,7 +33,7 @@ from .openai_service import (
     _save_visual, _visual_lock, as_image, client,
 )
 
-VERSION = "ai-full-design-verified-text-ai-typography-v2-editorial"
+VERSION = "ai-full-design-verified-text-ai-typography-v3-stable-fit"
 IMAGE_SIZES = {"4x3": "1536x1024", "9x16": "1024x1536"}
 AI_WARNING = (
     "AI нарисовал фон и ребрендированный прицеп. В РЕКЛАМНЫХ постерах "
@@ -435,6 +436,77 @@ def _finish_typography(previews: dict[str,Image.Image]) -> dict:
     return styles
 
 
+
+def _typography_fits(layout: dict, copy: dict, styles: dict) -> bool:
+    """Check the *actual final* font, scale and available SVG text box.
+
+    The layout solver originally measures with DEFAULT_STYLE. A later AI
+    typography suggestion can be wider and cause a paid job to fail while
+    rendering. Use the same font-fit rules as render_exact_svg, before export.
+    """
+    for fmt, (canvas_w, canvas_h) in FORMATS.items():
+        style = styles[fmt]
+        for role in ROLES:
+            values = copy.get(role) or []
+            if not values:
+                continue
+            box = layout[fmt][role]
+            w = box["w"] * canvas_w / 1000
+            h = box["h"] * canvas_h / 1000
+            margin = max(4, min(w, h) * .025)
+            w -= 2 * margin
+            h -= 2 * margin
+            ideal = min(int(BASE_PX[role] * style["scale_percent"] / 100),
+                        int(h * .72))
+            if w <= 0 or h <= 0 or ideal < MIN_PX[role]:
+                return False
+            bold = role in ("brand", "model", "slogan", "price", "claims")
+            try:
+                _size_and_lines(values, w, h, style["font_family"], bold,
+                                ideal, MIN_PX[role])
+            except ValueError:
+                return False
+    return True
+
+
+def _safe_final_typography(layout: dict, copy: dict, styles: dict) -> dict:
+    """Keep AI palette but never sacrifice exact text to an AI font choice.
+
+    Both formats must have one family. Try the requested styles, then reduce
+    scale to the supported minimum; if needed use the narrow Cyrillic font.
+    The geometry solver guarantees the base condensed style fits, so the
+    deterministic final fallback is safe without another paid AI request.
+    """
+    try:
+        styles = validate_style(styles)
+    except (TypeError, ValueError, KeyError):
+        styles = {fmt: dict(DEFAULT_STYLE) for fmt in FORMATS}
+    proposed = {fmt: dict(styles[fmt]) for fmt in FORMATS}
+    if _typography_fits(layout, copy, proposed):
+        return proposed
+    # Try to retain the AI-chosen palette and family; font size only shrinks.
+    for scale in range(min(s["scale_percent"] for s in proposed.values()),
+                       93, -1):
+        candidate = {fmt: dict(proposed[fmt], scale_percent=scale)
+                     for fmt in FORMATS}
+        if _typography_fits(layout, copy, candidate):
+            return candidate
+    candidate = {
+        fmt: dict(proposed[fmt], font_family="DejaVu Sans Condensed",
+                  scale_percent=94)
+        for fmt in FORMATS
+    }
+    if _typography_fits(layout, copy, candidate):
+        return candidate
+    candidate = {fmt: dict(DEFAULT_STYLE) for fmt in FORMATS}
+    if _typography_fits(layout, copy, candidate):
+        return candidate
+    raise ValueError(
+        "Даже базовый проверенный стиль не помещается в AI-макете. "
+        "Оплаченные изображения и расположение текста сохранены."
+    )
+
+
 def _preview_image(svg: bytes, fmt: str) -> Image.Image:
     """Low-resolution preview for the final paid typography vision pass."""
     import cairosvg
@@ -505,6 +577,8 @@ def generate_exact_typography_posters(
             _save_json(cache,"typography.json",styles)
         else:
             styles = validate_style(styles)
+        styles = _safe_final_typography(layout, copy, styles)
+        _save_json(cache, "typography.json", styles)
         result = {"svg":{},"png":{},"jpeg":{},"artwork":art,
                   "layout":layout,"typography":styles,
                   "verified_copy":verified_copy(brief),"poster_copy":copy,"cache_dir":cache}
@@ -700,6 +774,8 @@ def _generate_file_backed_posters(
             _save_json(cache,"typography.json",styles)
         else:
             styles = validate_style(styles)
+        styles = _safe_final_typography(layout, copy, styles)
+        _save_json(cache, "typography.json", styles)
         files={"svg":{},"png":{},"jpeg":{}}
         for fmt in FORMATS:
             if progress:
