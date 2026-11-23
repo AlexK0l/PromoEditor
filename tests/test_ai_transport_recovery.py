@@ -130,6 +130,7 @@ def test_main_recovery_zip_includes_safe_reason_and_saved_rebrand(
     with zipfile.ZipFile(tmp_path/jobid/"ai_failed_generation.zip") as z:
         assert "rebranded_product.png" in z.namelist()
         assert "openai_connection_diagnostic.json" in z.namelist()
+        assert json.loads(z.read("brief.json"))==brief
         report=json.loads(z.read("openai_connection_diagnostic.json"))
         assert report["reason_code"]=="read_timeout"
         readme=z.read("READ_ME_FIRST.txt").decode("utf-8")
