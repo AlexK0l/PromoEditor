@@ -75,7 +75,10 @@ def test_ai_art_prompt_has_no_fake_infographic_widgets_and_no_long_specs():
     prompt=_art_prompt(overloaded_brief(),"9x16",reference=False)
     assert "NO circular icons" in prompt
     assert "NO standalone" not in prompt or "NO" in prompt
-    assert "THREE short technical facts" in prompt or "THREE short" in prompt
+    assert "PORTRAIT-ORIGINAL 9:16 ART DIRECTION" in prompt
+    assert "original source engineering" in prompt
+    assert "a distinct vertical scene" in prompt
+    assert "not a stack of" not in prompt
     assert "55 м³" not in prompt, "AI background cannot typeset customer data"
 
 
