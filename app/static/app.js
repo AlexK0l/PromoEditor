@@ -216,8 +216,9 @@
   function refreshGenerationMode(){
     const ai=isAiPro();
     const hybrid=isHybrid();
-    // Primary AI path: full art without copy -> verified editable SVG
-    // text layers -> typography-only AI vision finish, no AI copy edits.
+    const referencePro=get('style')==='reference_pro';
+    // PRO follows the approved dense 4:3 / 9:16 reference: all factual
+    // rows, genuine drawing, verified ROI, separate portrait design.
     if(hybrid)$('use-openai').checked=true;
     $('use-openai').disabled=hybrid || !apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
@@ -230,7 +231,9 @@
       ?(ai
         ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
         :hybrid
-          ?'AI создаёт два постера без надписей, алгоритм вставляет ваши точные факты, затем AI гармонизирует шрифты. 3 платных Images + 2 текстово-визуальных AI-запроса, до 1 дополнительного при нескольких фото. PNG/JPEG/SVG.'
+          ?(referencePro
+            ?'Эталон PRO: два полноценных постера с ВСЕМИ ТТХ и размерами, оригинальным чертежом, преимуществами и расчётом выгоды. 3 платных Images (включая ребрендинг); платный подбор пустых зон и шрифтов не нужен. Дополнительный запрос возможен только при AI-выборе главного фото.'
+            :'AI создаёт два постера без надписей, алгоритм вставляет точные факты, затем AI гармонизирует шрифты. 3 платных Images + 2 текстово-визуальных запроса, до 1 дополнительного при нескольких фото. PNG/JPEG/SVG.')
           :paidInTemplate
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
@@ -253,7 +256,9 @@
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
         setStatus(apiReady?'AI-постеры · 3 платных вызова OpenAI Images':'AI недоступен',
-          apiReady?'Цельные AI-дизайны с точными редактируемыми текстами; единый шрифт подбирает AI после вставки.':
+          apiReady?(referencePro
+            ?'Эталон PRO: все ТТХ, размеры, чертёж, преимущества и экономика внутри обоих плакатов.'
+            :'Цельные AI-дизайны с точными редактируемыми текстами; единый шрифт подбирает AI после вставки.'):
             'Выберите бесплатный шаблон.');
       }else{
         setStatus(checked('use-openai')?'Шаблон с AI-фоном':'Без AI · бесплатно',
@@ -740,7 +745,7 @@
       $('mode-ai-pro').checked=false;
       $('advanced-settings').open=false;
       $('brief-data-hint').hidden=false;
-      $('brief-data-hint').textContent='Эталон загружен: 10 ТТХ, 7 размеров, 6 527 000 ₽ и телефоны. Полные характеристики доступны прямо ниже основного фото.';
+      $('brief-data-hint').textContent='Эталон PRO: 10 ТТХ, 7 размеров, чертёж, преимущества, расчёт выгоды, цена и контакты — на ОБОИХ плакатах. Фотографии и чертёж загрузите свои.';
       hasDemo=false;
       latest=null;$('download-panel').hidden=true;
       markPromptStale();
