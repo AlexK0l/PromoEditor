@@ -192,7 +192,7 @@ def _claims(scene: Scene, lines: list[str], x: float,y: float,
         _static_bullet(scene,x+40,top+cell/2,10)
         _role_text(scene,"claims","claims",value,
                    x+106,top+5,w-120,cell-13,
-                   size=font,minimum=max(13,font-6),color=_INK,bold=True)
+                   size=font,minimum=max(12,font-10),color=_INK,bold=True)
 
 
 def _proof(scene: Scene, lines: list[str], x: float,y: float,
@@ -319,10 +319,14 @@ def _price_footer(scene: Scene, data: dict, *,
                              (10,price_y+price_h),(0,price_y+price_h-18)],
                   _RED,ident="ref-price-ribbon")
     if data.get("price"):
-        _role_text(scene,"price","price","Цена: "+data["price"][0],
-                   82 if tall else 180,price_y+12,
-                   w-(130 if tall else 220),price_h-20,
-                   53 if tall else 52,33,_WHITE,True)
+        _role_text(scene,"price",None,"Цена:",
+                   70 if tall else 95,price_y+13,
+                   190 if tall else 180,price_h-22,
+                   47 if tall else 45,30,_WHITE,True)
+        _role_text(scene,"price","price",data["price"][0],
+                   245 if tall else 270,price_y+12,
+                   w-(280 if tall else 330),price_h-20,
+                   53 if tall else 52,31,_WHITE,True)
     contact_y=1862 if tall else 1025
     scene.rect("cta_bg",0,contact_y,w,h-contact_y,_RED_DARK,
                ident="ref-phone-footer")
