@@ -67,6 +67,8 @@ def _role_text(scene: Scene, group: str, role: str | None, value: str,
     text=scene.el(group,"text","reference-"+(role or "section"),{
         "x":x,"y":y+fs,"font-family":_FONT,"font-weight":"700" if bold else "400",
         "font-size":fs,"fill":color,"xml:space":"preserve",
+        "font-style":("italic" if role in ("model","category","slogan","price")
+                      or (role is None and group=="heading") else "normal"),
         "data-verified-role":role,"data-exact-copy":value if role else None,
     })
     for i,line in enumerate(lines):
