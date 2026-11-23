@@ -755,7 +755,11 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
     rebrand_dir=rebrand_cache_dir(brief,product_raw,logo_raw,model,quality)
     chosen=cached_rebrand_photo(rebrand_dir)
     if chosen is None:
-        check_paid_capacity('text',2)
+        # reference_pro uses a customer-approved detailed composition and
+        # needs NO paid layout/typography Responses calls. Only actual
+        # required Images (one rebrand + two paid source scenes) are billed.
+        if brief.get('style')!='reference_pro':
+            check_paid_capacity('text',2)
         check_paid_capacity('image',3)
         if progress: progress('Наносим ваш логотип и модель только на выбранный прицеп')
         chosen=rebrand_selected_photo(
