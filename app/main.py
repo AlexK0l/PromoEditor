@@ -739,7 +739,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
 
 def _exact_typography_posters_sync(brief, product_raw, logo_raw,
                                    drawing_raw, reference_raw, model, quality,
-                                   selected_source=None, progress=None):
+                                   selected_source=None, progress=None,
+                                   detail_raw=None):
     """New PRIMARY mode: full AI design -> exact SVG copy -> AI typography.
 
     Rebrand only the selected original trailer. The AI text finisher selects
@@ -791,6 +792,8 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
         render_options={'logo':logo_raw,'drawing':drawing_raw,
                         'reference':reference_raw,'model':model,'quality':quality,
                         'output_dir':folder}
+        if detail_raw:
+            render_options['detail']=detail_raw
         if progress is not None:
             render_options['progress']=progress
         rendered=generate_exact_typography_posters(
@@ -869,7 +872,7 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
                 'лишь гарнитуру и цвет. Перепроверьте визуально макеты.\n')
             for name,raw in (
                 ('product_photo',product_raw),('customer_logo',logo_raw),
-                ('drawing_preview',drawing_raw),
+                ('secondary_photo',detail_raw),('drawing_preview',drawing_raw),
                 ('style_reference',reference_raw),
             ):
                 if not raw:
@@ -1365,7 +1368,7 @@ async def _generate_from_form(form, progress=None):
             # Keep ONLY the AI-selected trailer + optional logo/drawing/style
             # photo in RAM during the long, paid multi-stage pipeline. Other
             # uploaded photos may consume up to 68 MiB unnecessarily.
-            del groups,records,report,detail_raw,background_raw,references
+            del groups,records,report,background_raw,references
             import gc
             gc.collect()
             result=await asyncio.to_thread(
@@ -1373,7 +1376,7 @@ async def _generate_from_form(form, progress=None):
                 reference_example_raw,
                 str(form.get('model','gpt-image-2.5-flare')),
                 str(form.get('quality','medium')),
-                selected_source=selected_source,
+                selected_source=selected_source,detail_raw=detail_raw,
                 **({'progress':progress} if progress else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references
