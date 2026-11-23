@@ -7,12 +7,22 @@
   <script src="/static/theme.js?v=20261113-smooth-1"></script>
   <meta name="description" content="PromoEditor — загрузите фото товара и создайте два рекламных AI-постера в один клик.">
   <title>PromoEditor — новый промо-материал</title>
-  <link rel="stylesheet" href="/static/app.css?v=20261120-ui-polish-1">
+  <link rel="stylesheet" href="/static/app.css?v=20261123-css-health-1">
   <link rel="stylesheet" href="/static/editor.css?v=20261113-v1">
   <link rel="stylesheet" href="/static/theme.css?v=20261113-smooth-1">
   <link rel="stylesheet" href="/static/assets.css?v=20261113-multifiles-1">
+  <style>
+    /* Emergency readable notice if the main /static/app.css did not load. */
+    #stylesheet-error{display:block;max-width:1000px;margin:18px auto;padding:16px 20px;
+      background:#fff7e6;border:2px solid #d97706;border-radius:10px;
+      color:#733b10;font:600 15px/1.55 Arial,sans-serif}
+    .brand-symbol svg{width:25px;height:25px;max-width:25px;max-height:25px}
+  </style>
 </head>
 <body>
+  <div id="stylesheet-error" role="alert">Не удалось применить оформление PromoEditor.
+    Проверьте загрузку /static/app.css и обновите страницу без кэша (Ctrl+Shift+R).
+    AI-генерацию не запускайте, пока интерфейс не отображается нормально.</div>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/" aria-label="PromoEditor — главная">
