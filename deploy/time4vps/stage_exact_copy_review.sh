@@ -137,6 +137,12 @@ install -o root -g root -m 0600 /dev/null "$ENV_FILE"
   printf 'PYTHONDONTWRITEBYTECODE=1\n'
   printf 'PYTHONUNBUFFERED=1\n'
   if [[ "$MODE" == "paid" ]]; then
+    # Keep the already-paid rebranded photo and any completed art for 24h
+    # instead of the 2h default. Support investigations often take longer
+    # than two hours; never force an avoidable duplicate charged edit.
+    # This is the isolated private staging data directory, NOT production.
+    printf 'PROMO_JOB_TTL_SECONDS=86400\\n'
+    printf 'PROMO_OPENAI_ART_TIMEOUT_SECONDS=480\\n'
     # Only OpenAI credentials; no production auth/password/session secret.
     grep -E '^[[:space:]]*(OPENAI_API_KEY|OPENAI_ORG_ID|OPENAI_PROJECT)[[:space:]]*=' "$PROD_ENV" || true
   else
