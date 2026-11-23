@@ -37,7 +37,9 @@ from .product_rebrand_service import (
 from .ai_exact_copy_template import (
     generate_exact_typography_posters, consume_paid_template_cache,
     AI_WARNING as EXACT_COPY_WARNING,
+    _rasterize_in_worker,
 )
+from .ai_technical_sheet import render_technical_sheet
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -89,6 +91,7 @@ FILES={'poster_4x3.png','poster_9x16.png','poster_4x3.jpg','poster_9x16.jpg',
 FILES.update({f'concept_{i}_{fmt}.png' for i in range(3) for fmt in ('4x3','9x16')})
 FILES.update({f'ai_poster_{fmt}.{ext}' for fmt in ('4x3','9x16') for ext in ('png','jpg')})
 FILES.update({'ai_posters.zip','ai_failed_generation.zip','rebranded_product.png',
+              'technical_sheet.svg','technical_sheet.png','technical_sheet.jpg',
               'ai_typographic_posters.zip','typography_layout.json',
               'typography_style.json','verified_copy.json','poster_copy.json','selected_photo.json'})
 FILES.update({f'ai_template_{fmt}.png' for fmt in ('4x3','9x16')})
@@ -761,6 +764,24 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
     folder=STORAGE/job_id
     folder.mkdir(mode=0o700)
     try:
+        technical_sheet = None
+        if drawing_raw or brief.get('specs') or brief.get('dimensions'):
+            # Preserve approved technical data and uploaded drawing before
+            # any additional paid art generation.
+            if progress:
+                progress('Сохраняем исходный чертёж и все проверенные ТТХ')
+            svg_path=folder/'technical_sheet.svg'
+            svg_path.write_bytes(render_technical_sheet(brief,drawing_raw))
+            _rasterize_in_worker(
+                svg_path,folder/'technical_sheet.png',
+                folder/'technical_sheet.jpg',
+            )
+            technical_sheet={
+                'svg':f'/files/{job_id}/technical_sheet.svg',
+                'png':f'/files/{job_id}/technical_sheet.png',
+                'jpeg':f'/files/{job_id}/technical_sheet.jpg',
+                'drawing_used':bool(drawing_raw),
+            }
         if progress: progress('Подготавливаем два AI-макета и точные текстовые зоны')
         render_options={'logo':logo_raw,'drawing':drawing_raw,
                         'reference':reference_raw,'model':model,'quality':quality,
@@ -830,6 +851,10 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
             for name in ('typography_layout.json','typography_style.json',
                          'verified_copy.json','poster_copy.json','selected_photo.json'):
                 archive.write(folder/name,arcname=name)
+            if technical_sheet:
+                for name in ('technical_sheet.svg','technical_sheet.png',
+                             'technical_sheet.jpg'):
+                    archive.write(folder/name,arcname=name)
             archive.writestr('brief.json',
                 json.dumps(brief,ensure_ascii=False,indent=2))
             archive.writestr('REVIEW_BEFORE_PUBLICATION.txt',
@@ -860,6 +885,8 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
             'rebranded_photo':f'/files/{job_id}/rebranded_product.png',
             'rebranding_applied':True,
             'verified_typography':True,
+            'technical_sheet':technical_sheet,
+            'drawing_used':bool(drawing_raw),
             'warnings':[EXACT_COPY_WARNING,REBRAND_WARNING],
         }
     except Exception as exc:
@@ -869,6 +896,8 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
             (folder/'rebranded_product.png').write_bytes(chosen)
             allowed = (
                 'rebranded_product.png',
+                'technical_sheet.svg','technical_sheet.png',
+                'technical_sheet.jpg',
                 'ai_template_4x3.png', 'ai_template_9x16.png',
                 'corel_4x3.svg', 'corel_9x16.svg',
                 'ai_poster_4x3.png', 'ai_poster_9x16.png',
