@@ -264,13 +264,9 @@ def test_paid_raw_layout_survives_invalid_collision_and_retry_requires_no_vision
     assert validate_slots(repaired,poster_copy(brief))==repaired
 
 
-def test_no_room_for_three_specs_reduces_optional_copy_without_paid_calls(
+def test_impossible_paid_layout_never_silently_deletes_all_approved_specs(
         monkeypatch,tmp_path):
-    """Actual production error: one oversized specs block must not kill ZIP.
-
-    Deliberately emulate the measured 4x3 geometric failure for three, two
-    and one spec; remaining mandatory facts must never be changed.
-    """
+    """A failed paid layout must NOT return a finished advert with no TTH."""
     brief=_brief()
     brief["specs"]=[
         ("Грузоподъёмность","44 т"),
@@ -283,32 +279,26 @@ def test_no_room_for_three_specs_reduces_optional_copy_without_paid_calls(
     workflow._save_json(tmp_path,"layout_raw.json",original)
     monkeypatch.setattr(
         workflow,"client",
-        lambda:pytest.fail("A cached layout must never trigger paid AI"),
+        lambda:pytest.fail("Cached layout must never trigger paid AI"),
     )
     assert workflow._layout_plan(
         brief,{},has_logo=False,has_drawing=False,folder=tmp_path,
         return_raw=True,
     )==original
-    real_repair=workflow.repair_ai_slots
-    attempted=[]
-    def fail_spec_fit(geometry,copy,**kw):
-        attempted.append(len(copy["specs"]))
-        if copy["specs"]:
-            raise ValueError(
-                "AI не оставил достаточно свободного места для «specs» "
-                "(4x3). Текст не обрезан.")
-        return real_repair(geometry,copy,**kw)
-    monkeypatch.setattr(workflow,"repair_ai_slots",fail_spec_fit)
-    layout,selected=workflow._fit_layout_with_adaptive_copy(
-        original,approved)
-    assert attempted==[3,2,1,0]
-    assert selected["specs"]==[]
-    assert selected["model"]==approved["model"]
-    assert selected["brand"]==approved["brand"]
-    assert selected["price"]==approved["price"]
-    assert selected["phones"]==approved["phones"]
-    assert approved["specs"] and len(approved["specs"])==3
-    assert validate_slots(layout,selected)==layout
+    seen=[]
+    def impossible(geometry,copy,**kw):
+        seen.append(len(copy["specs"]))
+        assert len(copy["specs"])>=1, "The last technical fact is mandatory"
+        raise ValueError(
+            "AI не оставил достаточно свободного места для «specs» (4x3)."
+        )
+    monkeypatch.setattr(workflow,"repair_ai_slots",impossible)
+    with pytest.raises(ValueError,match="ТТХ НЕ удалены"):
+        workflow._fit_layout_with_adaptive_copy(original,approved)
+    assert seen[0]==3
+    assert min(seen)==1
+    assert workflow._load_json(tmp_path,"layout_raw.json")==original
+    assert approved["specs"] and approved["model"] and approved["price"]
 
 
 def test_shrinks_failing_role_only_and_keeps_other_optional_copy(monkeypatch):
