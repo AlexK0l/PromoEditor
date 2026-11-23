@@ -15,6 +15,24 @@
 
   // Optional new fields should not disable the entire UI if an older HTML
   // document briefly remains in the browser cache after deployment.
+  // A successful /static/*.css HTTP status alone does not guarantee
+  // the customer's browser actually applied the styles. Guard the paid
+  // workflow if the page looks like the reported unstyled screenshot.
+  window.addEventListener('load',()=>{
+    const grid=document.querySelector('.composer-grid');
+    const icon=document.querySelector('.dropzone .drop-icon svg');
+    const healthy=Boolean(grid&&icon
+      &&window.getComputedStyle(grid).display==='grid'
+      &&icon.getBoundingClientRect().width<=35
+      &&window.getComputedStyle(document.body).fontFamily
+        .toLowerCase().includes('sans-serif'));
+    if(!healthy){
+      const notice=$('stylesheet-error');
+      if(notice)notice.style.setProperty('display','block','important');
+      const generate=$('generate-btn');
+      if(generate)generate.disabled=true;
+    }
+  },{once:true});
   const get = id => $(id)?.value ?? '';
   const checked = id => Boolean($(id)?.checked);
   const set = (id,val) => { const field=$(id);if(field)field.value = val ?? ''; };
