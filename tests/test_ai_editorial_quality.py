@@ -55,7 +55,7 @@ def test_no_technical_dossier_is_crammed_into_social_ad():
     assert "Собственный вес: 8,3 т" in front["specs"]
     assert front["claims"]==["Легче на 2,5 т","Больше полезной нагрузки"]
     assert front["benefits"]==[]
-    assert front["dimensions"]==[]
+    assert front["dimensions"]==["Длина: 12 360 мм","Длина: 12 360 мм"]
     assert front["proofs"]==[]
     assert front["brand"]==full["brand"]
     assert front["model"]==full["model"]
@@ -88,6 +88,7 @@ def test_actual_editable_svg_contains_only_selected_ad_roles_at_readable_size():
         "category":{"x":24,"y":102,"w":400,"h":48},
         "slogan":{"x":24,"y":160,"w":840,"h":104},
         "specs":{"x":24,"y":285,"w":720,"h":230},
+        "dimensions":{"x":755,"y":285,"w":220,"h":230},
         "claims":{"x":24,"y":540,"w":550,"h":135},
         "price":{"x":24,"y":735,"w":510,"h":130},
         "phones":{"x":550,"y":735,"w":400,"h":130},
@@ -100,7 +101,7 @@ def test_actual_editable_svg_contains_only_selected_ad_roles_at_readable_size():
            if e.get("data-verified-role")}
     assert set(roles)=={
         "brand","model","category","slogan",
-        "specs","claims","price","phones",
+        "specs","dimensions","claims","price","phones",
     }
     for role,el in roles.items():
         assert float(el.get("font-size"))>=MIN_PX[role]
