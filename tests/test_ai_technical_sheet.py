@@ -159,17 +159,13 @@ def test_repair_using_customer_zip_actual_failed_geometry_never_drops_all_tth():
         for role,rect in boxes[fmt].items():
             raw[fmt][role]=dict(zip(("x","y","w","h"),rect))
     planned=poster_copy(_brief())
-    try:
-        fixed,chosen=pipeline._fit_layout_with_adaptive_copy(
-            raw,planned,protect_product=True)
-    except ValueError as exc:
-        # If old paid art cannot be repacked, a visible failure is better
-        # than a paid SUCCESS with zero technical facts.
-        assert "ТТХ НЕ удалены" in str(exc)
-    else:
-        assert chosen["specs"], "Customer ZIP previously printed zero specs"
-        assert chosen["dimensions"], "Customer ZIP printed zero dimensions"
-        assert validate_slots(fixed,chosen)==fixed
+    fixed,chosen=pipeline._fit_layout_with_adaptive_copy(
+        raw,planned,protect_product=True)
+    # The exact uploaded paid layout MUST be recoverable locally, without
+    # buying another image. Merely failing loudly is insufficient here.
+    assert chosen["specs"], "Customer ZIP previously printed zero specs"
+    assert chosen["dimensions"], "Customer ZIP printed zero dimensions"
+    assert validate_slots(fixed,chosen)==fixed
 
 
 def test_main_paid_zip_includes_user_drawing_and_full_technical_sheet(
