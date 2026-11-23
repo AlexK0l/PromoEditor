@@ -672,6 +672,21 @@ def _reference_render(brief: dict, fmt: str, artwork: Image.Image,
     )
 
 
+
+def _design_svg(brief: dict, fmt: str, artwork: Image.Image,
+                layout: dict, styling: dict, *, rebranded: bytes,
+                detail: bytes | None, logo: bytes | None,
+                drawing: bytes | None, copy: dict) -> bytes:
+    if _is_reference_pro(brief):
+        return _reference_render(
+            brief,fmt,artwork,layout,styling,
+            hero=rebranded,detail=detail,logo=logo,drawing=drawing,
+            copy=copy)
+    return render_integrated_svg(
+        brief,fmt,artwork,layout,styling,
+        drawing=drawing,copy_override=copy)
+
+
 def generate_exact_typography_posters(
     brief: dict, rebranded: bytes, *, logo: bytes | None,
     drawing: bytes | None, reference: bytes | None,
@@ -694,11 +709,17 @@ def generate_exact_typography_posters(
         layout = _load_json(cache,"layout.json")
         layout_raw = _load_json(cache,"layout_raw.json")
         styles = _load_json(cache,"typography.json")
-        # The raw paid vision output is reusable even if it contained a
-        # collision; no additional Responses credit is needed to repair it.
-        check_paid_capacity("text", (0 if layout is not None or
-                                         layout_raw is not None else 1)
-                            + (0 if styles is not None else 1))
+        reference_mode=_is_reference_pro(brief)
+        # The full, customer-approved grid does not need expensive vision
+        # rectangles or a 2-font AI selection. Avoid buying unused calls.
+        if not reference_mode:
+            check_paid_capacity("text", (0 if layout is not None or
+                                             layout_raw is not None else 1)
+                                + (0 if styles is not None else 1))
+        if reference_mode and layout is None and layout_raw is None:
+            layout=_reference_layout()
+        if reference_mode and styles is None:
+            styles={fmt:dict(DEFAULT_STYLE) for fmt in FORMATS}
         art = generate_templates(brief,rebranded,reference=reference,
                                  drawing=drawing,model=model,quality=quality,folder=cache,
                                  progress=progress)
@@ -714,9 +735,15 @@ def generate_exact_typography_posters(
             # paid layout or artwork requests.
             raw_layout = layout_raw if layout_raw is not None else layout
         if progress:
-            progress('Подбираем читаемый объём рекламного текста без новых AI-запросов')
-        layout,copy = _integrated_layout_copy(
-            raw_layout,brief,has_drawing=bool(drawing))
+            progress('Компоную рекламу по утверждённому референсу'
+                     if reference_mode else
+                     'Подбираем читаемый объём рекламного текста без новых AI-запросов')
+        if reference_mode:
+            layout,copy=raw_layout,reference_poster_copy(
+                brief,drawing=bool(drawing))
+        else:
+            layout,copy = _integrated_layout_copy(
+                raw_layout,brief,has_drawing=bool(drawing))
         _save_json(cache,"layout.json",layout)
         _save_json(cache,"poster_copy.json",copy)
         if styles is None:
@@ -725,9 +752,10 @@ def generate_exact_typography_posters(
             # inspects these real previews and chooses final typography.
             previews = {}
             for fmt in FORMATS:
-                provisional = render_integrated_svg(
+                provisional = _design_svg(
                     brief,fmt,art[fmt],layout[fmt],DEFAULT_STYLE,
-                    drawing=drawing,copy_override=copy)
+                    rebranded=rebranded,detail=detail,logo=logo,
+                    drawing=drawing,copy=copy)
                 previews[fmt] = _preview_image(provisional,fmt)
             if progress: progress('AI подбирает общий стиль шрифта и цветов без изменения текста')
             styles = _finish_typography(previews)
@@ -739,9 +767,10 @@ def generate_exact_typography_posters(
                   "verified_copy":verified_copy(brief),"poster_copy":copy,"cache_dir":cache}
         for fmt in FORMATS:
             if progress: progress('Выполняем финальный рендер '+fmt+' и экспорт SVG/PNG/JPEG')
-            svg = render_integrated_svg(
+            svg = _design_svg(
                 brief,fmt,art[fmt],layout[fmt],styles[fmt],
-                drawing=drawing,copy_override=copy)
+                rebranded=rebranded,detail=detail,logo=logo,
+                drawing=drawing,copy=copy)
             png,jpeg = rasterize_svg(svg)
             result["svg"][fmt] = svg
             result["png"][fmt] = png
@@ -840,10 +869,16 @@ def _generate_file_backed_posters(
         styles = _load_json(cache,"typography.json")
         # A paid layout answer still counts as cached when geometric
         # reconciliation previously failed; do not repay the vision call.
+        reference_mode=_is_reference_pro(brief)
         text_needed = (
             int(layout is None and layout_raw is None)
-            + int(styles is None))
-        check_paid_capacity("text", text_needed)
+            + int(styles is None)) if not reference_mode else 0
+        if text_needed:
+            check_paid_capacity("text", text_needed)
+        if reference_mode and layout is None and layout_raw is None:
+            layout=_reference_layout()
+        if reference_mode and styles is None:
+            styles={fmt:dict(DEFAULT_STYLE) for fmt in FORMATS}
         missing = {
             fmt:not _valid_paid_image(cache/(fmt+".png"))
             for fmt in FORMATS
@@ -916,9 +951,15 @@ def _generate_file_backed_posters(
             # process crashed halfway through geometric validation.
             raw_layout = layout_raw if layout_raw is not None else layout
         if progress:
-            progress("Сокращаем необязательные характеристики, чтобы текст читался")
-        layout,copy = _integrated_layout_copy(
-            raw_layout,brief,has_drawing=bool(drawing))
+            progress("Размещаю все ТТХ, размеры, чертёж и экономику в обоих макетах"
+                     if reference_mode else
+                     "Согласовываю композицию с точными надписями")
+        if reference_mode:
+            layout,copy=raw_layout,reference_poster_copy(
+                brief,drawing=bool(drawing))
+        else:
+            layout,copy = _integrated_layout_copy(
+                raw_layout,brief,has_drawing=bool(drawing))
         _save_json(cache,"layout.json",layout)
         _save_json(cache,"poster_copy.json",copy)
         if styles is None:
@@ -927,9 +968,10 @@ def _generate_file_backed_posters(
             preview_images={}
             for fmt in FORMATS:
                 with Image.open(template_files[fmt]) as art:
-                    provisional = render_integrated_svg(
+                    provisional = _design_svg(
                         brief,fmt,art,layout[fmt],DEFAULT_STYLE,
-                        drawing=drawing,copy_override=copy)
+                        rebranded=rebranded,detail=detail,logo=logo,
+                        drawing=drawing,copy=copy)
                 try:
                     preview_images[fmt] = _preview_image(provisional,fmt)
                 finally:
@@ -955,9 +997,10 @@ def _generate_file_backed_posters(
                          " в отдельном процессе с ограниченной памятью")
             path = output_dir/("corel_"+fmt+".svg")
             with Image.open(template_files[fmt]) as art:
-                svg = render_integrated_svg(
+                svg = _design_svg(
                     brief,fmt,art,layout[fmt],styles[fmt],
-                    drawing=drawing,copy_override=copy)
+                    rebranded=rebranded,detail=detail,logo=logo,
+                    drawing=drawing,copy=copy)
             path.write_bytes(svg)
             del svg
             gc.collect()
