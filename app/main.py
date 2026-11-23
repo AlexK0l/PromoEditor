@@ -14,10 +14,11 @@ import threading
 import time
 import zipfile
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import UploadFile
 from PIL import Image, ImageDraw
@@ -120,9 +121,32 @@ async def password_logout(request:Request):
 
 
 
+# Some clients display an entirely unstyled document even while the VPS
+# returns HTTP 200 for the external .css files. Serve the exact same CSS
+# inline as an independent, same-response fallback so the browser does not
+# depend on a second round trip to render a usable interface. The four
+# original stylesheet files remain canonical; no duplicated CSS to drift.
+@lru_cache(maxsize=1)
+def _home_html() -> str:
+    html = (STATIC/'index.html').read_text(encoding='utf-8')
+    marker = '<!-- PROMOEDITOR_EMBEDDED_STYLES -->'
+    if html.count(marker) != 1:
+        raise RuntimeError('Missing unique embedded stylesheet marker')
+    names = ('app.css','editor.css','theme.css','assets.css')
+    pieces = [(STATIC/name).read_text(encoding='utf-8') for name in names]
+    if any('</style' in piece.lower() for piece in pieces):
+        raise RuntimeError('Unexpected HTML tag in local stylesheet')
+    css = '\n'.join(pieces)
+    return html.replace(
+        marker,
+        '<style id="promoeditor-embedded-styles">\n'+css+'\n</style>',
+    )
+
+
 @app.get('/')
 def home():
-    return FileResponse(STATIC/'index.html')
+    # Never serve stale HTML pointing to an older JS/CSS set after a release.
+    return HTMLResponse(_home_html(),headers={'Cache-Control':'no-store'})
 
 
 @app.get('/api/config')
