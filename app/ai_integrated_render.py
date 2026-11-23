@@ -298,19 +298,26 @@ def _paint_portrait(scene: Scene, data: dict, drawing: bytes | None,
     _label(scene,"ТЕХНИКА В ЦИФРАХ",532,panel_y+15,461,accent,family,
            size=23,h=35)
     specs=(data.get("specs") or [])[:3]
-    row_step=min(57,max(38,int((card_h-135)/max(3,len(specs) or 1))))
+    # Adaptive row rhythm: the AI may extend the vehicle lower in the
+    # frame, leaving a smaller safe panel. Reserve space for BOTH the specs
+    # and dimensions; never let one fact bleed into the footer.
+    row_step=min(57,max(36,int((card_h-142)/3)))
     for i,value in enumerate(specs):
         _type(scene,value=value,role="specs",group="specs",
-              x=534,y=panel_y+68+i*row_step,w=468,h=row_step-4,
+              x=534,y=panel_y+58+i*row_step,w=468,h=row_step-3,
               size=24,minimum=17,family=family,color=ink)
-    divider=panel_y+68+3*row_step+5
+    divider=panel_y+58+3*row_step+5
     _line(scene,532,divider,990,divider)
     dims=(data.get("dimensions") or [])[:2]
-    dim_step=max(32,min(53,int((panel_y+card_h-26-(divider+14))/
-                              max(2,len(dims) or 1))))
+    dim_y=divider+10
+    dim_step=min(53,int((panel_y+card_h-14-dim_y)/2))
+    if dims and dim_step < 26:
+        raise ValueError(
+            "AI-фон не оставил достаточно места для габаритов в 9:16. "
+            "Чертёж и ТТХ нельзя перекрывать.")
     for i,value in enumerate(dims):
         _type(scene,value=value,role="dimensions",group="dimensions",
-              x=534,y=divider+14+i*dim_step,w=468,h=dim_step-2,
+              x=534,y=dim_y+i*dim_step,w=468,h=dim_step-1,
               size=23,minimum=17,family=family,color=ink)
     scene.rect("decor",42,1763,996,114,"#202833",
                rad=16,ident="portrait-sale-cta")
