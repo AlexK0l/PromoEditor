@@ -425,15 +425,19 @@ def _finish_typography(previews: dict[str,Image.Image]) -> dict:
         text={"format":{"type":"json_schema","name":"poster_type_finish",
                          "schema":TYPOGRAPHY_SCHEMA,"strict":True}},
     )
-    if not getattr(result,"output_text",None):
-        raise ValueError("OpenAI не вернул финальный стиль типографики.")
+    # Paid Images and the exact-copy layout already exist at this point.
+    # An empty, invalid or contradictory optional styling response must not
+    # discard both finished artworks or cause another paid Images request.
+    # Preserve the deterministic editable text and report the fallback.
     try:
+        if not getattr(result, "output_text", None):
+            raise ValueError("Empty typography")
         styles = validate_style(json.loads(result.output_text)["styles"])
-    except (KeyError,TypeError,json.JSONDecodeError) as exc:
-        raise ValueError("OpenAI вернул некорректный стиль текста.") from exc
-    if styles["4x3"]["font_family"] != styles["9x16"]["font_family"]:
-        raise ValueError("AI не согласовал единую шрифтовую семью двух форматов.")
-    return styles
+        if styles["4x3"]["font_family"] != styles["9x16"]["font_family"]:
+            raise ValueError("Inconsistent typography families")
+        return styles
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return {fmt: dict(DEFAULT_STYLE) for fmt in FORMATS}
 
 
 
@@ -575,8 +579,6 @@ def generate_exact_typography_posters(
             if progress: progress('AI подбирает общий стиль шрифта и цветов без изменения текста')
             styles = _finish_typography(previews)
             _save_json(cache,"typography.json",styles)
-        else:
-            styles = validate_style(styles)
         styles = _safe_final_typography(layout, copy, styles)
         _save_json(cache, "typography.json", styles)
         result = {"svg":{},"png":{},"jpeg":{},"artwork":art,
