@@ -442,7 +442,9 @@ def test_textless_art_prompt_never_requests_model_to_print_verified_copy():
         prompt=workflow._art_prompt(_brief(),fmt,reference=False)
         assert "WITHOUT ANY PRINTED TEXT" in prompt
         assert "NO fake or placeholder text" in prompt
-        assert "The final poster dimensions" in prompt
+        assert "Images uses native 3:2 or 2:3" in prompt
+        assert "WITHOUT" in prompt
+        assert "engineering drawing" in prompt
         assert "copy_character_lengths" in prompt
         assert "6527000" not in prompt
         assert "+7 (951)" not in prompt
