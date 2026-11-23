@@ -33,6 +33,8 @@ def test_exact_copy_preview_is_branch_pinned_and_isolated():
     # /api/config returning 200 is insufficient when app.css is 404
     # or blocked: the brand's inline SVG becomes a huge blue link.
     assert 'page_html="$(curl' in script
+    assert "promoeditor-embedded-styles" in script
+    assert ".composer-grid{display:grid;" in script
     assert 'class="topbar"' in script
     assert "for asset in app.css editor.css theme.css assets.css" in script
     assert "app.js editor.js assets.js theme.js; do" in script
