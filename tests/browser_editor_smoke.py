@@ -27,6 +27,21 @@ def main():
         errors=[]
         page.on("pageerror",lambda error: errors.append(str(error)))
         page.goto(BASE,wait_until="domcontentloaded")
+        # The screenshot regression: an unstyled SVG brand icon expands
+        # dramatically if /static/app.css is unavailable. The normal UI
+        # must load the stylesheet and keep the 24px mark constrained.
+        assert page.locator("#stylesheet-error").is_hidden()
+        assert page.locator(".brand-symbol svg").evaluate(
+            "(el)=>Math.round(el.getBoundingClientRect().width)") == 25
+        no_css=browser.new_page(viewport={"width":1360,"height":900})
+        no_css.route("**/static/app.css*",lambda route:route.abort())
+        no_css.goto(BASE,wait_until="domcontentloaded")
+        assert no_css.locator("#stylesheet-error").is_visible()
+        assert "Не удалось применить оформление" in no_css.locator(
+            "#stylesheet-error").inner_text()
+        assert no_css.locator(".brand-symbol svg").evaluate(
+            "(el)=>el.getBoundingClientRect().width <= 30")
+        no_css.close()
         # Dark mode is a real choice, persists after reload and never touches PNG.
         toggle=page.locator("[data-theme-toggle]")
         assert toggle.count()==1
