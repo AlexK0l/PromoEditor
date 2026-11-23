@@ -170,3 +170,61 @@ def test_repair_using_customer_zip_actual_failed_geometry_never_drops_all_tth():
         assert chosen["specs"], "Customer ZIP previously printed zero specs"
         assert chosen["dimensions"], "Customer ZIP printed zero dimensions"
         assert validate_slots(fixed,chosen)==fixed
+
+
+def test_main_paid_zip_includes_user_drawing_and_full_technical_sheet(
+        monkeypatch,tmp_path):
+    """Test ZIP integration with mocked paid artwork and actual SVG raster."""
+    import json
+    import zipfile
+    from app import main
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"cached_rebrand_photo",lambda folder:None)
+    monkeypatch.setattr(main,"check_paid_capacity",lambda *args:None)
+    changed=_drawing()
+    source=_drawing()
+    def rebrand(brief,raw,**kwargs):
+        assert raw==source
+        return changed
+    monkeypatch.setattr(main,"rebrand_selected_photo",rebrand)
+    def mock_render(brief,raw,*,logo,drawing,reference,
+                    model,quality,output_dir=None,**kwargs):
+        assert drawing==source
+        artworks={
+            fmt:Image.new("RGB",(1440,1080) if fmt=="4x3"
+                          else (1080,1920),"white")
+            for fmt in ("4x3","9x16")
+        }
+        return {
+            "artwork":artworks,
+            "svg":{fmt:b'<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+                   for fmt in artworks},
+            "png":{fmt:_drawing() for fmt in artworks},
+            "jpeg":{fmt:b"MOCK_JPEG" for fmt in artworks},
+            "layout":{},"typography":{},
+            "verified_copy":verified_copy(brief),
+            "poster_copy":poster_copy(brief),
+            "cache_dir":tmp_path/"none",
+        }
+    monkeypatch.setattr(main,"generate_exact_typography_posters",mock_render)
+    result=main._exact_typography_posters_sync(
+        _brief(),source,None,source,None,
+        "gpt-image-2.5-flare","medium")
+    assert result["drawing_used"] is True
+    assert result["technical_sheet"]["drawing_used"] is True
+    assert result["technical_sheet"]["png"].endswith("/technical_sheet.png")
+    assert result["technical_sheet"]["svg"].endswith("/technical_sheet.svg")
+    folder=tmp_path/result["job_id"]
+    with zipfile.ZipFile(folder/"ai_typographic_posters.zip") as z:
+        required={"technical_sheet.svg","technical_sheet.png",
+                  "technical_sheet.jpg","originals/drawing_preview.png"}
+        assert required.issubset(z.namelist())
+        assert z.read("originals/drawing_preview.png")==source
+        assert z.read("technical_sheet.png").startswith(b"\\x89PNG")
+        root=ET.fromstring(z.read("technical_sheet.svg"))
+        facts=[el for el in root.iter()
+               if el.get("data-verified-role") in ("specs","dimensions")]
+        assert len(facts)==17
+        assert len(json.loads(z.read("verified_copy.json"))["specs"])==10
+        assert len(json.loads(z.read("verified_copy.json"))["dimensions"])==7
