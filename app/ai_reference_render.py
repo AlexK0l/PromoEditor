@@ -27,7 +27,7 @@ from .editable_export import Scene, NS, XLINK
 from .render import compute_roi
 
 _FONT = "DejaVu Sans Condensed"
-_RED = "#D51125"
+_RED = "#E31B26"
 _RED_DARK = "#B90B1C"
 _INK = "#171C25"
 _MUTED = "#4F5A68"
@@ -139,7 +139,6 @@ def _kv_rows(scene: Scene, role: str, rows: list[tuple[str,str]],
         label_w=w*label_share-10
         value_x=x+w*label_share
         value_w=w*(1-label_share)-12
-        _role_text(scene,role,None if False else None,"",0,0,0,0,1,1)
         # Mark the row as ONE verified exact field. Its label and value
         # remain independent, editable text elements, never a bitmap.
         row_group=scene.el(
@@ -356,7 +355,7 @@ def _body_wide(scene: Scene, brief: dict, data: dict,
 
     spec_box=(19,412,422,390)
     dim_box=(451,412,447,390)
-    proof_box=(908,412,513,390)
+    proof_box=(908,412,513,273)
     for box,name in (
         (spec_box,"Основные ТТХ"),
         (dim_box,"Габаритные размеры, мм"),
@@ -373,13 +372,13 @@ def _body_wide(scene: Scene, brief: dict, data: dict,
                provenance="original-customer-drawing")
     _kv_rows(scene,"dimensions",dims,463,664,421,126,
              label_share=.62,font=15,min_font=12)
-    _proof(scene,data["proofs"][:6],921,455,488,335,font=20)
+    _proof(scene,data["proofs"][:4],921,455,488,217,font=18)
 
     _panel(scene,19,809,871,130,"Наши преимущества",accent=_RED)
-    _panel(scene,898,809,523,130,
+    _panel(scene,898,696,523,243,
            "Экономический эффект · расчётный",accent=_RED)
     _benefits_wide(scene,data["benefits"][:6],27,850,854,78)
-    _roi(scene,brief,912,851,491,78,tall=False)
+    _roi(scene,brief,912,740,491,189,tall=False)
     _price_footer(scene,data,tall=False)
 
 
