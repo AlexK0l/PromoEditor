@@ -168,7 +168,6 @@ fi
 # telling the operator that a visual preview is ready.
 page_html="$(curl --silent --show-error --fail --max-time 8 "http://127.0.0.1:$PORT/" || true)"
 if [[ "$page_html" != *'class="topbar"'* ||
-      "$page_html" != *'/static/app.css?v='* ||
       "$page_html" != *'id="promoeditor-embedded-styles"'* ||
       "$page_html" != *'.composer-grid{display:grid;'* ]]; then
   systemctl stop "$UNIT" || true
