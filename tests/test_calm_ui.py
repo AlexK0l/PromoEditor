@@ -67,7 +67,7 @@ def test_essential_first_view_is_one_form_one_switch_one_button():
     assert "pro-workspace" in parser.parents["mode-ai-pro"]
 
 
-def test_technical_controls_remain_under_single_closed_workspace():
+def test_technical_specs_visible_but_optional_expert_controls_remain_collapsed():
     _, parser = parse_page()
     mapping = {
         "mode-ai-pro": "expert-modes",
@@ -78,16 +78,17 @@ def test_technical_controls_remain_under_single_closed_workspace():
         "design-actions": "creative-notes",
         "promo-prompt": "expert-prompt",
         "asset-approve": "asset-review-details",
-        "specs": "advanced-settings",
-        "dimensions": "advanced-settings",
         "show-roi": "advanced-settings",
     }
     for ident, detail in mapping.items():
         assert detail in parser.parents.get(ident, ()), (ident, parser.parents.get(ident))
         assert detail in parser.closed_by_default, detail
         assert "pro-workspace" in parser.parents[ident]
+    for ident in ("specs", "dimensions", "claims", "benefits"):
+        assert parser.parents[ident] == ("data-facts",)
+        assert "data-facts" not in parser.closed_by_default
+        assert "pro-workspace" not in parser.parents[ident]
     for ident, subgroup in {
-        "specs": "data-facts", "dimensions": "data-facts",
         "show-roi": "data-roi", "image-quality": "data-design",
     }.items():
         assert subgroup in parser.parents[ident]
@@ -97,6 +98,7 @@ def test_technical_controls_remain_under_single_closed_workspace():
     assert "editing-suite" in parser.closed_by_default
     # Action is the primary experience; fine settings come afterwards.
     html = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert html.index('id="data-facts"') < html.index('id="generate-btn"')
     assert html.index('id="generate-btn"') < html.index('id="advanced-settings"')
 
 def test_one_click_free_asset_selection_precedes_any_potentially_paid_generation():
