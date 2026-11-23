@@ -79,7 +79,8 @@ def _role_text(scene: Scene, group: str, role: str | None, value: str,
 
 def _photo(scene: Scene, raw: bytes | Image.Image,
            x: float,y: float,w: float,h: float,
-           *, ident: str, provenance: str) -> None:
+           *, ident: str, provenance: str,
+           detail_crop: bool = False) -> None:
     """Bounded photographic source downsampling (safe on the 760MB cgroup)."""
     if isinstance(raw,Image.Image):
         source=raw.copy()
@@ -87,6 +88,14 @@ def _photo(scene: Scene, raw: bytes | Image.Image,
         source=Image.open(io.BytesIO(raw))
     try:
         source.draft("RGB",(1300,950))
+        if detail_crop:
+            # Honest enlarged detail of the *same real vehicle*. Never
+            # pass it off as a new camera angle or fabricate a rear shot.
+            ww,hh=source.size
+            crop=source.crop((int(ww*.38),int(hh*.30),
+                              int(ww*.98),int(hh*.94)))
+            source.close()
+            source=crop
         source.thumbnail((1600,1200),Image.Resampling.LANCZOS)
         buf=io.BytesIO()
         source.convert("RGB").save(buf,format="JPEG",quality=87,
@@ -346,7 +355,7 @@ def _price_footer(scene: Scene, data: dict, *,
 
 def _body_wide(scene: Scene, brief: dict, data: dict,
                hero: bytes | Image.Image, inset: bytes | Image.Image,
-               drawing: bytes | None) -> None:
+               drawing: bytes | None, *, inset_crop: bool = False) -> None:
     # Two real product scenes and the user's four advertising claims.
     scene.rect("decor",17,142,635,264,_WHITE,rad=13,
                ident="ref-hero-wide")
@@ -357,7 +366,9 @@ def _body_wide(scene: Scene, brief: dict, data: dict,
     scene.rect("decor",965,142,459,264,_WHITE,rad=13,
                ident="ref-inset-wide")
     _photo(scene,inset,971,148,446,251,ident="ref-inset-photo",
-           provenance="secondary-photo-or-paid-ai-scene")
+           provenance=("source-vehicle-detail" if inset_crop
+                       else "secondary-photo-or-paid-ai-scene"),
+           detail_crop=inset_crop)
 
     spec_box=(19,412,422,390)
     dim_box=(451,412,447,390)
@@ -390,7 +401,7 @@ def _body_wide(scene: Scene, brief: dict, data: dict,
 
 def _body_tall(scene: Scene, brief: dict, data: dict,
                hero: bytes | Image.Image, inset: bytes | Image.Image,
-               drawing: bytes | None) -> None:
+               drawing: bytes | None, *, inset_crop: bool = False) -> None:
     scene.rect("decor",17,175,652,267,_WHITE,rad=12,
                ident="ref-hero-tall")
     _photo(scene,hero,22,180,642,258,ident="ref-hero-photo",
@@ -399,7 +410,9 @@ def _body_tall(scene: Scene, brief: dict, data: dict,
     scene.rect("decor",17,450,581,198,_WHITE,rad=12,
                ident="ref-inset-tall")
     _photo(scene,inset,22,454,572,188,ident="ref-inset-photo",
-           provenance="secondary-photo-or-paid-ai-scene")
+           provenance=("source-vehicle-detail" if inset_crop
+                       else "secondary-photo-or-paid-ai-scene"),
+           detail_crop=inset_crop)
     _proof(scene,data["proofs"][:4],617,448,441,202,font=19)
 
     _panel(scene,16,663,486,445,"Основные ТТХ",accent=_RED)
@@ -471,9 +484,26 @@ def render_reference_svg(brief: dict, fmt: str, artwork: Image.Image,
     # original is supplied, use the paid AI artwork for the inset but never
     # misrepresent its scene as a genuinely second photographic angle.
     main=hero if hero else artwork
-    secondary=detail if detail else artwork
-    if tall:
-        _body_tall(scene,brief,copy,main,secondary,drawing)
+    inset_crop=False
+    if detail:
+        secondary=detail
+    elif hero:
+        # Prior paid backgrounds could be nearly black (the user rejected
+        # that look). Keep this REFERENCE style bright with an honest source
+        # close-up rather than forcing black AI scenery into the sample.
+        small=artwork.convert("RGB").resize((28,28))
+        brightness=sum(small.resize((1,1)).getpixel((0,0)))/3
+        if brightness<152:
+            secondary=hero
+            inset_crop=True
+        else:
+            secondary=artwork
     else:
-        _body_wide(scene,brief,copy,main,secondary,drawing)
+        secondary=artwork
+    if tall:
+        _body_tall(scene,brief,copy,main,secondary,drawing,
+                   inset_crop=inset_crop)
+    else:
+        _body_wide(scene,brief,copy,main,secondary,drawing,
+                   inset_crop=inset_crop)
     return scene.export()
