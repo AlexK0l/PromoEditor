@@ -920,6 +920,14 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
                 ) as archive:
                     for source in available:
                         archive.write(source,arcname=source.name)
+                    # Preserve the exact submitted facts in failed runs,
+                    # so support can verify which data were supplied even
+                    # when art generation failed before poster_copy.json.
+                    # This is a private user-download archive only.
+                    archive.writestr(
+                        'brief.json',
+                        json.dumps(brief,ensure_ascii=False,indent=2),
+                    )
                     archive.writestr(
                         'READ_ME_FIRST.txt',
                         'Генерация НЕ завершена. Промежуточные материалы '
