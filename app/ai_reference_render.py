@@ -221,18 +221,39 @@ def _proof(scene: Scene, lines: list[str], x: float,y: float,
 
 def _benefits_wide(scene: Scene, lines: list[str],
                    x: float,y: float,w: float,h: float) -> None:
+    """Readable 3 x 2 grid, never six 120px-wide columns of long text.
+
+    The previous one-row, six-column design passed the CI font metrics but
+    failed on the real VPS while fitting a 62-character customer benefit.
+    A real two-line editorial grid fits the approved long copy in BOTH
+    DejaVu Sans Condensed and the wider DejaVu Sans fallback, with a
+    minimum 12px font and without abbreviating any words.
+    """
     if not lines:
         return
-    cols=len(lines)
+    if len(lines)>6:
+        raise ValueError("Стиль референса вмещает не более 6 преимуществ.")
+    cols=min(3,len(lines))
+    rows=(len(lines)+cols-1)//cols
     cw=w/cols
+    rh=h/rows
     for i,value in enumerate(lines):
-        xx=x+i*cw
-        if i:
-            scene.rect("decor",xx-5,y+10,1,h-17,_BORDER)
-        scene.rect("decor",xx+12,y+3,31,4,_RED,ident="ref-benefit-marker")
+        col=i%cols
+        row=i//cols
+        xx=x+col*cw
+        yy=y+row*rh
+        if col:
+            scene.rect("decor",xx-2,yy+5,1,rh-10,_BORDER,
+                       ident="ref-benefit-column-rule")
+        if row:
+            _rule(scene,xx+6,yy+1,cw-12,"#E4E9EF")
+        # Small red rule keeps the approved style without stealing 13px
+        # of vertical space from each long source sentence.
+        scene.rect("decor",xx+7,yy+3,30,3,_RED,
+                   ident="ref-benefit-marker")
         _role_text(scene,"benefits","benefits",value,
-                   xx+10,y+16,cw-23,h-21,
-                   size=16,minimum=11,color=_INK)
+                   xx+7,yy+7,cw-13,rh-10,
+                   size=16,minimum=12,color=_INK)
 
 
 def _benefits_tall(scene: Scene, lines: list[str],
@@ -394,7 +415,7 @@ def _body_wide(scene: Scene, brief: dict, data: dict,
     _panel(scene,19,809,871,130,"Наши преимущества",accent=_RED)
     _panel(scene,898,696,523,243,
            "Экономический эффект · расчётный",accent=_RED)
-    _benefits_wide(scene,data["benefits"][:6],27,850,854,78)
+    _benefits_wide(scene,data["benefits"][:6],27,846,854,88)
     _roi(scene,brief,912,740,491,189,tall=False)
     _price_footer(scene,data,tall=False)
 
