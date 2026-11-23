@@ -348,6 +348,27 @@ def _paint_portrait(scene: Scene, data: dict, drawing: bytes | None,
               size=26,minimum=20,family=family,color=_WHITE,bold=True)
 
 
+
+def integrated_copy(brief: dict, *, drawing: bool) -> dict:
+    """The exact copy that is ACTUALLY printed, not a wish-list of candidates.
+
+    Old poster_copy.json sometimes claimed more lines than the visible
+    SVG contained, especially optional marketing slogans and ROI. All
+    customer data stays in verified_copy.json/brief.json; the public
+    poster_copy now describes only what appears on BOTH hero posters.
+    """
+    copy={role:list(lines) for role,lines in poster_copy(brief).items()}
+    copy["claims"]=copy["claims"][:1]
+    copy["specs"]=copy["specs"][:3]
+    copy["dimensions"]=copy["dimensions"][:2]
+    copy["phones"]=copy["phones"][:2]
+    copy["slogan"]=[] if drawing else copy["slogan"][:1]
+    # Only printable roles are marked as printed; the separate complete
+    # technical sheet still contains all approved facts and calculations.
+    for role in ("roi","proofs","benefits"):
+        copy[role]=[]
+    return copy
+
 def render_integrated_svg(
     brief: dict, fmt: str, artwork: Image.Image, slots: dict,
     styling: dict, *, drawing: bytes | None = None,
@@ -365,7 +386,8 @@ def render_integrated_svg(
     family=str(styling.get("font_family") or "")
     if family not in FONTS:
         family=DEFAULT_STYLE["font_family"]
-    copy=copy_override if copy_override is not None else poster_copy(brief)
+    copy=copy_override if copy_override is not None else integrated_copy(
+        brief,drawing=bool(drawing))
     if not isinstance(copy,dict):
         raise ValueError("Некорректные подтверждённые рекламные данные.")
     _,panel_y=_safe_overlay_zones(fmt,slots.get("product"))
