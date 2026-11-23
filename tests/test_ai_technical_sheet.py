@@ -224,3 +224,15 @@ def test_main_paid_zip_includes_user_drawing_and_full_technical_sheet(
         assert len(facts)==17
         assert len(json.loads(z.read("verified_copy.json"))["specs"])==10
         assert len(json.loads(z.read("verified_copy.json"))["dimensions"])==7
+
+
+def test_paid_artwork_cache_is_not_deleted_when_paid_zip_finishes(tmp_path):
+    """Successful paid completion must not discard images the user paid for."""
+    cache=tmp_path/"paid"
+    cache.mkdir()
+    (cache/"4x3.png").write_bytes(_drawing())
+    (cache/"9x16.png").write_bytes(_drawing())
+    pipeline.consume_paid_template_cache(cache)
+    assert (cache/"4x3.png").is_file()
+    assert (cache/"9x16.png").is_file()
+    assert cache.is_dir()
