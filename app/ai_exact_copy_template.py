@@ -33,7 +33,7 @@ from .openai_service import (
     _save_visual, _visual_lock, as_image, client,
 )
 
-VERSION = "ai-full-design-verified-text-ai-typography-v3-stable-fit"
+VERSION = "ai-full-design-verified-text-ai-typography-v2-editorial"
 IMAGE_SIZES = {"4x3": "1536x1024", "9x16": "1024x1536"}
 AI_WARNING = (
     "AI нарисовал фон и ребрендированный прицеп. В РЕКЛАМНЫХ постерах "
