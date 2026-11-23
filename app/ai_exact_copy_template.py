@@ -629,8 +629,21 @@ def generate_exact_typography_posters(
 
 
 def consume_paid_template_cache(cache: Path) -> None:
-    """Remove paid-cache only AFTER all final outputs are archived."""
-    shutil.rmtree(cache,ignore_errors=True)
+    """Keep completed paid artwork briefly for exact-copy repairs.
+
+    The previous implementation deleted ALL successfully paid Images/layout/
+    font-cache data immediately after ZIP export. Fixing an omitted technical
+    fact then needlessly charged for every Images/Responses call again.
+    The shared _default_visual_cache prunes content-addressed folders at the
+    existing PROMO_JOB_TTL_SECONDS (normally two hours); touch the cache on
+    success so it stays reusable until expiry. Only cached API outputs and
+    metadata live here, never customer-supplied originals.
+    """
+    try:
+        if Path(cache).is_dir():
+            os.utime(cache, None)
+    except OSError:
+        pass
 
 
 def _valid_paid_image(path: Path) -> bool:
