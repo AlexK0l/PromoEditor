@@ -52,7 +52,8 @@ def new_task(storage: Path) -> tuple[str, Path]:
 
 def set_status(folder: Path, status: str, *, stage: str = "",
                result: dict | None = None, error: str = "",
-               http_status: int = 200) -> None:
+               http_status: int = 200,
+               recovery_zip: str | None = None) -> None:
     if status not in ("running", "complete", "failed"):
         raise ValueError("Неизвестное состояние задачи.")
     record = {
@@ -60,6 +61,7 @@ def set_status(folder: Path, status: str, *, stage: str = "",
         "result": result if status == "complete" else None,
         "error": str(error)[:500] if status == "failed" else "",
         "http_status": int(http_status),
+        "recovery_zip": (recovery_zip if status == "failed" else None),
         "instance": PROCESS_ID, "updated_at": time.time(),
     }
     destination = folder / STATUS_NAME
@@ -100,10 +102,12 @@ def read_status(storage: Path, task_id: str) -> dict | None:
                 "Платный запрос автоматически НЕ повторялся."
             ),
             "http_status":503, "result":None,
+            "recovery_zip":None,
         }
     return {
         key:content.get(key) for key in
-        ("status","stage","error","http_status","result")
+        ("status","stage","error","http_status","result",
+         "recovery_zip")
     }
 
 
