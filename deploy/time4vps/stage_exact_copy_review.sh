@@ -168,9 +168,11 @@ fi
 # telling the operator that a visual preview is ready.
 page_html="$(curl --silent --show-error --fail --max-time 8 "http://127.0.0.1:$PORT/" || true)"
 if [[ "$page_html" != *'class="topbar"'* ||
-      "$page_html" != *'/static/app.css?v='* ]]; then
+      "$page_html" != *'/static/app.css?v='* ||
+      "$page_html" != *'id="promoeditor-embedded-styles"'* ||
+      "$page_html" != *'.composer-grid{display:grid;'* ]]; then
   systemctl stop "$UNIT" || true
-  die "Preview / did not serve the expected HTML and stylesheet links."
+  die "Preview / is missing embedded usable CSS or expected HTML."
 fi
 for asset in app.css editor.css theme.css assets.css app.js editor.js assets.js theme.js; do
   probe="$(curl --silent --show-error --output /dev/null --max-time 8 \
