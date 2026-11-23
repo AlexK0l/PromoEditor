@@ -5,6 +5,8 @@
   --blue:#315ddc;--blue-hover:#224ec7;--blue-light:#eef3ff;--good:#178a61;
   --radius:20px;--shadow:0 14px 45px rgba(16,24,40,.055);
 }
+/* HTML embeds a minimal fallback notice when this stylesheet is missing. */
+#stylesheet-error{display:none!important}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;min-width:320px;color:var(--ink);background:var(--bg);font:15px/1.52 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
