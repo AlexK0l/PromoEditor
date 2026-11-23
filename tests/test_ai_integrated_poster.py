@@ -163,3 +163,37 @@ def test_optional_drawing_absent_does_not_break_full_facts_or_price():
                     if e.get("data-verified-role")=="specs"])==3
         assert len([e for e in root.iter()
                     if e.get("data-verified-role")=="price"])==1
+
+
+def test_integrated_poster_metadata_matches_actual_printed_layers():
+    """After the customer's earlier missing-data ZIP, metadata must be honest."""
+    from app.ai_integrated_render import integrated_copy
+    info=_brief()
+    info["show_roi"]=True
+    info["hero_claims"]=["Легче на 2,5 т","Больше рейсов"]
+    info["proof_points"]=["Гарантия","Одобрено"]
+    displayed=integrated_copy(info,drawing=True)
+    assert displayed["specs"]==poster_copy(info)["specs"]
+    assert displayed["dimensions"]==poster_copy(info)["dimensions"]
+    assert displayed["claims"]==["Легче на 2,5 т"]
+    assert displayed["slogan"]==[]
+    assert displayed["roi"]==[]
+    assert displayed["proofs"]==[]
+    # The exact editable SVG, not just a JSON claim, contains every
+    # advertised field in BOTH formats.
+    layout,_=_integrated_layout_copy(_plans(),info,has_drawing=True)
+    for fmt in FORMATS:
+        with Image.new("RGB",FORMATS[fmt],"#17191C") as photo:
+            root=ET.fromstring(render_integrated_svg(
+                info,fmt,photo,layout[fmt],dict(DEFAULT_STYLE),
+                drawing=_drawing(),copy_override=displayed))
+        roles={}
+        for el in root.iter():
+            role=el.get("data-verified-role")
+            if role:
+                roles.setdefault(role,[]).append(el.get("data-exact-copy"))
+        assert roles["specs"]==displayed["specs"]
+        assert roles["dimensions"]==displayed["dimensions"]
+        assert roles["claims"]==displayed["claims"]
+        assert "roi" not in roles
+        assert "slogan" not in roles
