@@ -137,3 +137,23 @@ def test_process_restart_is_visible_without_automatically_repeating_ai(
     assert recovered["http_status"]==503
     assert "перезапустился" in recovered["error"]
     assert "НЕ повторялся" in recovered["error"]
+
+
+def test_failed_background_job_returns_partial_zip_link_without_sdk_secret(
+        monkeypatch,tmp_path):
+    _ready(monkeypatch,tmp_path)
+    archive="/files/"+"a"*32+"/ai_failed_generation.zip"
+    async def fail(form,progress=None):
+        progress("Согласовываем окончательные зоны текста")
+        raise main.PartialPosterFailure(
+            archive,RuntimeError("PRIVATE_SDK_KEY_untrusted_prompt"))
+    monkeypatch.setattr(main,"_generate_from_form",fail)
+    with TestClient(main.app) as client:
+        started=_post(client)
+        assert started.status_code==202
+        state=_poll(client,started.json()["task_id"],expected="failed")
+    assert state["recovery_zip"]==archive
+    assert state["http_status"]==502
+    assert "Согласовываем окончательные зоны текста" in state["error"]
+    assert "RuntimeError" in state["error"]
+    assert "PRIVATE_SDK_KEY" not in json.dumps(state)
