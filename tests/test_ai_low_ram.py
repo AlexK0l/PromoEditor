@@ -102,14 +102,9 @@ def test_file_backed_ai_outputs_and_cache_resume(monkeypatch,tmp_path):
     assert len(list(Path(result["cache_dir"]).glob("*.png")))==2
 
 
-def test_paid_cached_art_with_impossible_specs_still_exports_without_new_api(
+def test_paid_cached_art_with_impossible_specs_preserves_cache_and_fails(
         monkeypatch,tmp_path):
-    """Reproduce reported 4x3 specs collision from an ALREADY PAID layout.
-
-    Two paid Images files, the paid raw Responses layout and finished font
-    styling are cached. Retry must locally remove optional specs and produce
-    both editable posters, with ZERO extra paid image/vision calls.
-    """
+    """Do not quietly omit specifications to produce a false success."""
     monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
     monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","0")
     monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY","0")
@@ -136,35 +131,27 @@ def test_paid_cached_art_with_impossible_specs_still_exports_without_new_api(
     })
     monkeypatch.setattr(
         pipeline,"client",
-        lambda:pytest.fail("Cached artwork and layout must not pay OpenAI"),
+        lambda:pytest.fail("Cached artwork/layout must never pay OpenAI"),
     )
-    original=pipeline.repair_ai_slots
-    seen=[]
-    def simulate_no_fit(geometry,copy,**kwargs):
-        seen.append(len(copy["specs"]))
-        if copy["specs"]:
-            raise ValueError(
-                "AI не оставил достаточно свободного места "
-                "для «specs» (4x3).")
-        return original(geometry,copy,**kwargs)
-    monkeypatch.setattr(pipeline,"repair_ai_slots",simulate_no_fit)
-    finished=pipeline.generate_exact_typography_posters(
-        values,selected,logo=None,drawing=None,reference=None,
-        model="gpt-image-2.5-flare",quality="medium",
-        output_dir=tmp_path/"recovered",
-    )
-    assert seen==[3,2,1,0],seen
-    assert finished["poster_copy"]["specs"]==[]
-    assert len(finished["verified_copy"]["specs"])==3
-    assert finished["poster_copy"]["model"]==["ZubrTrail 500"]
-    assert finished["poster_copy"]["price"]
-    assert finished["poster_copy"]["phones"]
-    for fmt in FORMATS:
-        assert finished["svg"][fmt].is_file()
-        assert finished["png"][fmt].is_file()
-        assert finished["jpeg"][fmt].is_file()
+    observed=[]
+    def reject_specs(geometry,copy,**kwargs):
+        observed.append(len(copy["specs"]))
+        assert copy["specs"], "Cannot remove the last spec to make a poster"
+        raise ValueError(
+            "AI не оставил достаточно свободного места для «specs» (4x3)."
+        )
+    monkeypatch.setattr(pipeline,"repair_ai_slots",reject_specs)
+    with pytest.raises(ValueError,match="ТТХ НЕ удалены"):
+        pipeline.generate_exact_typography_posters(
+            values,selected,logo=None,drawing=None,reference=None,
+            model="gpt-image-2.5-flare",quality="medium",
+            output_dir=tmp_path/"recovered",
+        )
+    assert observed[0]==3
+    assert min(observed)==1
     assert pipeline._load_json(cache,"layout_raw.json")==raw
-    assert pipeline._load_json(cache,"poster_copy.json")==finished["poster_copy"]
+    assert all((cache/(fmt+".png")).is_file() for fmt in FORMATS)
+    assert not (tmp_path/"recovered"/"corel_4x3.svg").exists()
 
 
 def test_native_raster_worker_oom_failure_is_reported(monkeypatch,tmp_path):
