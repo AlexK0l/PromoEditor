@@ -161,6 +161,33 @@ if [[ "$http" != "200" ]]; then
   systemctl stop "$UNIT" || true
   die "Preview /api/config responded HTTP $http; production unchanged."
 fi
+
+# API health alone cannot detect failed stylesheets. Without app.css the
+# header's inline SVG becomes a giant blue browser-default hyperlink icon.
+# Check the actual rendered page and each essential static asset BEFORE
+# telling the operator that a visual preview is ready.
+page_html="$(curl --silent --show-error --fail --max-time 8 "http://127.0.0.1:$PORT/" || true)"
+if [[ "$page_html" != *'class="topbar"'* ||
+      "$page_html" != *'/static/app.css?v='* ]]; then
+  systemctl stop "$UNIT" || true
+  die "Preview / did not serve the expected HTML and stylesheet links."
+fi
+for asset in app.css editor.css theme.css assets.css app.js editor.js assets.js theme.js; do
+  probe="$(curl --silent --show-error --output /dev/null --max-time 8 \
+    --write-out '%{http_code}|%{content_type}|%{size_download}' \
+    "http://127.0.0.1:$PORT/static/$asset" || true)"
+  IFS='|' read -r status mime bytes <<< "$probe"
+  if [[ "$status" != "200" || ! "$bytes" =~ ^[0-9]+$ ||
+        "$bytes" -lt 200 ]]; then
+    systemctl stop "$UNIT" || true
+    die "Preview asset /static/$asset failed: HTTP $status, type $mime, $bytes bytes."
+  fi
+  if [[ "$asset" == *.css && "$mime" != text/css* ]]; then
+    systemctl stop "$UNIT" || true
+    die "Preview CSS /static/$asset has wrong MIME type: $mime."
+  fi
+done
+info "Main page and eight CSS/JS assets are reachable and nonempty."
 for service in promoeditor regionalresearch caddy; do
   if ! systemctl is-active --quiet "$service"; then
     systemctl stop "$UNIT" || true
