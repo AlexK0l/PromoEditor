@@ -40,6 +40,7 @@ from .ai_exact_copy_template import (
     _rasterize_in_worker,
 )
 from .ai_technical_sheet import render_technical_sheet
+from .ai_transport import OpenAIImageConnectionFailure
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -80,6 +81,10 @@ class PartialPosterFailure(RuntimeError):
         super().__init__("Partially generated artwork was preserved")
         self.recovery_zip = recovery_zip
         self.cause_type = type(cause).__name__
+        # Only expose fixed, allowlisted network explanations, never raw
+        # SDK exception strings, customer prompts, file paths or headers.
+        self.public_reason = (cause.public_reason if isinstance(
+            cause, OpenAIImageConnectionFailure) else None)
 
 # Bound 6-preview renders inside a worker, especially on the 2-GB VPS.
 CONCEPT_RENDER_SLOTS=threading.BoundedSemaphore(1)
@@ -904,6 +909,7 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
                 'ai_poster_4x3.jpg', 'ai_poster_9x16.jpg',
                 'typography_layout.json', 'typography_style.json',
                 'verified_copy.json', 'poster_copy.json',
+                'openai_connection_diagnostic.json',
             )
             available = [folder/name for name in allowed
                          if (folder/name).is_file()]
@@ -919,9 +925,14 @@ def _exact_typography_posters_sync(brief, product_raw, logo_raw,
                         'Генерация НЕ завершена. Промежуточные материалы '
                         'не предназначены для публикации.\n'
                         'Сохранены только успешно выполненные этапы.\n'
-                        'Тип ошибки: '+type(exc).__name__+'.\n'
+                        'Тип ошибки: '+type(exc).__name__+'.\\n'
+                        + ('Безопасная диагностика: '+exc.public_reason+'\\n'
+                           if isinstance(exc,OpenAIImageConnectionFailure)
+                           else '') +
                         'Оплаченные изображения по возможности также '
-                        'хранятся в закрытом кэше сервера.\n',
+                        'хранятся в закрытом кэше сервера.\\n'
+                        'Если запрос был принят OpenAI, списание за него '
+                        'может произойти даже без полученного ответа.\\n',
                     )
                 raise PartialPosterFailure(
                     f'/files/{job_id}/ai_failed_generation.zip',exc
@@ -1112,7 +1123,8 @@ def _run_generation_task(task_id: str):
             code=502
             detail=(
                 'Сборка постеров прервалась ('+exc.cause_type+'). '
-                'Созданные материалы сохранены в диагностическом ZIP. '
+                + (exc.public_reason+' ' if exc.public_reason else '')
+                + 'Созданные материалы сохранены в диагностическом ZIP. '
                 'Оплаченные этапы не запускаются повторно автоматически.'
             )
         elif isinstance(exc,QuotaExceeded):
