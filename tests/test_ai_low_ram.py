@@ -102,9 +102,15 @@ def test_file_backed_ai_outputs_and_cache_resume(monkeypatch,tmp_path):
     assert len(list(Path(result["cache_dir"]).glob("*.png")))==2
 
 
-def test_paid_cached_art_with_impossible_specs_preserves_cache_and_fails(
+def test_paid_cached_art_with_small_legacy_specs_box_is_locally_recomposed(
         monkeypatch,tmp_path):
-    """Do not quietly omit specifications to produce a false success."""
+    """The NEW editorial panel fixes tiny AI slots without buying new art.
+
+    Previously, a tiny 4:3 'specs' rectangle forced a customer-visible error
+    or the deletion of technical claims. The renderer owns its own integrated
+    technical strip and depends only on the actual photographed product bbox.
+    """
+    import xml.etree.ElementTree as ET
     monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
     monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","0")
     monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY","0")
@@ -133,25 +139,23 @@ def test_paid_cached_art_with_impossible_specs_preserves_cache_and_fails(
         pipeline,"client",
         lambda:pytest.fail("Cached artwork/layout must never pay OpenAI"),
     )
-    observed=[]
-    def reject_specs(geometry,copy,**kwargs):
-        observed.append(len(copy["specs"]))
-        assert copy["specs"], "Cannot remove the last spec to make a poster"
-        raise ValueError(
-            "AI не оставил достаточно свободного места для «specs» (4x3)."
-        )
-    monkeypatch.setattr(pipeline,"repair_ai_slots",reject_specs)
-    with pytest.raises(ValueError,match="ТТХ НЕ удалены"):
-        pipeline.generate_exact_typography_posters(
-            values,selected,logo=None,drawing=None,reference=None,
-            model="gpt-image-2.5-flare",quality="medium",
-            output_dir=tmp_path/"recovered",
-        )
-    assert observed[0]==3
-    assert min(observed)==1
+    result=pipeline.generate_exact_typography_posters(
+        values,selected,logo=None,drawing=None,reference=None,
+        model="gpt-image-2.5-flare",quality="medium",
+        output_dir=tmp_path/"recovered",
+    )
+    for fmt in FORMATS:
+        svg=result["svg"][fmt].read_bytes()
+        root=ET.fromstring(svg)
+        facts=[node.get("data-exact-copy") for node in root.iter()
+               if node.get("data-verified-role")=="specs"]
+        assert facts==[
+            "Грузоподъёмность: 44 т","Объём кузова: 55 м³",
+            "Собственный вес: 8,3 т",
+        ]
+        assert result["png"][fmt].is_file()
     assert pipeline._load_json(cache,"layout_raw.json")==raw
     assert all((cache/(fmt+".png")).is_file() for fmt in FORMATS)
-    assert not (tmp_path/"recovered"/"corel_4x3.svg").exists()
 
 
 def test_native_raster_worker_oom_failure_is_reported(monkeypatch,tmp_path):
