@@ -22,9 +22,9 @@ from pathlib import Path
 from PIL import Image
 
 from app.ai_exact_copy_render import (
-    DEFAULT_STYLE, FORMATS, poster_copy, validate_style,
+    DEFAULT_STYLE, FORMATS, validate_style,
 )
-from app.ai_integrated_render import render_integrated_svg
+from app.ai_integrated_render import integrated_copy, render_integrated_svg
 from app.ai_exact_copy_template import _rasterize_in_worker
 
 _REQUIRED = (
@@ -84,7 +84,7 @@ def recompose(paid_zip: Path, destination_zip: Path) -> None:
                     or "\\" in name):
                 raise ValueError("Небезопасное имя файла в ZIP.")
         brief,layout,styles,drawing=_input_facts(original)
-        copy=poster_copy(brief)
+        copy=integrated_copy(brief,drawing=bool(drawing))
         # Use ONLY the source artwork the customer already paid for.
         # This script never imports or creates an OpenAI client.
         with tempfile.TemporaryDirectory(prefix="promo-recompose-") as temp:
