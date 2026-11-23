@@ -500,6 +500,16 @@
           $('generated-preview-link-'+fmt).href=path;
         }
       }
+      const technical=latest.technical_sheet;
+      const showTechnical=Boolean(technical?.png&&technical?.svg);
+      $('generated-preview-link-technical').hidden=!showTechnical;
+      $('technical-sheet-downloads').hidden=!showTechnical;
+      if(showTechnical){
+        $('generated-preview-technical').src=technical.png;
+        $('generated-preview-link-technical').href=technical.png;
+      }
+      $('download-technical-png').disabled=!showTechnical;
+      $('download-technical-svg').disabled=!showTechnical;
       $('generated-previews').hidden=false;
       $('download-panel').hidden=false;
       const rasterOnly=Boolean(latest.raster_only);
@@ -515,7 +525,9 @@
         :'Скачать отдельные PNG, JPEG или SVG';
       document.querySelector('.prompt-download-note').textContent=rasterOnly
         ?'ZIP содержит два AI-постера, исходное выбранное фото и отдельно ребрендированный прицеп (rebranded_product.png). Остальные фото не изменяются. SVG нет.'
-        :'ZIP содержит оба AI-дизайна, точные редактируемые SVG, AI-зоны текста, стилевые параметры, ребрендированное и исходное фото.';
+        :(showTechnical
+          ?'ZIP содержит оба AI-постера, отдельный редактируемый технический лист с полными ТТХ и исходным чертежом, а также все исходные материалы.'
+          :'ZIP содержит оба AI-дизайна, точные редактируемые SVG, стилевые параметры и исходные материалы.');
       document.querySelector('.result-disclaimer').textContent=rasterOnly
         ?'AI изменил фото выбранного прицепа, а не реальную технику. Проверьте точность нового логотипа, бренда, модели, цены, характеристик и геометрии перед публикацией; остальные фото не изменялись. Текст растра не редактируется.'
         :'Текст и числа вставлены точно из вашей формы; AI лишь подбирал шрифт, цвет и масштаб. Проверьте читаемость, фотографию и логотип. SVG можно исправить в CorelDRAW.';
@@ -728,7 +740,7 @@
       $('mode-ai-pro').checked=false;
       $('advanced-settings').open=false;
       $('brief-data-hint').hidden=false;
-      $('brief-data-hint').textContent='Эталон загружен: 10 ТТХ, 7 размеров, 6 527 000 ₽ и телефоны. Остальные поля — в «Дополнительно».';
+      $('brief-data-hint').textContent='Эталон загружен: 10 ТТХ, 7 размеров, 6 527 000 ₽ и телефоны. Полные характеристики доступны прямо ниже основного фото.';
       hasDemo=false;
       latest=null;$('download-panel').hidden=true;
       markPromptStale();
@@ -978,5 +990,7 @@
   $('download-jpeg-9x16').addEventListener('click',()=>download(latest?.jpeg?.['9x16']));
   $('download-svg-4x3').addEventListener('click',()=>download(latest?.corel?.['4x3']));
   $('download-svg-9x16').addEventListener('click',()=>download(latest?.corel?.['9x16']));
+  $('download-technical-png').addEventListener('click',()=>download(latest?.technical_sheet?.png));
+  $('download-technical-svg').addEventListener('click',()=>download(latest?.technical_sheet?.svg));
   init();
 })();
