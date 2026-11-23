@@ -141,8 +141,13 @@ def poster_copy(brief: dict) -> dict[str, list[str]]:
         item[0]))
     chosen["specs"]=[value for _,value in ranked
                      if len(value)<=44][:3]
-    chosen["claims"]=[value for value in full["claims"]
-                      if len(value)<=56][:2]
+    # The form has two independent approved sources of selling points.
+    # Previously an empty "short claims" field silently excluded every
+    # value from "other benefits", leaving a blank ad despite user input.
+    claims=[value for value in full["claims"] if len(value)<=56]
+    benefits=[value for value in full["benefits"]
+              if len(value)<=56 and value not in claims]
+    chosen["claims"]=(claims+benefits)[:2]
     return chosen
 
 
