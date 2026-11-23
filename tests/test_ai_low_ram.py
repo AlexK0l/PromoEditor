@@ -262,3 +262,42 @@ def test_uploaded_large_logo_is_downscaled_before_rgba_embedding(monkeypatch):
     assert name=="exact-uploaded-logo"
     assert w<=900 and h<=175,(
         "Full-size logo was converted before downsampling: "+str((w,h)))
+
+
+def test_failed_paid_exact_copy_gives_private_partial_art_zip(monkeypatch,tmp_path):
+    """A text-zone failure must not leave the customer empty-handed."""
+    import zipfile
+    from app import main
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","0")
+    monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY","0")
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    source=png()
+    monkeypatch.setattr(main,"cached_rebrand_photo",lambda folder:None)
+    monkeypatch.setattr(main,"rebrand_selected_photo",
+                        lambda brief,raw,**kwargs:source)
+    def failure_after_one_paid_art(brief,rebranded,*,output_dir,**kwargs):
+        assert rebranded==source
+        (output_dir/"ai_template_4x3.png").write_bytes(source)
+        raise ValueError("AI не оставил достаточно свободного места для «model» (9x16)")
+    monkeypatch.setattr(main,"generate_exact_typography_posters",
+                        failure_after_one_paid_art)
+    with pytest.raises(main.PartialPosterFailure) as failure:
+        main._exact_typography_posters_sync(
+            brief(),source,None,None,None,"gpt-image-2.5-flare","medium")
+    assert failure.value.cause_type=="ValueError"
+    url=failure.value.recovery_zip
+    assert url.startswith("/files/") and url.endswith("/ai_failed_generation.zip")
+    job_id=url.split("/")[2]
+    archive=tmp_path/job_id/"ai_failed_generation.zip"
+    with zipfile.ZipFile(archive) as bundle:
+        names=bundle.namelist()
+        assert "ai_template_4x3.png" in names
+        assert "rebranded_product.png" in names
+        assert "READ_ME_FIRST.txt" in names
+        assert bundle.read("ai_template_4x3.png")==source
+        assert "ai_poster_9x16.png" not in bundle.namelist()
+        assert "Генерация НЕ завершена" in bundle.read(
+            "READ_ME_FIRST.txt").decode("utf-8")
+    # Never present partial files as a finished advertising ZIP.
+    assert not (tmp_path/job_id/"ai_typographic_posters.zip").is_file()
