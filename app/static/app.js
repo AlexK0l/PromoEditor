@@ -745,7 +745,7 @@
       $('mode-ai-pro').checked=false;
       $('advanced-settings').open=false;
       $('brief-data-hint').hidden=false;
-      $('brief-data-hint').textContent='Эталон PRO: 10 ТТХ, 7 размеров, чертёж, преимущества, расчёт выгоды, цена и контакты — на ОБОИХ плакатах. Фотографии и чертёж загрузите свои.';
+      $('brief-data-hint').textContent='Эталон PRO: 10 ТТХ, 7 размеров, чертёж, преимущества, расчёт выгоды, цена 6 527 000 ₽ и контакты — на ОБОИХ плакатах. Фотографии и чертёж загрузите свои.';
       hasDemo=false;
       latest=null;$('download-panel').hidden=true;
       markPromptStale();
