@@ -112,7 +112,7 @@ def test_one_click_free_asset_selection_precedes_any_potentially_paid_generation
     assert "pollAiGeneration(result.task_id)" in body
     assert "isHybrid()" in body
     assert "const selected=window.PromoAssets?.getReport?.()" in body
-    assert "if(isBusy)return;" in body
+    assert "if(isBusy||pendingPaidTask)return;" in body
 
 
 def test_design_css_supports_keyboard_focus_small_screen_and_dark_theme():

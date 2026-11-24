@@ -220,7 +220,7 @@ def main():
           const originalFetch=window.fetch.bind(window);
           const originalTimeout=window.setTimeout.bind(window);
           window.setTimeout=(fn,delay,...args)=>
-            originalTimeout(fn,delay===8000?80:delay===2400?25:delay,...args);
+            originalTimeout(fn,delay===8000?300:delay===2400?25:delay,...args);
           window.fetch=(url,options={})=>{
             if(window.__blockStatus&&String(url).includes('/api/generate/status/')){
               return new Promise((resolve,reject)=>{
