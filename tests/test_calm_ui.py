@@ -205,3 +205,13 @@ def test_reference_is_optional_in_every_ui_mode():
     assert "Рекламный эталон · необязательно" in html
     assert "для PRO обязателен" not in html
     assert "обязательно загрузите хотя бы один" not in html
+
+
+def test_poster_visual_review_is_explicitly_disclosed_and_opt_out_available():
+    html, _ = parse_page()
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert 'id="verify-posters" type="checkbox" checked' in html
+    assert "1 платный Responses-запрос" in js
+    assert "checked('verify-posters'))form.append('verify_posters','true')" in js
+    assert "poster_review.json" in js
+    assert "AI-черновики для проверки" in js

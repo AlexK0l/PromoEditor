@@ -118,6 +118,7 @@
               <small id="quick-ai-description">OpenAI создаёт два цельных рекламных плаката с типографикой. До 3 платных вызовов Images, возможен AI-выбор фото. Экспорт PNG/JPEG без обрезки; оригинальный чертёж и исходные AI-изображения в ZIP.</small>
             </span>
           </label>
+          <label class="check-field" id="verify-posters-option"><input id="verify-posters" type="checkbox" checked><span>Предварительная AI-сверка обоих плакатов <small>1 дополнительный платный Responses-запрос; не заменяет ручную проверку</small></span></label>
         </div>
         <div class="generate-row">
           <div class="generate-description">
@@ -351,6 +352,7 @@
       </details>
         <p class="prompt-download-note">ZIP содержит оба формата, редактируемые SVG для CorelDRAW и ваши оригиналы.</p>
       <div id="result-warnings" class="result-warnings" role="status" aria-live="polite" hidden><strong>Как улучшить следующий макет</strong><ul id="result-warning-items"></ul></div>
+      <p id="poster-review-status" class="result-disclaimer" role="status" aria-live="polite" hidden></p>
       <button type="button" id="new-variation-btn" class="secondary-button" hidden>Создать новый художественный вариант (платно)</button>
       <p class="result-disclaimer">Перед публикацией проверьте данные и права на изображения. Для правок откройте SVG в CorelDRAW.</p>
     </section>
@@ -452,7 +454,7 @@
     <footer class="footer">PromoEditor · AI-дизайн, проверяемые данные в редактируемом SVG и исходное выбранное фото в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261124-no-crop-v5" defer></script>
+  <script src="/static/app.js?v=20261124-no-crop-review-v6" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>

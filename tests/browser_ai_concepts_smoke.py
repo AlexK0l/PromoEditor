@@ -50,6 +50,7 @@ def main():
         status_requests = []
         def begin_reply(route):
             posts.append(route.request.url)
+            assert b'name="verify_posters"' in (route.request.post_data_buffer or b"")
             route.fulfill(status=202, content_type="application/json",
                           body=json.dumps({
                 "task_id": "b" * 32, "status": "running",
@@ -125,6 +126,7 @@ def main():
         assert confirmations and "До 3 платных вызовов OpenAI Images" in confirmations[0], confirmations
         assert "PNG/JPEG, НЕ SVG" in confirmations[0]
         assert "кэш" in confirmations[0]
+        assert "1 платный Responses-запрос" in confirmations[0]
         assert not posts, "Rejecting a paid call must make ZERO requests"
         assert page.locator("#loading").is_hidden()
 
@@ -148,6 +150,8 @@ def main():
         assert page.locator("#download-svg-9x16").is_disabled()
         assert "растр" in page.locator(".result-disclaimer").inner_text().lower()
         assert "approved_copy.json" in page.locator(".prompt-download-note").inner_text()
+        assert "AI-черновики" in page.locator("#download-title").inner_text()
+        assert page.locator("#poster-review-status").is_visible()
         for selector in ("#generation-mode",
                          "#ai-concepts-workflow", "#openai-posters-workflow"):
             assert page.locator(selector).is_hidden(), selector

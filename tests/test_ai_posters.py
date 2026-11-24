@@ -142,6 +142,11 @@ def test_ai_poster_route_without_exemplar_downloads_raster_and_originals(
             assert "OpenAI Images" in readme
             assert "SVG" in readme
             assert "approved_copy.json" in z.namelist()
+            review=json.loads(z.read("poster_review.json"))
+            assert review["status"]=="not_requested"
+            assert review["human_review_required"] is True
+            geometry=json.loads(z.read("export_geometry.json"))
+            assert all(not info["crop"] for info in geometry.values())
 
 
 def test_ai_poster_route_requires_actual_product_photo_without_spending(

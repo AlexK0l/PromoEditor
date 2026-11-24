@@ -229,6 +229,8 @@
     const paidInTemplate=!hybrid&&!ai&&checked('use-openai');
     simple.checked=hybrid||paidInTemplate;
     simple.disabled=!apiReady||ai;
+    if($('verify-posters'))$('verify-posters').disabled=!apiReady||!hybrid||isBusy;
+    if($('verify-posters-option'))$('verify-posters-option').hidden=!hybrid;
     simple.closest('.one-ai-choice').classList.toggle('is-disabled',!apiReady||ai);
     $('quick-ai-description').textContent=apiReady
       ?(ai
@@ -450,6 +452,7 @@
     isBusy=on;
     $('generate-btn').disabled=on;
     if($('new-variation-btn'))$('new-variation-btn').disabled=on;
+    if($('verify-posters'))$('verify-posters').disabled=on||!apiReady||!isHybrid();
     $('generate-concepts-btn').disabled=on || !apiReady;
     $('generate-ai-posters-btn').disabled=on || !apiReady;
     $('build-prompt-btn').disabled=on;
@@ -524,6 +527,15 @@
       $('download-panel').hidden=false;
       const rasterOnly=Boolean(latest.raster_only);
       if($('new-variation-btn'))$('new-variation-btn').hidden=!rasterOnly;
+      if($('poster-review-status')){
+        const review=latest.poster_review;
+        $('poster-review-status').hidden=!rasterOnly;
+        if(rasterOnly){
+          const messages={issues_found:'AI-сверка выявила расхождения или непроверенные данные: '+(review?.issues_count??'—')+'.',no_issues_detected:'AI-сверка не выявила расхождений в проверенных полях. Это не гарантия точности.',unavailable:'AI-сверка недоступна; изображения сохранены, требуется ручная сверка.',not_requested:'AI-сверка не запускалась; требуется ручная сверка.'};
+          $('poster-review-status').textContent=(messages[review?.status]||messages.not_requested)+' Подробности в poster_review.json. Не публикуйте без проверки.';
+        }
+      }
+      $('download-title').textContent=rasterOnly?'AI-черновики для проверки':'Файлы готовы к скачиванию';
       for(const id of ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16'])
         $(id).disabled=false;
       for(const fmt of ['4x3','9x16']){
@@ -535,15 +547,15 @@
         ?'Скачать отдельные PNG или JPEG'
         :'Скачать отдельные PNG, JPEG или SVG';
       document.querySelector('.prompt-download-note').textContent=rasterOnly
-        ?'ZIP содержит PNG/JPEG без обрезки, исходные AI-растры без полей, approved_copy.json, export_geometry.json, оригинал чертежа при наличии и исходные фото. Текст растра не редактируется, SVG нет.'
+        ?'ZIP содержит PNG/JPEG без обрезки, исходные AI-растры без полей, approved_copy.json, export_geometry.json, poster_review.json, оригинал чертежа при наличии и исходные фото. Текст растра не редактируется, SVG нет.'
         :(showTechnical
           ?'ZIP содержит оба плаката С ОРИГИНАЛЬНЫМ ЧЕРТЕЖОМ и ключевыми ТТХ, а также дополнительный редактируемый лист со всеми характеристиками.'
           :'ZIP содержит оба AI-дизайна, точные редактируемые SVG, стилевые параметры и исходные материалы.');
       document.querySelector('.result-disclaimer').textContent=rasterOnly
         ?'AI создал весь художественный дизайн и текст. Габариты — текстом, оригинал чертежа сохранён отдельно. ОБЯЗАТЕЛЬНО сверьте растр с approved_copy.json и оригиналами. Не публикуйте без ручного утверждения.'
         :'Текст и числа вставлены точно из вашей формы; AI лишь подбирал шрифт, цвет и масштаб. Проверьте читаемость, фотографию и логотип. SVG можно исправить в CorelDRAW.';
-      setStatus('Готово',rasterOnly
-        ?('Созданы два постера 4:3 и 9:16; ребрендирован только прицеп на фото «'+(latest.selected_photo?.name||'выбранное главное')+'». Проверьте логотип и ТТХ.')
+      setStatus(rasterOnly?'Требуется проверка':'Готово',rasterOnly
+        ?('Сохранены два AI-черновика 4:3 и 9:16 без обрезки; ребрендирован только прицеп на фото «'+(latest.selected_photo?.name||'выбранное главное')+'». Проверьте все факты.')
         :(isHybrid()?'AI-макет с точным текстом и AI-типографикой':isAiPro()?'Выбранный AI-дизайн':'Шаблон')+': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
   }
@@ -576,7 +588,9 @@
     const paidRendering=isHybrid()||checked('use-openai');
     if(isHybrid()&&!window.confirm(
       (newVariation?'Создать НОВЫЙ художественный вариант с новыми платными вызовами? ':'')+
-      'OpenAI создаст два цельных плаката с надписями и габаритами. Оригинал чертежа сохраняется отдельно. До 3 платных вызовов OpenAI Images: ребрендинг и два формата, возможен платный выбор главного фото. Повтор того же варианта использует сохранённый кэш, пока он не истёк. Результат PNG/JPEG, НЕ SVG, без обрезки. Данные и логотип требуют ручного утверждения. Продолжить?'
+      'OpenAI создаст два цельных плаката с надписями и габаритами. Оригинал чертежа сохраняется отдельно. До 3 платных вызовов OpenAI Images: ребрендинг и два формата, возможен платный выбор главного фото. '+
+      (checked('verify-posters')?'Дополнительно: 1 платный Responses-запрос для предварительной сверки обоих плакатов. ':'AI-сверка отключена. ')+
+      'Повтор того же варианта использует сохранённый кэш, пока он не истёк. Результат PNG/JPEG, НЕ SVG, без обрезки. Данные и логотип требуют ручного утверждения. Продолжить?'
     ))return;
     if(isHybrid()&&newVariation){
       posterVariation=Array.from(crypto.getRandomValues(new Uint8Array(16)),
@@ -635,6 +649,7 @@
       form.append('use_demo',String(checked('use-demo')));
       form.append('generation_mode',isAiPro()?'ai_pro':isHybrid()?'hybrid':'template');
       if(isHybrid()&&posterVariation)form.append('poster_variation',posterVariation);
+      if(isHybrid()&&checked('verify-posters'))form.append('verify_posters','true');
       if(isAiPro()){
         form.append('concept_set_id',aiConceptSet.concept_set_id);
         form.append('concept_index',String(selectedAiConcept));

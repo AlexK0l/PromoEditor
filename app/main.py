@@ -45,6 +45,7 @@ from .ai_native_art_direction import (
 )
 from .ai_transport import OpenAIImageConnectionFailure
 from .ai_artwork_fit import artwork_geometry
+from .ai_poster_review import review_pair, skipped_review
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -695,7 +696,8 @@ def _partial_poster_response(exc):
 
 def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        reference_raw, model, quality, selected_source=None,
-                       progress=None, secondary_raw=None, variation_id=''):
+                       progress=None, secondary_raw=None, variation_id='',
+                       verify_posters=False, drawing_source_pdf=None):
     """Rebrand ONLY the selected photo before authoring both full AI posters.
 
     The original photo is immutable. The one paid rebranding edit is cached
@@ -769,6 +771,18 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             encoding='utf8')
         (folder/'export_geometry.json').write_text(
             json.dumps(geometry,ensure_ascii=False,indent=2),encoding='utf8')
+        # Free memory from finished images before optional high-detail review.
+        del posters
+        if verify_posters:
+            if progress:
+                progress('AI сверяет оба готовых плаката с исходными данными')
+            review=review_pair(approved,folder,paid_cache,
+                               logo=logo_raw,drawing=drawing_raw,
+                               product=rebranded_raw)
+        else:
+            review=skipped_review()
+        (folder/'poster_review.json').write_text(
+            json.dumps(review,ensure_ascii=False,indent=2),encoding='utf8')
         archive=folder/'ai_posters.zip'
         with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,
                              compresslevel=6) as z:
@@ -787,6 +801,10 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             z.write(folder/'approved_copy.json',
                     arcname='approved_copy.json')
             z.write(folder/'export_geometry.json',arcname='export_geometry.json')
+            z.write(folder/'poster_review.json',arcname='poster_review.json')
+            if drawing_source_pdf:
+                z.writestr('originals/drawing_source.pdf',drawing_source_pdf,
+                           compress_type=zipfile.ZIP_STORED)
             z.writestr('brief.json',
                        json.dumps(brief,ensure_ascii=False,indent=2))
             z.writestr('selected_photo.json',json.dumps({
@@ -803,6 +821,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        'approved_copy.json содержит ВСЕ исходные факты '
                        'и расчёты для сверки обоих изображений. '
                        'В export_geometry.json — геометрия масштабирования без обрезки. '
+                       'В poster_review.json — статус и результаты предварительной '
+                       'AI-сверки (если запрошена), НЕ подтверждение точности. '
                        'Оригинальный чертёж сохранён отдельно, габариты должны '
                        'быть указаны точным текстом. '
                        'Изменённый кадр: rebranded_product.png. '
@@ -833,6 +853,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'rebranded_photo':f'/files/{job_id}/rebranded_product.png',
                 'rebranding_applied':True,
                 'publication_status':'human_review_required',
+                'poster_review':review,
                 'export_geometry':geometry,
                 'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]}
     except Exception as exc:
@@ -1113,7 +1134,9 @@ async def create_full_ai_posters(request:Request):
             raise HTTPException(400,detail='Загрузите и выберите главное фото техники.')
         drawing=chosen_bytes(report,records,'drawing')
         drawing_id=report['selected_assets'].get('drawing')
+        drawing_source_pdf=None
         if drawing and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
+            drawing_source_pdf=drawing
             drawing=await asyncio.to_thread(pdf_first_page_png,drawing)
         photo_id=report['selected_assets']['primary_photo']
         source={'id':photo_id,'name':records[photo_id]['name'],
@@ -1127,7 +1150,9 @@ async def create_full_ai_posters(request:Request):
             chosen_bytes(report,records,'logo'),drawing,
             style_board,model,quality,selected_source=source,
             secondary_raw=chosen_bytes(report,records,'secondary_photo'),
-            **({'variation_id':variation_id} if variation_id else {}))
+            **({'variation_id':variation_id} if variation_id else {}),
+                **({'verify_posters':True} if str(form.get('verify_posters','false')).lower()=='true' else {}),
+                **({'drawing_source_pdf':drawing_source_pdf} if drawing_source_pdf else {}))
     except QuotaExceeded as exc:
         raise HTTPException(429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
@@ -1249,7 +1274,7 @@ def _run_generation_task(task_id: str):
         opened.clear()
         ai_job_queue.erase_uploads(folder)
         ai_job_queue.set_status(
-            folder,'complete',stage='Оба полноформатных AI-плаката готовы',
+            folder,'complete',stage='Оба AI-плаката сохранены; требуется ручная проверка',
             result=result)
     except Exception as exc:
         if isinstance(exc,HTTPException):
@@ -1480,7 +1505,10 @@ async def _generate_from_form(form, progress=None):
         except (ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:
             raise HTTPException(400,detail='AI-концепция повреждена или не выбрана.') from exc
     drawing_id=report['selected_assets']['drawing']
+    drawing_source_pdf=None
     if drawing_raw and drawing_id and records[drawing_id]['name'].lower().endswith('.pdf'):
+        if mode=='hybrid':
+            drawing_source_pdf=drawing_raw
         try:drawing_raw=await asyncio.to_thread(pdf_first_page_png,drawing_raw)
         except ValueError as exc:raise HTTPException(400,detail=str(exc))
     try:
@@ -1519,7 +1547,9 @@ async def _generate_from_form(form, progress=None):
                 selected_source=selected_source,
                 secondary_raw=detail_raw,
                 **({'progress':progress} if progress else {}),
-                **({'variation_id':variation_id} if variation_id else {}))
+                **({'variation_id':variation_id} if variation_id else {}),
+                **({'verify_posters':True} if str(form.get('verify_posters','false')).lower()=='true' else {}),
+                **({'drawing_source_pdf':drawing_source_pdf} if drawing_source_pdf else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references
             result=await asyncio.to_thread(
