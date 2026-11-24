@@ -133,7 +133,7 @@
             <div class="mini-uploads optional-uploads">
               <label for="documents" class="mini-upload"><span class="mini-icon" aria-hidden="true">▤</span><span><strong>Документы с ТТХ</strong><small id="file-documents">PDF, Excel, Word, CSV</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Документы с характеристиками"></label>
               <label class="mini-upload" for="background" hidden><span class="mini-icon" aria-hidden="true">▧</span><span><strong>Свой фон</strong><small id="file-background">Фото промышленной сцены</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="background" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Загрузить собственное фото промышленной площадки для фона постера"></label>
-              <label class="mini-upload" for="reference_example"><span class="mini-icon" aria-hidden="true">✦</span><span><strong>Рекламный эталон · для PRO обязателен</strong><small id="file-reference_example">Пример оформления</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="reference_example" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Пример рекламного дизайна для AI, обязателен для Рекламный PRO"></label>
+              <label class="mini-upload" for="reference_example"><span class="mini-icon" aria-hidden="true">✦</span><span><strong>Рекламный эталон · необязательно</strong><small id="file-reference_example">Пример оформления</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="reference_example" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Необязательный пример рекламного дизайна для AI"></label>
             </div>
           </details>
             <details class="quiet-details asset-file-details" id="asset-files-details">
@@ -166,14 +166,14 @@
             <option value="sales">Продажи</option><option value="engineering">Техническая убедительность</option>
             <option value="prestige">Имидж бренда</option><option value="balanced">Универсальная подача</option>
           </select></label>
-          <p class="field-tip">Для «Рекламный PRO» обязательно загрузите хотя бы один исходный рекламный эталон; желательно оба образца 4:3 и 9:16. Файлы из переписки автоматически на VPS не попадают. Для остальных стилей эталон необязателен. Генерация OpenAI Images платная, плакаты — растровые.</p>
+          <p class="field-tip">Рекламный эталон необязателен для всех стилей, включая «Рекламный PRO». Без него AI самостоятельно разрабатывает дизайн по вашим данным и фотографиям. Если хотите ориентировать AI на конкретное оформление, загрузите один или два примера. Генерация OpenAI Images платная, плакаты — растровые.</p>
         </div>
         <details class="quiet-details design-options" id="design-options" hidden>
           <summary>Поменять стиль и настройки AI <span aria-hidden="true">⌄</span></summary>
           <div class="choices-row">
           <div class="style-wrap">
-            <span class="control-label">Стиль оформления <span class="field-hint">яркий рекламный — ближе к эталону</span></span>
-            <select id="style" class="sr-only" aria-label="Выбранный стиль"><option value="industrial">Контрастный</option><option value="reference_pro">Рекламный PRO — как эталон</option><option value="graphite">Премиальный</option><option value="minimal">Минимальный</option></select>
+            <span class="control-label">Стиль оформления <span class="field-hint">профессиональная рекламная арт-дирекция</span></span>
+            <select id="style" class="sr-only" aria-label="Выбранный стиль"><option value="industrial">Контрастный</option><option value="reference_pro">Рекламный PRO — авторский дизайн</option><option value="graphite">Премиальный</option><option value="minimal">Минимальный</option></select>
             <div class="style-pills" role="group" aria-label="Стиль оформления">
               <button type="button" class="style-pill is-active" data-style="industrial" aria-pressed="true"><span class="style-dot dot-red"></span>Контрастный</button>
               <button type="button" class="style-pill" data-style="reference_pro" aria-pressed="false"><span class="style-dot dot-red"></span>Рекламный PRO · постер</button>
@@ -452,7 +452,7 @@
     <footer class="footer">PromoEditor · AI-дизайн, проверяемые данные в редактируемом SVG и исходное выбранное фото в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261124-native-recovery-v3" defer></script>
+  <script src="/static/app.js?v=20261124-optional-style-v4" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>

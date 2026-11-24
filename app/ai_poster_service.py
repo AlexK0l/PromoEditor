@@ -20,7 +20,7 @@ from .openai_service import (
 
 FORMATS = {"4x3": ((1440, 1080), "1536x1024"),
            "9x16": ((1080, 1920), "1024x1536")}
-VERSION = "full-openai-ad-poster-creative-v6-safe-crop-no-edge-extension"
+VERSION = "full-openai-ad-poster-creative-v7-optional-style"
 WARNING = (
     "Полный рекламный плакат создан OpenAI Images, включая художественную "
     "композицию, фотографии и типографику. Алгоритмический SVG-шаблон "
@@ -115,8 +115,8 @@ def _prompt(brief, fmt, logo, drawing, reference,
             "visually ranked clear red-white specifications on right; "
             "engineering/dimensions and benefits below the hero; "
             "strong full-width red price/contact CTA at bottom. "
-            "Preserve every brand, title, icon and table in the whole native "
-            "3:2 output frame. No cut-off text or artwork at the borders."
+            "Preserve every brand, title, icon and table inside the final "
+            "central aspect-safe region described below, not the outer edges."
         )
     else:
         composition = (
@@ -126,17 +126,18 @@ def _prompt(brief, fmt, logo, drawing, reference,
             "specifications, engineering and benefits below, persuasive "
             "price and contact CTA at bottom. Preserve the whole vehicle "
             "including wheels, with ALL important content kept inside "
-            "the full native 2:3 output frame. Never cut off any headline."
+            "the final central aspect-safe region. Never cut off any headline."
         )
     if brief.get("style")=="reference_pro":
         composition=(
             "Create a COMPLETE reference-quality promotional poster "
-            "with all heading text, source facts, source engineering "
-            "drawing, pictograms, red/black stylistic graphics and "
-            "price/CTA composed BY THE IMAGE MODEL. It must look like "
-            "the customer's beautifully art-directed information-rich "
-            "ZUBR TRAIL print advertisements. No empty template zones "
-            "or programmatic labels will be inserted later. "
+            "with all provided heading text, source facts, supplied engineering "
+            "drawing, appropriate pictograms, coherent stylistic graphics and "
+            "provided price/CTA composed BY THE IMAGE MODEL. Create a premium "
+            "information-rich print advertisement for the actual submitted "
+            "product and brand. An example image is optional. Without one, "
+            "invent an original artistic concept, not new product facts. "
+            "No empty template zones or programmatic labels will be inserted later. "
         )
     # Never trade logo visibility or readable technical figures for a
     # dramatic oversized hero. AI owns the visual design, not Python.

@@ -101,38 +101,78 @@ def test_both_customer_style_examples_are_transmitted_without_exposing_raw():
 
 
 
-def test_reference_pro_without_actual_uploaded_example_is_rejected_before_paid_ai(
+def test_reference_pro_without_example_uses_actual_full_image_pipeline(
         monkeypatch,tmp_path):
-    """The latest paid customer ZIP had no originals/style_reference file.
-
-    Images shown in a ChatGPT conversation are not automatically uploaded
-    into the PromoEditor web form. Prevent another paid, unguided art run.
-    """
+    """No required example; all three routes reach mocked Images edits."""
+    import base64
     import json
+    import time
+    import zipfile
+    from types import SimpleNamespace
     from fastapi.testclient import TestClient
-    from app import main
+    from app import main, product_rebrand_service
     from app.render import default_brief
 
-    brief=default_brief()
-    brief["style"]="reference_pro"
     monkeypatch.setenv("OPENAI_API_KEY","dummy-not-network")
     monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
     monkeypatch.setattr(main,"STORAGE",tmp_path)
     monkeypatch.setattr(main,"_guard_rate",lambda request:None)
-    def forbidden(*args,**kwargs):
-        raise AssertionError("Paid image/ranking called before style validation")
-    monkeypatch.setattr(main,"_full_posters_sync",forbidden)
-    monkeypatch.setattr(main,"analyze_project",forbidden)
     image=_png(420,270,"#FFDD00")
+    calls=[]
+    def edit(**options):
+        calls.append(options)
+        assert len(options["image"]) == 1
+        return SimpleNamespace(data=[SimpleNamespace(
+            b64_json=base64.b64encode(image).decode("ascii"))])
+    api=SimpleNamespace(images=SimpleNamespace(edit=edit))
+    monkeypatch.setattr(ai_poster_service,"client",lambda:api)
+    monkeypatch.setattr(product_rebrand_service,"client",lambda:api)
+    def forbidden(*args,**kwargs):
+        raise AssertionError("Full AI mode cannot fall back to an SVG renderer")
+    monkeypatch.setattr(main,"_exact_typography_posters_sync",forbidden)
+    monkeypatch.setattr(main,"_generate_sync",forbidden)
     with TestClient(main.app) as client:
-        result=client.post("/api/generate",data={
-            "payload":json.dumps(brief,ensure_ascii=False),
-            "generation_mode":"hybrid","use_openai":"true",
-        },files={"hero":("trailer.png",image,"image/png")})
-    assert result.status_code==400,result.text
-    assert "Рекламный PRO" in result.text
-    assert "эталон" in result.text
-    assert "Платные запросы не запускались" in result.text
+        for index,route in enumerate(("/api/generate","/api/ai-posters",
+                                      "/api/generate/start")):
+            brief=default_brief()
+            brief["style"]="reference_pro"
+            # Unique source data per endpoint, so each exercises both
+            # actual poster model calls rather than a cached answer.
+            brief["model"]=f"Independent product {index}"
+            before=len(calls)
+            response=client.post(route,data={
+                "payload":json.dumps(brief,ensure_ascii=False),
+                "generation_mode":"hybrid","use_openai":"true",
+            },files={"hero":("trailer.png",image,"image/png")})
+            if route.endswith("/start"):
+                assert response.status_code==202,response.text
+                status_url=response.json()["status_url"]
+                deadline=time.monotonic()+30
+                while time.monotonic()<deadline:
+                    state=client.get(status_url).json()
+                    if state["status"]!="running":
+                        break
+                    time.sleep(.05)
+                assert state["status"]=="complete",state
+                result=state["result"]
+            else:
+                assert response.status_code==200,response.text
+                result=response.json()
+            assert result["generation_mode"]=="openai_full_poster"
+            assert result["raster_only"] is True
+            assert result["reference_used"] is False
+            assert len(calls)-before==3
+            assert [c["size"] for c in calls[-2:]]==["1536x1024","1024x1536"]
+            for call in calls[-2:]:
+                assert "NO EXAMPLE IMAGE WAS PROVIDED" in call["prompt"]
+                assert brief["model"] in call["prompt"]
+                assert "ZUBR TRAIL print advertisements" not in call["prompt"]
+                assert "yellow accurate four-axle" not in call["prompt"]
+            with zipfile.ZipFile(io.BytesIO(client.get(result["zip"]).content)) as z:
+                assert "approved_copy.json" in z.namelist()
+                assert not any(name.startswith("originals/style_reference") for name in z.namelist())
+                assert "native_ai_artwork_4x3.png" in z.namelist()
+                assert "native_ai_artwork_9x16.png" in z.namelist()
 
 
 def test_customer_reference_pro_describes_editorial_campaign_not_template():

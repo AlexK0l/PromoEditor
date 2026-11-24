@@ -195,3 +195,13 @@ def test_native_poster_confirmation_and_explicit_new_variant():
     assert 'id="new-variation-btn"' in html
     assert "form.append('poster_variation',posterVariation)" in js
     assert "new-variation-btn')?.addEventListener('click',()=>generate(true))" in js
+
+
+def test_reference_is_optional_in_every_ui_mode():
+    html, _ = parse_page()
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    validate = js.split("function validateFiles(){",1)[1].split("function busy(",1)[0]
+    assert "Для стиля «Рекламный PRO» загрузите" not in validate
+    assert "Рекламный эталон · необязательно" in html
+    assert "для PRO обязателен" not in html
+    assert "обязательно загрузите хотя бы один" not in html

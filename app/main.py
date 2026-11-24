@@ -1088,9 +1088,6 @@ async def create_full_ai_posters(request:Request):
     groups=await _asset_groups(form)
     prefs,cached=_asset_review(form)
     variation_id=_poster_variation(form)
-    if (brief.get('style')=='reference_pro' and not groups['reference_examples']
-            and not groups['references']):
-        raise HTTPException(400,detail='Загрузите рекламный эталон. Платные запросы не запускались.')
     if not MAIN_AI_GENERATION_SLOT.acquire(blocking=False):
         raise HTTPException(409,detail='Уже выполняется AI-генерация.')
     try:
@@ -1295,7 +1292,7 @@ def _run_generation_task(task_id: str):
 async def start_ai_generation(request:Request):
     """Immediate 202, followed by authenticated progress polling.
 
-    The five paid API operations may outlive a normal reverse-proxy timeout.
+    The paid Images workflow may outlive a normal reverse-proxy timeout.
     One active task per 800 MiB worker, no concurrent paid duplicate.
     """
     _guard_rate(request)
@@ -1390,20 +1387,8 @@ async def _generate_from_form(form, progress=None):
     use_demo=str(form.get('use_demo','false')).lower()=='true'
     mode=str(form.get('generation_mode','template'))
     variation_id=_poster_variation(form) if mode=='hybrid' else ''
-    # The user-approved 4:3 and 9:16 advertising samples live in the CHAT,
-    # not magically inside a VPS upload. The prior charged ZIP had ZERO
-    # style reference files, so the image model never actually saw them.
-    # Stop BEFORE photo ranking or image credits are consumed.
-    if (mode=='hybrid' and brief.get('style')=='reference_pro'
-            and not groups['reference_examples']
-            and not groups['references']):
-        raise HTTPException(
-            400,detail=(
-                'Для стиля «Рекламный PRO» загрузите хотя бы один '
-                'рекламный эталон (4:3 или 9:16) в поле «Рекламный '
-                'эталон». Примеры из переписки автоматически на VPS '
-                'не передаются. Платные запросы не запускались.'
-            ))
+    # Style examples are optional for every mode, including reference_pro.
+    # Without an uploaded example, the model creates its own campaign.
     if mode not in ('ai_pro','template','hybrid'):
         raise HTTPException(400,detail='Неподдерживаемый режим создания.')
     if mode=='hybrid':
