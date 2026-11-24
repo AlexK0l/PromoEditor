@@ -101,7 +101,8 @@ def _layout_rules(fmt: str) -> str:
     raise ValueError("Недопустимый формат постера.")
 
 
-def _prompt(brief, fmt, logo, drawing, reference, product_is_rebranded=False):
+def _prompt(brief, fmt, logo, drawing, reference,
+            product_is_rebranded=False, secondary_photo=False):
     if fmt not in FORMATS:
         raise ValueError("Недопустимый формат постера.")
     if fmt == "4x3":
@@ -175,6 +176,18 @@ def _prompt(brief, fmt, logo, drawing, reference, product_is_rebranded=False):
         if product_is_rebranded else
         "The first source is the unmodified selected original product photo. "
     )
+    second_view_rule = (
+        "The additional product photograph is an ACTUAL CUSTOMER-SUPPLIED "
+        "alternate camera angle of the trailer, supplied ONLY to inform "
+        "your photo composition; the customer-decaled FIRST image is "
+        "the definitive branding source. Never revert to an older "
+        "manufacturer mark visible in the secondary photo. Do not "
+        "alter the uploaded secondary source file. "
+        if secondary_photo else
+        "NO separate customer-provided alternate-angle photo exists. "
+        "Do not invent a fictitious photographed camera view or "
+        "misrepresent a crop as an alternate real source photo. "
+    )
     diagram = (
         "A real technical drawing is attached; any illustrated reference "
         "to it must be treated as decorative unless visually verified."
@@ -199,7 +212,8 @@ def _prompt(brief, fmt, logo, drawing, reference, product_is_rebranded=False):
         "replace it with another vehicle or invent product engineering. "
         "Produce outstanding commercial print-ad craft, not a software UI. "
         + composition + " " + subject_scale + " " + layout_rules + " "
-        + rebrand_rule + stylistic + " " + brand + " " + diagram + " "
+        + rebrand_rule + stylistic + " " + brand + " "
+        + second_view_rule + diagram + " "
         "The following COMPLETE APPROVED CUSTOMER FACTS are the ONLY "
         "authoritative copy; VISUAL REFERENCES MUST NOT supply facts. "
         "Render ALL approved technical specifications and dimensions "
@@ -268,7 +282,8 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
                           reference: bytes | None = None,
                           model="gpt-image-2.5-flare", quality="medium",
                           cache_dir=None, consume_cache=True,
-                          product_is_rebranded=False):
+                          product_is_rebranded=False,
+                          secondary_photo: bytes | None = None):
     """At most two chargeable image edits, one per aspect.
 
     Cache a successfully paid response if the next aspect fails; no automatic
@@ -281,7 +296,9 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
         raise ValueError("Недопустимое качество OpenAI Images.")
     if not product_photo:
         raise ValueError("Загрузите исходное фото техники для AI-постера.")
-    sources = [product_photo] + [raw for raw in (logo, drawing, reference) if raw]
+    sources = [product_photo] + [
+        raw for raw in (logo,drawing,secondary_photo,reference) if raw
+    ]
     if cache_dir is None:
         cache_dir = _default_visual_cache(
             brief, True, sources, model, quality, VERSION, "complete-poster")
@@ -300,15 +317,20 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
                     inputs.append(_input_png(logo, "02_logo"))
                 if drawing:
                     inputs.append(_input_png(drawing, "03_drawing"))
+                if secondary_photo:
+                    inputs.append(_input_png(
+                        secondary_photo,"04_real_secondary_camera_view"))
                 if reference:
-                    inputs.append(_input_png(reference, "04_style_reference"))
+                    inputs.append(_input_png(
+                        reference,"05_customer_visual_style_only"))
                 if api is None:
                     api = client()
                 response = api.images.edit(
                     model=model, image=inputs,
                     prompt=_prompt(brief, fmt, bool(logo),
                                    bool(drawing), bool(reference),
-                                   product_is_rebranded=product_is_rebranded),
+                                   product_is_rebranded=product_is_rebranded,
+                                   secondary_photo=bool(secondary_photo)),
                     size=api_size, quality=quality, output_format="png",
                     timeout=max(180,min(600,int(os.getenv(
                         "PROMO_OPENAI_ART_TIMEOUT_SECONDS","480")))))
