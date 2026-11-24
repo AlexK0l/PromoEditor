@@ -79,6 +79,15 @@ def client():
     return _QuotaClient(sdk)
 
 
+def async_client():
+    """Cancellable SDK for optional QA; same quota and zero SDK retries."""
+    if not os.getenv('OPENAI_API_KEY'):
+        raise ValueError('OPENAI_API_KEY не задан на сервере.')
+    from openai import AsyncOpenAI
+    return _QuotaClient(AsyncOpenAI(api_key=os.environ['OPENAI_API_KEY'],
+                                    timeout=180,max_retries=0))
+
+
 def as_image(result):
     try:
         raw=base64.b64decode(result.data[0].b64_json)

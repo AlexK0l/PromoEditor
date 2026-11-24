@@ -16,7 +16,8 @@ from PIL import Image, ImageChops
 
 from .ai_artwork_fit import artwork_geometry
 from .ai_poster_finish import try_expand_artwork, repair_artwork, validate_repair
-from .ai_poster_review import expected_fields, review_pair, skipped_review
+from .ai_poster_review import expected_fields, review_pair, skipped_review, pending_review
+from .ai_review_archive import attach_review
 from .openai_service import IMAGE_MODELS, IMAGE_QUALITIES, _default_visual_cache
 
 FORMATS={"4x3":(1440,1080),"9x16":(1080,1920)}
@@ -237,7 +238,7 @@ def _source_asset(z,stem):
 
 
 def revise_bundle(path,folder,job_id,*,action,fmt,region,instruction,
-                  model,quality,verify,attempt,progress=None):
+                  model,quality,verify,attempt,progress=None,on_ready=None):
     if model not in IMAGE_MODELS or quality not in IMAGE_QUALITIES:
         raise ValueError("Недопустимые настройки OpenAI Images.")
     if action not in ("expand","repair"):
@@ -296,21 +297,10 @@ def revise_bundle(path,folder,job_id,*,action,fmt,region,instruction,
                 (folder/png).write_bytes(raw)
                 (folder/jpg).write_bytes(z.read(jpg))
             del source,final,raw
+        needs_review=bool(revision["changed_formats"] and verify)
         if revision["changed_formats"]:
-            # A review of the previous pixels is never carried forward as
-            # a successful review of revised artwork.
-            review=skipped_review()
-            if verify:
-                if progress:
-                    progress("Повторная AI-сверка обоих фактических PNG")
-                cache=_default_visual_cache(approved,True,[
-                    (folder/f"ai_poster_{key}.png").read_bytes() for key in FORMATS
-                ],model,quality,VERSION,"refinement-review")
-                review=review_pair(approved,folder,cache,
-                                   logo=_source_asset(z,"originals/customer_logo"),
-                                   drawing=_source_asset(z,"originals/drawing_preview"),
-                                   product=_source_asset(z,"rebranded_product"),
-                                   original_product=_source_asset(z,"originals/product_photo"))
+            # Previous QA is stale as soon as any image pixel changes.
+            review=pending_review() if needs_review else skipped_review()
         elif revision["status"]!="failed":
             revision["status"]="no_change"
         history.append(revision)
@@ -340,4 +330,25 @@ def revise_bundle(path,folder,job_id,*,action,fmt,region,instruction,
         if output.stat().st_size>MAX_ARCHIVE:
             # Don't create a package that our own import cannot accept.
             raise ValueError("Доработанный комплект превышает лимит 68 МБ; исходный ZIP не изменён.")
-    return _public_result(job_id,geometry,review,selected,revision)
+        if needs_review:
+            if on_ready:
+                on_ready({**_public_result(job_id,geometry,review,selected,revision),
+                          "review_pending":True})
+            if progress:
+                progress("Доработанный ZIP доступен; выполняется AI-сверка (до 180 секунд на запрос)")
+            try:
+                cache=_default_visual_cache(approved,True,[
+                    (folder/f"ai_poster_{key}.png").read_bytes() for key in FORMATS
+                ],model,quality,VERSION,"refinement-review")
+                checked=review_pair(approved,folder,cache,
+                                   logo=_source_asset(z,"originals/customer_logo"),
+                                   drawing=_source_asset(z,"originals/drawing_preview"),
+                                   product=_source_asset(z,"rebranded_product"),
+                                   original_product=_source_asset(z,"originals/product_photo"))
+                if attach_review(folder,checked):
+                    review=checked
+            except Exception:
+                # Optional QA never destroys the completed paid edit.
+                pass
+    return {**_public_result(job_id,geometry,review,selected,revision),
+            "review_pending":False}

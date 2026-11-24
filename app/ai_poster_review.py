@@ -6,6 +6,7 @@ to publish, even if no issues were found. No Images calls or automatic retries.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import io
@@ -18,11 +19,12 @@ from pathlib import Path
 
 from PIL import Image
 from .ai_quota import check_paid_capacity, QuotaExceeded, QuotaStoreUnavailable
-from .openai_service import client
+from .openai_service import async_client
 from .image_analysis import analysis_preview
 from .ai_native_art_direction import approved_axle_count
 
 VERSION = "poster-review-v3-located-fields"
+REVIEW_DEADLINE_SECONDS = 180
 FORMATS = ("4x3", "9x16")
 ROI_LABELS = {
     "additional_revenue_per_trip": "Дополнительная выручка за рейс",
@@ -284,6 +286,27 @@ def _persist_cache(path, fingerprint, review):
             pass
 
 
+def pending_review():
+    # The on-disk/downloadable draft must never claim that QA was completed.
+    return _unavailable("На момент сохранения комплекта AI-сверка не завершена. "
+                        "Ручная проверка обязательна.")
+
+
+async def _request_review(**options):
+    api=async_client()
+    try:
+        # The SDK's network timeout is an inactivity timeout, NOT a total
+        # wall-clock deadline. Cancel the local request after this deadline.
+        # This does not promise that provider-side work or billing is cancelled.
+        return await asyncio.wait_for(
+            api.responses.create(**options), timeout=REVIEW_DEADLINE_SECONDS)
+    finally:
+        try:
+            await asyncio.wait_for(api.close(),timeout=3)
+        except Exception:
+            pass
+
+
 def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
                 drawing=None, product=None, original_product=None):
     """One explicitly requested Responses call for both final rasters."""
@@ -372,7 +395,7 @@ def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
     except Exception:
         return _unavailable("Не удалось подготовить материалы для AI-сверки.")
     try:
-        response=client().responses.create(
+        response=asyncio.run(_request_review(
             model=model,
             instructions=("You are a conservative visual proofreader. Read only the actual "
                           "pixels and compare to the separately labelled visual sources. "
@@ -383,8 +406,12 @@ def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
             store=False,
             max_output_tokens=14000,
             timeout=180,
-        )
+        ))
         review=compare_review(approved,json.loads(response.output_text or "{}"),visuals)
+    except TimeoutError:
+        review=_unavailable("Превышен лимит времени AI-сверки (180 секунд). "
+                            "Готовые плакаты сохранены; автоматического повтора нет. "
+                            "Вызов мог быть оплачен.")
     except Exception:
         # An upstream timeout can still incur a charge: do not automatically
         # replay a failed verification for this exact paid pair.

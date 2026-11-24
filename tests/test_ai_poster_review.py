@@ -1,4 +1,5 @@
 """No paid network: verify visual audit contract, conservative comparison and cache."""
+import asyncio
 import base64
 import io
 import json
@@ -86,7 +87,7 @@ def test_opted_in_http_route_reviews_both_real_final_rasters_once_and_caches(
         image_calls.append(kw)
         return SimpleNamespace(data=[SimpleNamespace(
             b64_json=base64.b64encode(_png()).decode("ascii"))])
-    def create(**kw):
+    async def create(**kw):
         review_calls.append(kw)
         content=kw["input"][0]["content"]
         images=[x for x in content if x["type"]=="input_image"]
@@ -100,10 +101,12 @@ def test_opted_in_http_route_reviews_both_real_final_rasters_once_and_caches(
         assert "6 527 000" not in content[0]["text"]
         return SimpleNamespace(output_text=json.dumps(_observations(
             approved,["readability","unwanted_blueprint","product","source_geometry","drawing_consistency"])))
-    api=SimpleNamespace(images=SimpleNamespace(edit=edit),responses=SimpleNamespace(create=create))
+    async def close():
+        pass
+    api=SimpleNamespace(images=SimpleNamespace(edit=edit),responses=SimpleNamespace(create=create),close=close)
     monkeypatch.setattr(ai_poster_service,"client",lambda:api)
     monkeypatch.setattr(product_rebrand_service,"client",lambda:api)
-    monkeypatch.setattr(ai_poster_review,"client",lambda:api)
+    monkeypatch.setattr(ai_poster_review,"async_client",lambda:api)
     with TestClient(main.app) as http:
         def submit(verify):
             return http.post("/api/generate",data={
@@ -139,11 +142,13 @@ def test_failed_review_does_not_discard_or_auto_retry_paid_images(monkeypatch,tm
     for fmt in ("4x3","9x16"):
         (folder/f"ai_poster_{fmt}.png").write_bytes(_png())
     calls=[]
-    def fail(**kw):
+    async def fail(**kw):
         calls.append(kw)
         raise RuntimeError("secret upstream response")
-    monkeypatch.setattr(ai_poster_review,"client",
-                        lambda:SimpleNamespace(responses=SimpleNamespace(create=fail)))
+    async def close():
+        pass
+    monkeypatch.setattr(ai_poster_review,"async_client",
+                        lambda:SimpleNamespace(responses=SimpleNamespace(create=fail),close=close))
     approved=approved_full_copy(approved_zubrtrail_500())
     r=ai_poster_review.review_pair(approved,folder,tmp_path/"cache")
     assert r["status"]=="unavailable" and r["human_review_required"]
@@ -222,3 +227,30 @@ def test_located_fields_keep_only_valid_coordinates():
     assert rows[0]["status"]=="conflicting"
     assert rows[1]["region"] is None
     assert rows[2]["region"] is None
+
+
+
+def test_review_has_absolute_deadline_even_with_active_connection(monkeypatch,tmp_path):
+    folder=tmp_path/"job"
+    folder.mkdir()
+    for fmt in ("4x3","9x16"):
+        (folder/f"ai_poster_{fmt}.png").write_bytes(_png())
+    calls=[]
+    cancelled=[]
+    async def slow(**kw):
+        calls.append(kw)
+        try:
+            await asyncio.sleep(30)
+        finally:
+            cancelled.append(True)
+    async def close():
+        pass
+    monkeypatch.setattr(ai_poster_review,"async_client",lambda:SimpleNamespace(
+        responses=SimpleNamespace(create=slow),close=close))
+    monkeypatch.setattr(ai_poster_review,"REVIEW_DEADLINE_SECONDS",.03)
+    approved=approved_full_copy(approved_zubrtrail_500())
+    result=ai_poster_review.review_pair(approved,folder,tmp_path/"cache")
+    assert result["status"]=="unavailable" and "лимит времени" in result["reason"]
+    assert len(calls)==1 and cancelled==[True]
+    assert ai_poster_review.review_pair(approved,folder,tmp_path/"cache")==result
+    assert len(calls)==1

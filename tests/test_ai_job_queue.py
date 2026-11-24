@@ -52,7 +52,7 @@ def test_async_job_snapshots_multipart_returns_fast_and_recovers_result(
         monkeypatch,tmp_path):
     _ready(monkeypatch,tmp_path)
     originals=[]
-    async def process(form,progress=None):
+    async def process(form,progress=None,on_ready=None):
         image=form.get("hero")
         assert image.filename=="real-trailer.png"
         raw=await image.read()
@@ -86,7 +86,7 @@ def test_one_paid_job_at_a_time_no_duplicate_charge_or_second_request(
     started=threading.Event()
     release=threading.Event()
     calls=[]
-    async def pause(form,progress=None):
+    async def pause(form,progress=None,on_ready=None):
         calls.append("paid")
         started.set()
         assert await asyncio.to_thread(release.wait,3)
@@ -111,7 +111,7 @@ def test_one_paid_job_at_a_time_no_duplicate_charge_or_second_request(
 def test_ai_job_failure_reports_stage_and_type_but_not_private_sdk_string(
         monkeypatch,tmp_path):
     _ready(monkeypatch,tmp_path)
-    async def fail(form,progress=None):
+    async def fail(form,progress=None,on_ready=None):
         progress("AI распределяет текстовые зоны")
         raise RuntimeError("VERY_PRIVATE_API_KEY_and_customer_prompt")
     monkeypatch.setattr(main,"_generate_from_form",fail)
@@ -143,7 +143,7 @@ def test_failed_background_job_returns_partial_zip_link_without_sdk_secret(
         monkeypatch,tmp_path):
     _ready(monkeypatch,tmp_path)
     archive="/files/"+"a"*32+"/ai_failed_generation.zip"
-    async def fail(form,progress=None):
+    async def fail(form,progress=None,on_ready=None):
         progress("Согласовываем окончательные зоны текста")
         raise main.PartialPosterFailure(
             archive,RuntimeError("PRIVATE_SDK_KEY_untrusted_prompt"))
@@ -157,3 +157,21 @@ def test_failed_background_job_returns_partial_zip_link_without_sdk_secret(
     assert "Согласовываем окончательные зоны текста" in state["error"]
     assert "RuntimeError" in state["error"]
     assert "PRIVATE_SDK_KEY" not in json.dumps(state)
+
+
+
+def test_ready_archive_is_available_during_review_and_on_worker_restart(tmp_path):
+    task_id,folder=ai_job_queue.new_task(tmp_path)
+    result={"images":{"4x3":"/files/"+"a"*32+"/ai_poster_4x3.png"},
+            "zip":"/files/"+"a"*32+"/ai_posters.zip","review_pending":True}
+    ai_job_queue.set_status(folder,"running",stage="AI-сверка",result=result)
+    state=ai_job_queue.read_status(tmp_path,task_id)
+    assert state["status"]=="running" and state["result"]==result
+    assert state["stage_age_seconds"]>=0
+    raw=json.loads((folder/"status.json").read_text())
+    raw["instance"]="previous-worker"
+    (folder/"status.json").write_text(json.dumps(raw))
+    recovered=ai_job_queue.read_status(tmp_path,task_id)
+    assert recovered["status"]=="complete"
+    assert recovered["result"]["zip"]==result["zip"]
+    assert recovered["result"]["review_pending"] is False

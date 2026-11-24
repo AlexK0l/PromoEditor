@@ -47,7 +47,8 @@ from .ai_transport import OpenAIImageConnectionFailure
 from .ai_artwork_fit import artwork_geometry
 from .ai_poster_finish import try_expand_artwork
 from .ai_poster_revision import import_bundle, revise_bundle, FORMATS as REVISION_FORMATS
-from .ai_poster_review import review_pair, skipped_review
+from .ai_poster_review import review_pair, skipped_review, pending_review
+from .ai_review_archive import attach_review
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -700,7 +701,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        reference_raw, model, quality, selected_source=None,
                        progress=None, secondary_raw=None, variation_id='',
                        verify_posters=False, drawing_source_pdf=None,
-                       expand_posters=False):
+                       expand_posters=False, on_ready=None):
     """Rebrand ONLY the selected photo before authoring both full AI posters.
 
     The original photo is immutable. The one paid rebranding edit is cached
@@ -781,21 +782,13 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             encoding='utf8')
         (folder/'export_geometry.json').write_text(
             json.dumps(geometry,ensure_ascii=False,indent=2),encoding='utf8')
-        # Free memory from finished images before optional high-detail review.
+        # Publish a durable complete draft BEFORE the optional paid QA call.
         del posters
-        if verify_posters:
-            if progress:
-                progress('AI сверяет оба готовых плаката с исходными данными')
-            review=review_pair(approved,folder,paid_cache,
-                               logo=logo_raw,drawing=drawing_raw,
-                               product=rebranded_raw,original_product=product_raw)
-        else:
-            review=skipped_review()
+        review=pending_review() if verify_posters else skipped_review()
         (folder/'poster_review.json').write_text(
             json.dumps(review,ensure_ascii=False,indent=2),encoding='utf8')
         archive=folder/'ai_posters.zip'
-        with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,
-                             compresslevel=6) as z:
+        with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_STORED) as z:
             for fmt in ('4x3','9x16'):
                 z.write(folder/f'ai_poster_{fmt}.png',
                         arcname=f'ai_poster_{fmt}.png')
@@ -857,9 +850,9 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                         original.format,'.bin')
                 z.writestr(f'originals/{name}{suffix}',
                            raw,compress_type=zipfile.ZIP_STORED)
-        # Retain the paid pair until the configured cache TTL. A normal
-        # repeated request reuses it; only an explicit variant gets a new key.
-        return {'job_id':job_id,'images':images,'jpeg':jpegs,
+        # Retain the paid pair until the configured cache TTL.
+        def result_for(review,pending=False):
+            return {'job_id':job_id,'images':images,'jpeg':jpegs,
                  'zip':f'/files/{job_id}/ai_posters.zip',
                 'generation_mode':'openai_full_poster',
                 'ai_used':True,'raster_only':True,
@@ -874,10 +867,32 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                                    for g in geometry.values())
                                else 'human_review_required'),
                 'poster_review':review,
+                'review_pending':pending,
                 'export_geometry':geometry,
                 'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]+[
                     g['outpaint']['reason'] for g in geometry.values()
                     if g.get('outpaint',{}).get('status')=='failed']}
+        if verify_posters:
+            if on_ready:
+                on_ready(result_for(review,True))
+            if progress:
+                progress('Плакаты доступны для скачивания; выполняется AI-сверка (до 180 секунд на запрос)')
+            try:
+                checked=review_pair(approved,folder,paid_cache,
+                                    logo=logo_raw,drawing=drawing_raw,
+                                    product=rebranded_raw,original_product=product_raw)
+                if attach_review(folder,checked):
+                    review=checked
+                    # JSON in the authoritative ZIP is already committed.
+                    try:
+                        (folder/'poster_review.json').write_text(
+                            json.dumps(review,ensure_ascii=False,indent=2),encoding='utf8')
+                    except OSError:
+                        pass
+            except Exception:
+                # The complete draft ZIP must survive every optional QA failure.
+                RENDER_LOG.warning('Optional poster review failed after ZIP publication')
+        return result_for(review)
     except Exception as exc:
         if not isinstance(exc,(QuotaExceeded,QuotaStoreUnavailable)):
             recovery_url = _native_poster_recovery(
@@ -1270,11 +1285,12 @@ def _run_generation_task(task_id: str):
     """Detached single paid workflow; no public HTTP connection held open."""
     folder=ai_job_queue.task_folder(STORAGE,task_id)
     opened=[]
+    ready_result=None
     last_stage='Проверяем исходные данные проекта'
     def stage(message):
         nonlocal last_stage
         last_stage=message
-        ai_job_queue.set_status(folder,'running',stage=message)
+        ai_job_queue.set_status(folder,'running',stage=message,result=ready_result)
         # Record the native process memory high-watermark at each stage,
         # without leaking file names, customer data or OpenAI responses.
         try:
@@ -1285,13 +1301,17 @@ def _run_generation_task(task_id: str):
                 task_id,message,peak_mib)
         except (OSError,ImportError):
             RENDER_LOG.info('PromoEditor AI task %s: %s',task_id,message)
+    def publish_ready(result):
+        nonlocal ready_result
+        ready_result=result
+        stage('Плакаты сохранены в ZIP; AI-сверка выполняется отдельно')
     try:
         form,opened=ai_job_queue.reopen_form(folder)
         stage('Проверяем исходные данные проекта')
         if str(form.get('generation_mode',''))=='refine_posters':
-            result=_refine_from_form(form,progress=stage)
+            result=_refine_from_form(form,progress=stage,on_ready=publish_ready)
         else:
-            result=asyncio.run(_generate_from_form(form,progress=stage))
+            result=asyncio.run(_generate_from_form(form,progress=stage,on_ready=publish_ready))
         # A completed task must have NO uploaded private sources left.
         # Clean them BEFORE reporting completion; the browser can download
         # its generated ZIP without the original form inputs remaining here.
@@ -1303,6 +1323,11 @@ def _run_generation_task(task_id: str):
             folder,'complete',stage='Оба AI-плаката сохранены; требуется ручная проверка',
             result=result)
     except Exception as exc:
+        if ready_result is not None:
+            ai_job_queue.set_status(folder,'complete',
+                stage='Плакаты сохранены; дополнительная AI-сверка не завершена',
+                result={**ready_result,'review_pending':False})
+            return
         if isinstance(exc,HTTPException):
             code=int(exc.status_code)
             detail=str(exc.detail)
@@ -1439,7 +1464,7 @@ async def generate(request:Request):
     return await _generate_from_form(form)
 
 
-async def _generate_from_form(form, progress=None):
+async def _generate_from_form(form, progress=None, on_ready=None):
     """Same validated pipeline for direct and disconnect-safe queued requests."""
     raw=form.get('payload','{}')
     if not isinstance(raw,str) or len(raw)>48000:raise HTTPException(400,detail='Некорректные данные формы')
@@ -1573,6 +1598,7 @@ async def _generate_from_form(form, progress=None):
                 selected_source=selected_source,
                 secondary_raw=detail_raw,
                 **({'progress':progress} if progress else {}),
+                **({'on_ready':on_ready} if on_ready else {}),
                 **({'variation_id':variation_id} if variation_id else {}),
                 **({'verify_posters':True} if str(form.get('verify_posters','false')).lower()=='true' else {}),
                 **({'expand_posters':True} if str(form.get('expand_posters','false')).lower()=='true' else {}),
@@ -1645,7 +1671,7 @@ async def import_poster_archive(request:Request):
         MAIN_AI_GENERATION_SLOT.release()
 
 
-def _refine_from_form(form,progress=None):
+def _refine_from_form(form,progress=None,on_ready=None):
     source_id=form.get('source_job','')
     attempt=form.get('refine_attempt','')
     if not isinstance(source_id,str) or not JOB_ID.fullmatch(source_id):
@@ -1674,7 +1700,7 @@ def _refine_from_form(form,progress=None):
                              model=str(form.get('model','gpt-image-2.5-flare')),
                              quality=str(form.get('quality','medium')),
                              verify=str(form.get('verify_posters','false')).lower()=='true',
-                             attempt=attempt,progress=progress)
+                             attempt=attempt,progress=progress,on_ready=on_ready)
         snapshot.unlink(missing_ok=True)
         return result
     except Exception:
