@@ -2,7 +2,7 @@
 
 Legacy experiments remain in source for compatibility but are NOT visible
 to users. This test verifies the main button accepts the paid confirmation,
-starts a private long AI job, polls through one 502, shows real SVG.
+starts a private long AI job, polls through one 502, and shows AI raster.
 """
 from __future__ import annotations
 
@@ -37,16 +37,14 @@ def main():
         ))
 
         completed = {
-            "generation_mode": "ai_template_exact_copy",
+            "generation_mode": "openai_full_poster",
             "ai_used": True,
-            "raster_only": False,
+            "raster_only": True,
             "images": {"4x3": "/static/demo_4x3.svg",
                        "9x16": "/static/demo_9x16.svg"},
             "jpeg": {"4x3": "/static/demo_4x3.svg",
                      "9x16": "/static/demo_9x16.svg"},
-            "corel": {"4x3":"/static/demo_4x3.svg",
-                      "9x16":"/static/demo_9x16.svg"},
-            "zip": "/files/" + "a" * 32 + "/ai_typographic_posters.zip",
+            "zip": "/files/" + "a" * 32 + "/ai_posters.zip",
             "warnings": [],
         }
         status_requests = []
@@ -89,7 +87,8 @@ def main():
         assert page.locator("#quick-ai-toggle").is_checked()
         assert page.locator("#use-openai").is_checked()
         assert "3 платных Images" in page.locator("#quick-ai-description").inner_text()
-        assert "SVG" in page.locator("#quick-ai-description").inner_text()
+        assert "PNG/JPEG" in page.locator("#quick-ai-description").inner_text()
+        assert "SVG" not in page.locator("#quick-ai-description").inner_text()
 
         # The single public switch may still explicitly choose free creation.
         page.locator("#quick-ai-toggle").uncheck()
@@ -134,11 +133,12 @@ def main():
         assert page.locator("#generated-preview-4x3").get_attribute("src") == "/static/demo_4x3.svg"
         assert page.locator("#generated-preview-9x16").get_attribute("src") == "/static/demo_9x16.svg"
         assert page.locator("#download-all").is_enabled()
-        assert not page.locator("#download-svg-4x3").evaluate("(b)=>b.parentElement.hidden")
-        assert not page.locator("#download-svg-9x16").evaluate("(b)=>b.parentElement.hidden")
-        assert page.locator("#download-svg-4x3").is_enabled()
-        assert page.locator("#download-svg-9x16").is_enabled()
-        assert "редактируемые SVG" in page.locator(".prompt-download-note").inner_text()
+        assert page.locator("#download-svg-4x3").evaluate("(b)=>b.parentElement.hidden")
+        assert page.locator("#download-svg-9x16").evaluate("(b)=>b.parentElement.hidden")
+        assert page.locator("#download-svg-4x3").is_disabled()
+        assert page.locator("#download-svg-9x16").is_disabled()
+        assert "растр" in page.locator(".result-disclaimer").inner_text()
+        assert "approved_copy.json" in page.locator(".prompt-download-note").inner_text()
         for selector in ("#generation-mode",
                          "#ai-concepts-workflow", "#openai-posters-workflow"):
             assert page.locator(selector).is_hidden(), selector
@@ -150,7 +150,7 @@ def main():
         ), "Mobile viewport overflow"
         assert not errors, errors
         browser.close()
-    print("Production AI poster UI: paid confirmation, editable SVG, exact text — PASS")
+    print("Production AI poster UI: paid confirmation, full AI raster, honest fact review — PASS")
 
 
 if __name__ == "__main__":
