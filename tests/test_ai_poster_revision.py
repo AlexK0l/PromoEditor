@@ -243,3 +243,36 @@ def test_revision_publishes_edited_zip_before_optional_review(setup,monkeypatch)
             assert len(calls)==1
         finally:
             release.set()
+
+
+
+def test_review_only_reuses_both_paid_rasters_and_all_originals(setup):
+    calls,reviews,storage=setup
+    original=_bundle()
+    with TestClient(main.app) as http:
+        loaded=_import(http,original)
+        state=_run(http,loaded,"review",verify=False)
+        assert state["status"]=="complete",state
+        result=state["result"]
+        assert result["refinement"]["action"]=="review"
+        assert result["refinement"]["changed_formats"]==[]
+        assert result["poster_review"]["status"]=="no_issues_detected"
+        assert not calls and len(reviews)==1
+        with zipfile.ZipFile(io.BytesIO(original)) as old,zipfile.ZipFile(io.BytesIO(http.get(result["zip"]).content)) as new:
+            for name in old.namelist():
+                if name.endswith((".png",".jpg",".jpeg")) or name=="approved_copy.json":
+                    assert old.read(name)==new.read(name)
+            assert json.loads(new.read("poster_review.json"))==result["poster_review"]
+        assert http.get(loaded["zip"]).content==original
+
+
+def test_import_keeps_review_skip_reason_and_visual_location():
+    approved=approved_full_copy(approved_zubrtrail_500())
+    skipped=revision._safe_review({"status":"unavailable","reason":"Памяти недостаточно"},approved)
+    assert skipped["reason"]=="Памяти недостаточно"
+    report={"status":"issues_found","formats":{
+        fmt:{"fields":[],"visuals":[{"id":"price_integrity","status":"issue",
+             "observation":"Дублирование НДС","region":[40,820,390,900]}]}
+        for fmt in revision.FORMATS}}
+    clean=revision._safe_review(report,approved)
+    assert clean["formats"]["9x16"]["visuals"][0]["region"]==[40,820,390,900]

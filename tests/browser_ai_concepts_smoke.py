@@ -55,7 +55,9 @@ def main():
                               "human_review_required":True,
                               "formats":{"4x3":{"vehicle_check":{"issues":["Оси: ожидается 4, обнаружено 5."]}},
                                          "9x16":{"fields":[{"label":"Модель","expected":"TEST",
-                                                             "observed":"","status":"missing"}]}}},
+                                                             "observed":"","status":"missing"}],
+                                                 "visuals":[{"id":"price_integrity","status":"issue",
+                                                     "observation":"Дублирование НДС","region":[20,810,390,900]}]}}},
         }
         status_requests = []
         def begin_reply(route):
@@ -201,6 +203,12 @@ def main():
         assert page.locator("#refine-expand").is_disabled()
         assert page.locator("#refine-repair").is_visible()
         assert page.locator("#refine-import-panel").is_visible()
+        page.locator("#refine-issue").select_option(label="Цена / НДС: Дублирование НДС")
+        assert "Убрать лишние" in page.locator("#refine-instruction").input_value()
+        page.once("dialog",decline)
+        page.locator("#refine-review-only").click()
+        assert "0 Images-запросов" in confirmations[-1]
+        assert "1 платного Responses-запроса" in confirmations[-1]
         assert len(posts)==1
 
         # Production interface remains usable on a phone.

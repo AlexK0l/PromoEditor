@@ -16,7 +16,8 @@ from PIL import Image, ImageChops
 
 from .ai_artwork_fit import artwork_geometry
 from .ai_poster_finish import try_expand_artwork, repair_artwork, validate_repair
-from .ai_poster_review import expected_fields, review_pair, skipped_review, pending_review
+from .ai_poster_review import (expected_fields, review_pair, skipped_review,
+                               pending_review, normalized_region)
 from .ai_review_archive import attach_review
 from .openai_service import IMAGE_MODELS, IMAGE_QUALITIES, _default_visual_cache
 
@@ -79,6 +80,11 @@ def _check_approved(approved):
             approved.get("verified_economic_scenario") is not None and
             not isinstance(approved.get("verified_economic_scenario"),dict)):
         raise ValueError("Некорректные исходные данные в ZIP.")
+    for name in ("selling_claims","customer_benefits","approved_proofs"):
+        values=approved.get(name,[])
+        if (not isinstance(values,list) or len(values)>20 or
+                any(not isinstance(s,str) or len(s)>500 for s in values)):
+            raise ValueError("Некорректные рекламные сведения в ZIP.")
     if len(expected_fields(approved))>250:
         raise ValueError("Слишком много полей для сверки.")
 
@@ -89,7 +95,8 @@ def _safe_review(raw, approved):
             "issues_found","no_issues_detected","not_requested","unavailable"):
         return skipped_review()
     if raw["status"] in ("not_requested","unavailable"):
-        return {**skipped_review(),"status":raw["status"]}
+        return {**skipped_review(),"status":raw["status"],
+                "reason":str(raw.get("reason",""))[:500]}
     fields={x["id"]:x for x in expected_fields(approved)}
     reports=raw.get("formats")
     if not isinstance(reports,dict):
@@ -123,6 +130,7 @@ def _safe_review(raw, approved):
                 if isinstance(item,dict):
                     visuals.append({"id":str(item.get("id",""))[:80],
                                     "observation":str(item.get("observation",""))[:500],
+                                    "region":normalized_region(item.get("region")),
                                     "status":item.get("status") if item.get("status") in
                                     ("no_issue_detected","issue","uncertain") else "uncertain"})
         vehicle=report.get("vehicle_check",{})
@@ -172,6 +180,8 @@ def inspect_bundle(z):
             computed["outpaint"]={"status":"not_needed","protected_box":list(box)}
         else:
             computed["outpaint"]={"status":"not_requested"}
+        if box==(0,0,*target) and prior.get("generation")=="native_target_aspect":
+            computed["generation"]="native_target_aspect"
         if isinstance(prior.get("local_repair"),dict):
             computed["local_repair"]=prior["local_repair"]
         geometry[fmt]=computed
@@ -241,7 +251,7 @@ def revise_bundle(path,folder,job_id,*,action,fmt,region,instruction,
                   model,quality,verify,attempt,progress=None,on_ready=None):
     if model not in IMAGE_MODELS or quality not in IMAGE_QUALITIES:
         raise ValueError("Недопустимые настройки OpenAI Images.")
-    if action not in ("expand","repair"):
+    if action not in ("expand","repair","review"):
         raise ValueError("Неизвестная операция доработки.")
     if action=="repair":
         if fmt not in FORMATS:
@@ -257,6 +267,12 @@ def revise_bundle(path,folder,job_id,*,action,fmt,region,instruction,
         for key,target in FORMATS.items():
             png,jpg=f"ai_poster_{key}.png",f"ai_poster_{key}.jpg"
             raw=z.read(png)
+            if action=="review":
+                # A review-only operation must not decode/re-encode or
+                # generate either image. inspect_bundle already validated PNGs.
+                (folder/png).write_bytes(raw)
+                (folder/jpg).write_bytes(z.read(jpg))
+                continue
             source=_image(raw,target)
             final=source
             if action=="expand":
@@ -269,7 +285,7 @@ def revise_bundle(path,folder,job_id,*,action,fmt,region,instruction,
                 if operation["status"]=="failed":
                     revision["status"]="failed"
                     revision["reason"]=operation["reason"]
-            elif key==fmt:
+            elif action=="repair" and key==fmt:
                 # Don't let a local edit consume old empty matte that the
                 # outpainting stage is supposed to fill separately.
                 if geometry[key]["outpaint"]["status"] not in ("complete","not_needed"):
@@ -297,8 +313,10 @@ def revise_bundle(path,folder,job_id,*,action,fmt,region,instruction,
                 (folder/png).write_bytes(raw)
                 (folder/jpg).write_bytes(z.read(jpg))
             del source,final,raw
-        needs_review=bool(revision["changed_formats"] and verify)
-        if revision["changed_formats"]:
+        needs_review=bool(action=="review" or (revision["changed_formats"] and verify))
+        if action=="review":
+            review=pending_review()
+        elif revision["changed_formats"]:
             # Previous QA is stale as soon as any image pixel changes.
             review=pending_review() if needs_review else skipped_review()
         elif revision["status"]!="failed":
@@ -339,7 +357,8 @@ def revise_bundle(path,folder,job_id,*,action,fmt,region,instruction,
             try:
                 cache=_default_visual_cache(approved,True,[
                     (folder/f"ai_poster_{key}.png").read_bytes() for key in FORMATS
-                ],model,quality,VERSION,"refinement-review")
+                ],model,quality,VERSION,("refinement-review:"+attempt
+                                         if action=="review" else "refinement-review"))
                 checked=review_pair(approved,folder,cache,
                                    logo=_source_asset(z,"originals/customer_logo"),
                                    drawing=_source_asset(z,"originals/drawing_preview"),

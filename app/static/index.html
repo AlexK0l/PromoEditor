@@ -363,6 +363,8 @@
         <summary>Доработать уже созданные плакаты без полной перегенерации</summary>
         <div class="refine-controls">
           <p id="refine-status" role="status" aria-live="polite" class="field-tip">Исходный ZIP не изменяется. Результат сохраняется новым комплектом.</p>
+          <button type="button" id="refine-review-only" class="secondary-button">AI-сверить готовый ZIP (без генерации изображений)</button>
+          <p class="field-tip">До 1 платного Responses-запроса при достаточной памяти. Оба PNG, JPEG и исходники сохраняются без изменений.</p>
           <button type="button" id="refine-expand" class="secondary-button">AI-дорисовать поля старого ZIP (платно)</button>
           <label class="check-field"><input id="refine-review" type="checkbox"><span>Повторная сверка после правок <small>1 дополнительный платный Responses-запрос только если изображение изменилось</small></span></label>
           <h3>Исправить отдельную область</h3>
@@ -384,7 +386,7 @@
     <details id="refine-import-panel" class="quiet-details editor-suite">
       <summary>Открыть ранее скачанный AI-комплект ZIP для доработки</summary>
       <div class="refine-controls">
-        <p>Импорт не обращается к OpenAI. Можно дорисовать поля или исправить область уже оплаченного плаката без новой генерации обоих форматов.</p>
+        <p>Импорт не обращается к OpenAI. Можно отдельно сверить комплект, дорисовать поля старых плакатов или исправить выделенную область без новой генерации обоих форматов.</p>
         <label>ZIP PromoEditor (до 68 МБ) <input type="file" id="refine-import-file" accept=".zip,application/zip"></label>
         <button type="button" id="refine-import" class="secondary-button">Открыть ZIP бесплатно</button>
       </div>
@@ -485,7 +487,7 @@
     <footer class="footer">PromoEditor · AI-дизайн, проверяемые данные в редактируемом SVG и исходное выбранное фото в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261124-memory-pressure-v11" defer></script>
+  <script src="/static/app.js?v=20261124-complete-copy-review-v12" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>

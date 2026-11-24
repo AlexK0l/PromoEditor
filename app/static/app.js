@@ -24,7 +24,7 @@
     if($('resume-paid-task'))$('resume-paid-task').disabled=isBusy;
     if(pendingPaidTask){
       for(const id of ['generate-btn','new-variation-btn','generate-ai-posters-btn',
-                       'generate-concepts-btn','refine-repair','refine-expand'])
+                       'generate-concepts-btn','refine-repair','refine-expand','refine-review-only'])
         if($(id))$(id).disabled=true;
     }
   }
@@ -678,6 +678,7 @@
     $('refine-expand').hidden=!needsBleed;
     $('refine-expand').disabled=isBusy||Boolean(pendingPaidTask)||!apiReady||!needsBleed;
     $('refine-repair').disabled=isBusy||Boolean(pendingPaidTask)||!apiReady||!available||!refineImage;
+    $('refine-review-only').disabled=isBusy||Boolean(pendingPaidTask)||!apiReady||!available;
     for(const id of ['refine-format','refine-issue','refine-region','refine-instruction','refine-review'])
       $(id).disabled=isBusy;
   }
@@ -708,12 +709,42 @@
     const select=$('refine-issue');
     if(!select)return;
     select.replaceChildren(new Option('Выбрать область вручную',''));
-    const fields=latest?.poster_review?.formats?.[get('refine-format')]?.fields||[];
-    fields.filter(v=>v.status!=='match').forEach((v,i)=>{
-      const option=new Option(v.label+': '+(v.observed||'не подтверждено'),'issue-'+i);
-      option.dataset.field=JSON.stringify(v);
+    const report=latest?.poster_review?.formats?.[get('refine-format')]||{};
+    const fields=report.fields||[];
+    const benefits=fields.filter(v=>v.id?.startsWith('benefit_'));
+    const add=(label,field)=>{
+      const option=new Option(label,'issue-'+select.options.length);
+      option.dataset.field=JSON.stringify(field);
       select.appendChild(option);
+    };
+    if(benefits.some(v=>v.status!=='match')){
+      add('Восстановить весь блок преимуществ ('+benefits.length+')',{
+        region:null,instruction:'В выделенном блоке разместить все преимущества полностью, '
+          +'читабельно, каждое отдельным пунктом, без изменения других блоков: '
+          +benefits.map(v=>v.expected).join(' | ')+'. Без общих замен и выдуманных тезисов.'
+      });
+    }
+    fields.filter(v=>v.status!=='match').forEach(v=>{
+      add(v.label+': '+(v.observed||'не подтверждено'),v);
     });
+    const visualLabels={price_integrity:'Цена / НДС',pictograms:'Пиктограммы',
+      claim_integrity:'Рекламные утверждения',logo:'Логотип',product:'Техника',
+      source_geometry:'Геометрия',drawing_consistency:'Чертёж и размеры',
+      readability:'Читаемость',unwanted_blueprint:'Лишний чертёж'};
+    for(const v of (report.visuals||[]).filter(v=>v.status!=='no_issue_detected')){
+      let instruction='Исправить только замечание в выделенной области: '+(v.observation||visualLabels[v.id]||v.id)+'. ';
+      if(v.id==='price_integrity'){
+        const price=fields.find(f=>f.id==='price')?.expected;
+        instruction+='Убрать лишние и искажённые дубли, сохранить единственный уже верный ценовой блок'
+          +(price?' «'+price+'»':'')+'. Не добавлять новую цену или повторную отметку НДС.';
+      }else if(v.id==='pictograms'){
+        instruction+='Заменить только ошибочные значки подходящими по смыслу; если это невозможно, убрать их, сохранив подписи, значения, фон и читаемость.';
+      }else{
+        instruction+='Не менять верные числа, надписи, логотип и соседние элементы.';
+      }
+      add((visualLabels[v.id]||'Визуальная ошибка')+': '+(v.observation||'проверьте вручную'),
+          {region:v.region,instruction});
+    }
   }
   function loadRefinePreview(){
     const canvas=$('refine-canvas');
@@ -750,6 +781,7 @@
     $('outpaint-status').textContent=notes.join(' · ');
     const rev=latest.refinement;
     $('refine-status').textContent=rev?.status==='failed'?(rev.reason||'Операция не завершена; исходный ZIP сохранён.'):
+      rev?.action==='review'?'Изображения не изменены. Состояние новой сверки указано в отчёте выше.':
       rev?.status==='complete'?'Новый ZIP создан. Изменены форматы: '+(rev.changed_formats||[]).join(', ')+'. Исходный ZIP не изменён.':
       rev?.status==='no_change'?'Новые пиксели не получены. Исходный комплект сохранён.':
       'Исходный ZIP не изменяется. Новая версия сохраняется отдельно.';
@@ -759,8 +791,8 @@
     const selected=$('refine-issue').selectedOptions[0];
     if(!selected?.dataset.field)return;
     const field=JSON.parse(selected.dataset.field);
-    $('refine-instruction').value='Строка «'+field.label+'»: должно быть ровно «'+field.expected+
-      '». Удалить ошибочные и дублирующиеся символы, не изменяя соседние строки и оформление.';
+    $('refine-instruction').value=field.instruction||('Строка «'+field.label+'»: должно быть ровно «'+field.expected+
+      '». Удалить ошибочные и дублирующиеся символы, не изменяя соседние строки и оформление.');
     const box=field.region;
     if(refineImage&&Array.isArray(box)&&box.length===4){
       const w=refineImage.naturalWidth,h=refineImage.naturalHeight;
@@ -796,8 +828,9 @@
     if(isBusy||pendingPaidTask||!apiReady||!canRefine())return;
     clearError();
     const format=get('refine-format'),region=regionValue(),instruction=get('refine-instruction').trim();
-    const count=action==='expand'?pendingBleeds().length:1;
-    if(!count)return;
+    const reviewOnly=action==='review';
+    const count=reviewOnly?0:action==='expand'?pendingBleeds().length:1;
+    if(!reviewOnly&&!count)return;
     if(action==='repair'){
       if(!region||region[2]-region[0]<6||region[3]-region[1]<6||
          (region[2]-region[0])*(region[3]-region[1])>refineImage.naturalWidth*refineImage.naturalHeight/2){
@@ -805,10 +838,13 @@
       }
       if(!instruction||instruction.length>2500){showError('Укажите точную правку.');return;}
     }
-    const verify=checked('refine-review');
-    if(!window.confirm((action==='expand'?'Дорисовать только поля существующих плакатов. ':'Исправить только выбранную область '+format+'. ')+
+    const verify=reviewOnly||checked('refine-review');
+    const confirmation=reviewOnly?
+      'Проверить оба существующих плаката без изменения изображений. 0 Images-запросов, до 1 платного Responses-запроса при достаточной памяти. Исходный ZIP не меняется; автоматических повторов нет. Продолжить?':
+      (action==='expand'?'Дорисовать только поля существующих плакатов. ':'Исправить только выбранную область '+format+'. ')+
       'До '+count+' платных Images-запросов.'+(verify?' При изменении изображений — ещё 1 платный Responses-запрос.':' Повторная AI-сверка отключена.')+
-      ' Центральная защищённая область или остальные пиксели сохраняются. Исходный ZIP не изменяется. Автоповторов нет. Продолжить?'))return;
+      ' Центральная защищённая область или остальные пиксели сохраняются. Исходный ZIP не изменяется. Автоповторов нет. Продолжить?';
+    if(!window.confirm(confirmation))return;
     const form=new FormData();
     form.append('generation_mode','refine_posters');
     form.append('source_job',latest.job_id);
@@ -1292,6 +1328,7 @@
   $('new-variation-btn')?.addEventListener('click',()=>generate(true));
   $('refine-import')?.addEventListener('click',importExistingBundle);
   $('refine-expand')?.addEventListener('click',()=>runRefinement('expand'));
+  $('refine-review-only')?.addEventListener('click',()=>runRefinement('review'));
   $('refine-repair')?.addEventListener('click',()=>runRefinement('repair'));
   $('refine-format')?.addEventListener('change',loadRefinePreview);
   $('refine-issue')?.addEventListener('change',pickRefineIssue);
