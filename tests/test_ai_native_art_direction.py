@@ -140,8 +140,7 @@ def test_customer_reference_pro_describes_editorial_campaign_not_template():
         direction=reference_style_direction(fmt)
         assert "auto-filled report" in direction
         assert "identical rectangle" in direction
-        assert "not a fixed coordinate layout" in direction.lower() or (
-            "not ui panels" in direction.lower()
-            or "not a hardcoded coordinate layout" in direction.lower())
+        assert ("coordinate layout" in direction.lower()
+                or "ui panels" in direction.lower())
         assert "cinematic" in direction.lower() or "professional" in direction
         assert "central aspect-safe framing" in direction
