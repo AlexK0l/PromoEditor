@@ -1303,6 +1303,20 @@ async def _generate_from_form(form, progress=None):
     use_openai=str(form.get('use_openai','false')).lower()=='true'
     use_demo=str(form.get('use_demo','false')).lower()=='true'
     mode=str(form.get('generation_mode','template'))
+    # The user-approved 4:3 and 9:16 advertising samples live in the CHAT,
+    # not magically inside a VPS upload. The prior charged ZIP had ZERO
+    # style reference files, so the image model never actually saw them.
+    # Stop BEFORE photo ranking or image credits are consumed.
+    if (mode=='hybrid' and brief.get('style')=='reference_pro'
+            and not groups['reference_examples']
+            and not groups['references']):
+        raise HTTPException(
+            400,detail=(
+                'Для стиля «Рекламный PRO» загрузите хотя бы один '
+                'рекламный эталон (4:3 или 9:16) в поле «Рекламный '
+                'эталон». Примеры из переписки автоматически на VPS '
+                'не передаются. Платные запросы не запускались.'
+            ))
     if mode not in ('ai_pro','template','hybrid'):
         raise HTTPException(400,detail='Неподдерживаемый режим создания.')
     if mode=='hybrid':
