@@ -1155,7 +1155,7 @@ def _run_generation_task(task_id: str):
         opened.clear()
         ai_job_queue.erase_uploads(folder)
         ai_job_queue.set_status(
-            folder,'complete',stage='Оба макета и редактируемые SVG готовы',
+            folder,'complete',stage='Оба полноформатных AI-плаката готовы',
             result=result)
     except Exception as exc:
         if isinstance(exc,HTTPException):
@@ -1386,31 +1386,32 @@ async def _generate_from_form(form, progress=None):
         except ValueError as exc:raise HTTPException(400,detail=str(exc))
     try:
         if mode=='hybrid':
-            # Main mode is genuine AI-designed textless artwork, not a
-            # procedural template or old full-raster lettering attempt.
-            # Verified facts are drawn as editable SVG AFTER the art and
-            # stylistic finish only chooses typography parameters.
+            # Primary AI mode: ALL visible artistic design is authored by
+            # OpenAI Images, including lettering, complex photo composition,
+            # engineering illustration, benefits and CTA. NEVER route the
+            # main button to the fixed ai_reference_render/AI-zones SVG
+            # compositor: customers rejected its rigid 'algorithmic stub'.
             selected_id=report['selected_assets']['primary_photo']
             selected_source={
                 'id':selected_id,
                 'name':records[selected_id]['name'],
                 'sha256':records[selected_id]['sha256'],
             }
-            # Keep ONLY the AI-selected trailer + optional logo/drawing/style
-            # photo in RAM during the long, paid multi-stage pipeline. Other
-            # uploaded photos may consume up to 68 MiB unnecessarily.
+            # Join up to two actual user-uploaded style references (landscape
+            # and portrait) into an optional transient style board. Source
+            # facts always come from the normalized brief, not the pictures.
+            style_board=combine_style_references(
+                reference_example_raw,references)
             del groups,records,report,background_raw,references
             import gc
             gc.collect()
             result=await asyncio.to_thread(
-                _exact_typography_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
-                reference_example_raw,
+                _full_posters_sync,brief,hero_raw,logo_raw,drawing_raw,
+                style_board,
                 str(form.get('model','gpt-image-2.5-flare')),
                 str(form.get('quality','medium')),
                 selected_source=selected_source,
-                **({'detail_raw':detail_raw}
-                   if detail_raw and brief.get('style')=='reference_pro'
-                   else {}),
+                secondary_raw=detail_raw,
                 **({'progress':progress} if progress else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references
