@@ -154,7 +154,9 @@ def test_paid_progress_is_explicit_and_cancelling_confirmation_sends_nothing():
     js = (ROOT / "app.js").read_text(encoding="utf-8")
     assert "generate-elapsed" in parser.parents
     assert "if(isHybrid()&&!window.confirm(" in js
-    assert "3 платных вызова OpenAI Images" in js
+    assert "До 3 платных вызовов OpenAI Images" in js
+    assert "до 2 платных Images-запросов для дорисовки полей" in js
+    assert 'id="expand-posters" type="checkbox" checked' in html
     assert "window.setInterval(updateElapsed,1000)" in js
     assert "window.clearInterval(elapsedClock)" in js
     assert "elapsed.hidden=true" in js

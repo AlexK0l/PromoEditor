@@ -205,3 +205,20 @@ def test_missing_vehicle_evidence_cannot_pass():
     report=ai_poster_review.compare_review(approved,raw,keys)
     assert report["status"]=="issues_found"
     assert all(report["formats"][fmt]["vehicle_check"]["status"]=="issue" for fmt in ("4x3","9x16"))
+
+
+
+def test_located_fields_keep_only_valid_coordinates():
+    approved=approved_full_copy(approved_zubrtrail_500())
+    keys=["readability","unwanted_blueprint"]
+    raw=_observations(approved,keys,fail=False)
+    fields=raw["formats"][1]["fields"]
+    fields[0].update(state="conflicting",region=[800,600,970,640],observed="ZUBR TRAIL ZUBR TRAIL")
+    fields[1]["region"]=[10,20,1200,50]
+    fields[2]["region"]=[True,20,100,50]
+    report=ai_poster_review.compare_review(approved,raw,keys)
+    rows=report["formats"]["9x16"]["fields"]
+    assert rows[0]["region"]==[800,600,970,640]
+    assert rows[0]["status"]=="conflicting"
+    assert rows[1]["region"] is None
+    assert rows[2]["region"] is None
