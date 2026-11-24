@@ -264,13 +264,9 @@ def test_paid_raw_layout_survives_invalid_collision_and_retry_requires_no_vision
     assert validate_slots(repaired,poster_copy(brief))==repaired
 
 
-def test_no_room_for_three_specs_reduces_optional_copy_without_paid_calls(
+def test_impossible_paid_layout_never_silently_deletes_all_approved_specs(
         monkeypatch,tmp_path):
-    """Actual production error: one oversized specs block must not kill ZIP.
-
-    Deliberately emulate the measured 4x3 geometric failure for three, two
-    and one spec; remaining mandatory facts must never be changed.
-    """
+    """A failed paid layout must NOT return a finished advert with no TTH."""
     brief=_brief()
     brief["specs"]=[
         ("Грузоподъёмность","44 т"),
@@ -283,32 +279,26 @@ def test_no_room_for_three_specs_reduces_optional_copy_without_paid_calls(
     workflow._save_json(tmp_path,"layout_raw.json",original)
     monkeypatch.setattr(
         workflow,"client",
-        lambda:pytest.fail("A cached layout must never trigger paid AI"),
+        lambda:pytest.fail("Cached layout must never trigger paid AI"),
     )
     assert workflow._layout_plan(
         brief,{},has_logo=False,has_drawing=False,folder=tmp_path,
         return_raw=True,
     )==original
-    real_repair=workflow.repair_ai_slots
-    attempted=[]
-    def fail_spec_fit(geometry,copy,**kw):
-        attempted.append(len(copy["specs"]))
-        if copy["specs"]:
-            raise ValueError(
-                "AI не оставил достаточно свободного места для «specs» "
-                "(4x3). Текст не обрезан.")
-        return real_repair(geometry,copy,**kw)
-    monkeypatch.setattr(workflow,"repair_ai_slots",fail_spec_fit)
-    layout,selected=workflow._fit_layout_with_adaptive_copy(
-        original,approved)
-    assert attempted==[3,2,1,0]
-    assert selected["specs"]==[]
-    assert selected["model"]==approved["model"]
-    assert selected["brand"]==approved["brand"]
-    assert selected["price"]==approved["price"]
-    assert selected["phones"]==approved["phones"]
-    assert approved["specs"] and len(approved["specs"])==3
-    assert validate_slots(layout,selected)==layout
+    seen=[]
+    def impossible(geometry,copy,**kw):
+        seen.append(len(copy["specs"]))
+        assert len(copy["specs"])>=1, "The last technical fact is mandatory"
+        raise ValueError(
+            "AI не оставил достаточно свободного места для «specs» (4x3)."
+        )
+    monkeypatch.setattr(workflow,"repair_ai_slots",impossible)
+    with pytest.raises(ValueError,match="ТТХ НЕ удалены"):
+        workflow._fit_layout_with_adaptive_copy(original,approved)
+    assert seen[0]==3
+    assert min(seen)==1
+    assert workflow._load_json(tmp_path,"layout_raw.json")==original
+    assert approved["specs"] and approved["model"] and approved["price"]
 
 
 def test_shrinks_failing_role_only_and_keeps_other_optional_copy(monkeypatch):
@@ -452,7 +442,9 @@ def test_textless_art_prompt_never_requests_model_to_print_verified_copy():
         prompt=workflow._art_prompt(_brief(),fmt,reference=False)
         assert "WITHOUT ANY PRINTED TEXT" in prompt
         assert "NO fake or placeholder text" in prompt
-        assert "The final poster dimensions" in prompt
+        assert "Images uses native 3:2 or 2:3" in prompt
+        assert "WITHOUT" in prompt
+        assert "engineering drawing" in prompt
         assert "copy_character_lengths" in prompt
         assert "6527000" not in prompt
         assert "+7 (951)" not in prompt
@@ -532,3 +524,74 @@ def test_main_zip_contains_exact_text_svgs_blank_ai_art_and_originals(
         assert "verified_copy.json" in names
         assert "REVIEW_BEFORE_PUBLICATION.txt" in names
     assert selected==_png((500,310),"gold")
+
+
+def test_final_ai_font_cannot_break_paid_exact_copy_export():
+    """Reproduce a font wider than the provisional condensed SVG preview."""
+    layout = _layouts()
+    layout["4x3"]["model"]["w"] = 220
+    layout["9x16"]["model"]["w"] = 290
+    copy = poster_copy(_brief())
+    ai = {fmt: dict(DEFAULT_STYLE, font_family="DejaVu Sans",
+                    scale_percent=112, accent="#12AABB")
+          for fmt in FORMATS}
+    assert workflow._typography_fits(layout, copy, {
+        fmt: dict(DEFAULT_STYLE) for fmt in FORMATS
+    })
+    assert not workflow._typography_fits(layout, copy, ai)
+    corrected = workflow._safe_final_typography(layout, copy, ai)
+    assert workflow._typography_fits(layout, copy, corrected)
+    assert corrected["4x3"]["font_family"] == "DejaVu Sans Condensed"
+    assert corrected["9x16"]["font_family"] == "DejaVu Sans Condensed"
+    assert corrected["4x3"]["accent"] == "#12AABB"
+    for fmt in FORMATS:
+        with Image.new("RGB", FORMATS[fmt], "white") as art:
+            svg = render_exact_svg(_brief(), fmt, art, layout[fmt],
+                                   corrected[fmt], copy_override=copy)
+            assert b'data-verified-role="model"' in svg
+
+
+def test_invalid_optional_typography_response_keeps_paid_artwork(monkeypatch):
+    """An invalid paid styling JSON must not defeat exact text export."""
+    class Responses:
+        def create(self, **kwargs):
+            return type("Result", (), {"output_text": '{"styles": {}}'})()
+    monkeypatch.setattr(workflow, "client",
+                        lambda: type("API", (), {"responses": Responses()})())
+    art = {fmt: Image.new("RGB", (320, 320), "white") for fmt in FORMATS}
+    try:
+        assert workflow._finish_typography(art) == {
+            fmt: dict(DEFAULT_STYLE) for fmt in FORMATS
+        }
+    finally:
+        for image in art.values():
+            image.close()
+
+
+def test_corrupt_cached_typography_is_locally_repaired():
+    layout = _layouts()
+    copy = poster_copy(_brief())
+    repaired = workflow._safe_final_typography(
+        layout, copy, {"4x3": {"font_family": "Unknown"}})
+    assert repaired == {fmt: dict(DEFAULT_STYLE) for fmt in FORMATS}
+
+
+def test_other_approved_benefits_are_not_lost_when_claims_are_blank():
+    brief=_brief()
+    brief["hero_claims"]=[]
+    brief["benefits"]=["Гарантия 24 месяца","Усиленная рама"]
+    copy=poster_copy(brief)
+    assert copy["claims"]==["Гарантия 24 месяца","Усиленная рама"]
+    assert copy["price"]==["6 527 000 ₽"]
+    assert copy["phones"]==["+7 (951) 704-30-42"]
+    brief["hero_claims"]=["Под заказ за 14 дней"]
+    copy=poster_copy(brief)
+    assert copy["claims"]==["Под заказ за 14 дней","Гарантия 24 месяца"]
+
+
+def test_discarded_optional_benefits_stay_in_verified_copy():
+    brief=_brief()
+    brief["benefits"]=["Сервисное обслуживание", "Гарантия",
+                       "Дополнительный длинный рекламный тезис"]
+    assert len(poster_copy(brief)["claims"])==2
+    assert len(verified_copy(brief)["benefits"])==3

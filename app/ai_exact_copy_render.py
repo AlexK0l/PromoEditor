@@ -120,10 +120,9 @@ def _format_money(value) -> str:
 def poster_copy(brief: dict) -> dict[str, list[str]]:
     """Select factual AD COPY; preserve the full source in verified_copy().
 
-    A photographed product advert is not a specification sheet. Never cram
-    all dimensions, 10 long specs, six benefits and ROI proofs into one ad;
-    no invented text, arithmetic or silent truncation of a selected line.
-    The full facts still accompany the ZIP in verified_copy.json/brief.json.
+    Keep a readable selection of real technical facts IN each hero advert.
+    The separate technical sheet displays the full specs/dimensions and
+    original drawing. Never invent, truncate or silently lose key data.
     """
     full=verified_copy(brief)
     chosen={role:[] for role in ROLES}
@@ -139,10 +138,27 @@ def poster_copy(brief: dict) -> dict[str, list[str]]:
         next((index for index,word in enumerate(priority)
               if item[1].casefold().startswith(word)) ,len(priority)),
         item[0]))
-    chosen["specs"]=[value for _,value in ranked
-                     if len(value)<=44][:3]
-    chosen["claims"]=[value for value in full["claims"]
-                      if len(value)<=56][:2]
+    # Technical facts are essential, not optional decoration. Long verified
+    # lines are wrapped by the exact-copy renderer, never discarded solely
+    # because a label exceeds a historical 44-character shortcut.
+    chosen["specs"]=[value for _,value in ranked][:3]
+    # Include two actual measurements from the customer-provided drawing data.
+    # This must be visible in BOTH hero posters, not just in brief.json.
+    dims=list(full["dimensions"])
+    dim_priority=("длина","ширина","высота","масса","колея")
+    dim_ranked=sorted(enumerate(dims),key=lambda item:(
+        next((n for n,keyword in enumerate(dim_priority)
+              if item[1].casefold().startswith(keyword)),len(dim_priority)),
+        item[0],
+    ))
+    chosen["dimensions"]=[value for _,value in dim_ranked][:2]
+    # The form has two independent approved sources of selling points.
+    # Previously an empty "short claims" field silently excluded every
+    # value from "other benefits", leaving a blank ad despite user input.
+    claims=[value for value in full["claims"] if len(value)<=56]
+    benefits=[value for value in full["benefits"]
+              if len(value)<=56 and value not in claims]
+    chosen["claims"]=(claims+benefits)[:2]
     return chosen
 
 

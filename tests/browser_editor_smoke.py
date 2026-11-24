@@ -27,6 +27,42 @@ def main():
         errors=[]
         page.on("pageerror",lambda error: errors.append(str(error)))
         page.goto(BASE,wait_until="domcontentloaded")
+        # The original screenshot had Times New Roman body text and huge
+        # SVG icons even though the VPS returned HTTP 200 for all CSS files.
+        # Validate ACTUAL computed layout, not just an asset response status.
+        assert page.locator("#stylesheet-error").is_hidden()
+        # The page does not make blocking external CSS requests at all.
+        assert page.locator('link[rel="stylesheet"]').count()==0
+        assert page.locator(".composer-grid").evaluate(
+            "(el)=>getComputedStyle(el).display") == "grid"
+        assert page.locator(".brand-symbol svg").evaluate(
+            "(el)=>Math.round(el.getBoundingClientRect().width)") == 25
+        assert page.locator(".dropzone .drop-icon svg").evaluate(
+            "(el)=>Math.round(el.getBoundingClientRect().width)") == 25
+        assert "sans-serif" in page.locator("body").evaluate(
+            "(el)=>getComputedStyle(el).fontFamily").lower()
+
+        # Reproduce the real failure: browser cannot use ANY linked CSS,
+        # despite an otherwise healthy FastAPI server. The HTML response
+        # carries the canonical CSS inline and remains completely styled.
+        no_css=browser.new_page(viewport={"width":1360,"height":900})
+        no_css.route("**/static/*.css*",lambda route:route.abort())
+        no_css.goto(BASE,wait_until="load")
+        assert no_css.locator("#promoeditor-embedded-styles").count()==1
+        assert no_css.locator("#stylesheet-error").is_hidden()
+        assert no_css.locator(".composer-grid").evaluate(
+            "(el)=>getComputedStyle(el).display")=="grid"
+        assert no_css.locator(".brand-symbol svg").evaluate(
+            "(el)=>Math.round(el.getBoundingClientRect().width)")==25
+        assert no_css.locator(".dropzone .drop-icon svg").evaluate(
+            "(el)=>Math.round(el.getBoundingClientRect().width)")==25
+        # If embedded CSS ALSO disappears, show a warning and cap icons.
+        no_css.evaluate(
+            "document.getElementById('promoeditor-embedded-styles').remove()")
+        assert no_css.locator("#stylesheet-error").is_visible()
+        assert no_css.locator(".dropzone .drop-icon svg").evaluate(
+            "(el)=>el.getBoundingClientRect().width <= 30")
+        no_css.close()
         # Dark mode is a real choice, persists after reload and never touches PNG.
         toggle=page.locator("[data-theme-toggle]")
         assert toggle.count()==1

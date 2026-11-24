@@ -12,9 +12,9 @@ from app import ai_poster_service, main, openai_service, product_rebrand_service
 from app.render import default_brief
 
 
-def _png(color="yellow"):
+def _png(color="yellow",size=(300,180)):
     out = io.BytesIO()
-    Image.new("RGB", (300, 180), color).save(out, "PNG")
+    Image.new("RGB", size, color).save(out, "PNG")
     return out.getvalue()
 
 
@@ -28,11 +28,11 @@ def _api():
 
         def edit(self, **kwargs):
             calls.append(("edit", kwargs["size"]))
-            return self._result()
+            return self._result(tuple(map(int,kwargs["size"].split("x"))))
 
-        def _result(self):
+        def _result(self,size=(300,180)):
             datum = type("Datum", (), {
-                "b64_json": base64.b64encode(_png("lightblue")).decode("ascii")
+                "b64_json": base64.b64encode(_png("lightblue",size)).decode("ascii")
             })()
             return type("Result", (), {"data": [datum]})()
 
@@ -141,12 +141,22 @@ def test_full_raster_poster_outputs_survive_zip_failure(monkeypatch, tmp_path):
     assert len(calls) == 3
     output = main._full_posters_sync(*kwargs)
     assert len(calls) == 3
-    assert not (cache / "4x3.png").exists()
+    assert (cache / "4x3.png").is_file()
     assert output["raster_only"] is True
+    repeated = main._full_posters_sync(*kwargs)
+    assert repeated["raster_only"] is True
+    assert len(calls) == 3, "Repeat same variant must not buy art again"
+    changed = main._full_posters_sync(*kwargs, variation_id="a"*32)
+    assert changed["raster_only"] is True
+    assert len(calls) == 5, "Explicit new variant buys only two posters"
+    main._full_posters_sync(*kwargs, variation_id="a"*32)
+    assert len(calls) == 5, "Retry of explicit variant must use its cache"
     assert (tmp_path / output["job_id"] / "ai_posters.zip").is_file()
     with zipfile.ZipFile(tmp_path / output["job_id"] / "ai_posters.zip") as z:
         assert z.read("originals/product_photo.png") == raw
         assert "rebranded_product.png" in z.namelist()
+        assert "native_ai_artwork_4x3.png" in z.namelist()
+        assert "native_ai_artwork_9x16.png" in z.namelist()
 
 
 def test_approved_reference_preset_does_not_modify_legacy_demo():
@@ -201,61 +211,107 @@ def test_completed_hybrid_response_reports_actual_mode(monkeypatch, tmp_path):
     assert metadata["art_director"].startswith("OpenAI Responses")
 
 
-def test_primary_create_uses_exact_copy_ai_template_not_full_raster(
-        monkeypatch, tmp_path):
-    """Customer-facing Create must use textless AI design + exact SVG copy.
+def test_primary_create_uses_full_openai_image_art_not_procedural_svg(
+        monkeypatch,tmp_path):
+    """The customer rejected the six-column AI-blank-template stub.
 
-    The legacy raster Images engine must NOT run from the main button.
-    CI does not make paid network requests.
+    Main Create must call the full-raster OpenAI artistic flow, never
+    the hard-coded ai_reference_render or exact-copy typography pass.
+    This test uses NO paid network.
     """
-    monkeypatch.setenv("OPENAI_API_KEY", "test-no-network")
-    monkeypatch.setenv("PROMO_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(main, "STORAGE", tmp_path)
-    monkeypatch.setattr(main, "_guard_rate", lambda request: None)
-    original = _png("yellow")
-    called = []
+    monkeypatch.setenv("OPENAI_API_KEY","test-no-network")
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    original=_png("yellow")
+    called=[]
 
-    def typed_posters(brief, product, logo, drawing, reference, model, quality,
-                     selected_source=None):
-        called.append(("typed_poster", product, model, quality))
-        assert selected_source["id"] == "photo_1"
-        assert selected_source["name"] == "real.png"
-        assert brief["model"]
-        assert product == original
+    def native_posters(brief,product,logo,drawing,reference,model,quality,
+                       selected_source=None,progress=None,secondary_raw=None):
+        called.append(("full_openai_image_poster",product,model,quality))
+        assert selected_source["id"]=="photo_1"
+        assert selected_source["name"]=="real.png"
+        assert product==original
         return {
-            "images": {"4x3": "/files/test/ai_poster_4x3.png",
-                       "9x16": "/files/test/ai_poster_9x16.png"},
-            "jpeg": {"4x3": "/files/test/ai_poster_4x3.jpg",
-                     "9x16": "/files/test/ai_poster_9x16.jpg"},
-            "zip": "/files/test/ai_typographic_posters.zip",
-            "corel": {"4x3":"/files/test/corel_4x3.svg",
-                      "9x16":"/files/test/corel_9x16.svg"},
-            "generation_mode": "ai_template_exact_copy",
-            "raster_only": False,
-            "ai_used": True,
-            "warnings": [],
+            "images":{"4x3":"/files/test/ai_poster_4x3.png",
+                      "9x16":"/files/test/ai_poster_9x16.png"},
+            "jpeg":{"4x3":"/files/test/ai_poster_4x3.jpg",
+                    "9x16":"/files/test/ai_poster_9x16.jpg"},
+            "zip":"/files/test/ai_posters.zip",
+            "generation_mode":"openai_full_poster",
+            "raster_only":True,"ai_used":True,"warnings":[],
         }
 
-    def forbidden_old_renderer(*args, **kwargs):
-        raise AssertionError("Primary AI creation called old layout renderer")
+    def forbidden_stub(*args,**kwargs):
+        raise AssertionError("Primary AI poster routed to procedural stub!")
 
-    monkeypatch.setattr(main, "_exact_typography_posters_sync", typed_posters)
-    monkeypatch.setattr(main, "_full_posters_sync", forbidden_old_renderer)
-    monkeypatch.setattr(main, "_generate_sync", forbidden_old_renderer)
+    monkeypatch.setattr(main,"_full_posters_sync",native_posters)
+    monkeypatch.setattr(main,"_exact_typography_posters_sync",forbidden_stub)
+    monkeypatch.setattr(main,"_generate_sync",forbidden_stub)
     with TestClient(main.app) as browser:
-        result = browser.post("/api/generate",
-            data={
-                "payload": json.dumps(default_brief(), ensure_ascii=False),
-                "generation_mode": "hybrid",
-                "use_openai": "true",
-                "model": "gpt-image-2.5-flare",
-                "quality": "medium",
-            },
-            files={"hero": ("real.png", original, "image/png")})
-    assert result.status_code == 200, result.text
-    assert result.json()["generation_mode"] == "ai_template_exact_copy"
-    assert result.json()["raster_only"] is False
-    assert result.json()["zip"].endswith("ai_typographic_posters.zip")
-    assert result.json()["corel"]["4x3"].endswith(".svg")
-    assert called and called[0][0] == "typed_poster"
-    assert len(called) == 1 and called[0][0] == "typed_poster"
+        result=browser.post("/api/generate",data={
+            "payload":json.dumps(default_brief(),ensure_ascii=False),
+            "generation_mode":"hybrid",
+            "use_openai":"true",
+            "model":"gpt-image-2.5-flare",
+            "quality":"medium",
+        },files={"hero":("real.png",original,"image/png")})
+    assert result.status_code==200,result.text
+    assert result.json()["generation_mode"]=="openai_full_poster"
+    assert result.json()["raster_only"] is True
+    assert result.json()["zip"].endswith("ai_posters.zip")
+    assert "corel" not in result.json()
+    assert called and called[0][0]=="full_openai_image_poster"
+    assert len(called)==1
+
+
+
+def test_real_uploaded_landscape_and_portrait_style_files_reach_paid_model(
+        monkeypatch,tmp_path):
+    """PRO files MUST be sent to the real model as a joined STYLE image.
+
+    The customer's earlier ZIP contained NO original style reference at
+    all. This checks actual HTTP multipart handling, not prompt strings.
+    """
+    from app import main
+    monkeypatch.setenv("OPENAI_API_KEY","dummy-no-network")
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    calls=[]
+    def native(brief,product,logo,drawing,reference,model,quality,
+               selected_source=None,progress=None,secondary_raw=None):
+        assert brief["style"]=="reference_pro"
+        assert reference
+        with Image.open(io.BytesIO(reference)) as board:
+            assert board.size==(1500,960)
+            assert board.format=="JPEG"
+            # first landscape and second portrait belong to DIFFERENT
+            # visual sources, both should survive the montage.
+            assert board.getpixel((415,475))[0]>80
+            assert board.getpixel((1170,475))[2]>80
+        calls.append("received_both_uploaded_style_examples")
+        return {
+            "images":{"4x3":"/files/mock/4x3.png",
+                      "9x16":"/files/mock/9x16.png"},
+            "jpeg":{"4x3":"/files/mock/4x3.jpg",
+                    "9x16":"/files/mock/9x16.jpg"},
+            "zip":"/files/mock/ai_posters.zip",
+            "generation_mode":"openai_full_poster",
+            "raster_only":True,"ai_used":True,"warnings":[],
+        }
+    monkeypatch.setattr(main,"_full_posters_sync",native)
+    brief=default_brief()
+    brief["style"]="reference_pro"
+    with TestClient(main.app) as client:
+        result=client.post("/api/generate",data={
+            "payload":json.dumps(brief,ensure_ascii=False),
+            "generation_mode":"hybrid","use_openai":"true",
+        },files=[
+            ("hero",("photo.png",_png("yellow"),"image/png")),
+            ("reference_example",
+             ("landscape.png",_png("red"),"image/png")),
+            ("references",("portrait.png",_png("blue"),"image/png")),
+        ])
+    assert result.status_code==200,result.text
+    assert calls==["received_both_uploaded_style_examples"]

@@ -40,8 +40,13 @@ def _protected_product(box: dict, fmt: str) -> dict:
     left=max(0,box["x"]-24)
     top=max(0,box["y"]-20)
     right=min(1000,box["x"]+box["w"]+24)
+    # The old 140/85-unit bottom safety blanket covered the entire
+    # explicitly blank technical strip in genuine AI art. It caused
+    # automatic deletion of all approved specs while wheels were actually
+    # contained within the product bbox. Retain a meaningful safety gap,
+    # but honor the observed product envelope from the vision stage.
     bottom=min(1000,box["y"]+box["h"]+
-               (140 if fmt=="4x3" else 85))
+               (48 if fmt=="4x3" else 42))
     return {"x":left,"y":top,"w":right-left,"h":bottom-top}
 
 

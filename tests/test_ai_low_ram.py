@@ -102,14 +102,15 @@ def test_file_backed_ai_outputs_and_cache_resume(monkeypatch,tmp_path):
     assert len(list(Path(result["cache_dir"]).glob("*.png")))==2
 
 
-def test_paid_cached_art_with_impossible_specs_still_exports_without_new_api(
+def test_paid_cached_art_with_small_legacy_specs_box_is_locally_recomposed(
         monkeypatch,tmp_path):
-    """Reproduce reported 4x3 specs collision from an ALREADY PAID layout.
+    """The NEW editorial panel fixes tiny AI slots without buying new art.
 
-    Two paid Images files, the paid raw Responses layout and finished font
-    styling are cached. Retry must locally remove optional specs and produce
-    both editable posters, with ZERO extra paid image/vision calls.
+    Previously, a tiny 4:3 'specs' rectangle forced a customer-visible error
+    or the deletion of technical claims. The renderer owns its own integrated
+    technical strip and depends only on the actual photographed product bbox.
     """
+    import xml.etree.ElementTree as ET
     monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
     monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","0")
     monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY","0")
@@ -136,35 +137,25 @@ def test_paid_cached_art_with_impossible_specs_still_exports_without_new_api(
     })
     monkeypatch.setattr(
         pipeline,"client",
-        lambda:pytest.fail("Cached artwork and layout must not pay OpenAI"),
+        lambda:pytest.fail("Cached artwork/layout must never pay OpenAI"),
     )
-    original=pipeline.repair_ai_slots
-    seen=[]
-    def simulate_no_fit(geometry,copy,**kwargs):
-        seen.append(len(copy["specs"]))
-        if copy["specs"]:
-            raise ValueError(
-                "AI не оставил достаточно свободного места "
-                "для «specs» (4x3).")
-        return original(geometry,copy,**kwargs)
-    monkeypatch.setattr(pipeline,"repair_ai_slots",simulate_no_fit)
-    finished=pipeline.generate_exact_typography_posters(
+    result=pipeline.generate_exact_typography_posters(
         values,selected,logo=None,drawing=None,reference=None,
         model="gpt-image-2.5-flare",quality="medium",
         output_dir=tmp_path/"recovered",
     )
-    assert seen==[3,2,1,0],seen
-    assert finished["poster_copy"]["specs"]==[]
-    assert len(finished["verified_copy"]["specs"])==3
-    assert finished["poster_copy"]["model"]==["ZubrTrail 500"]
-    assert finished["poster_copy"]["price"]
-    assert finished["poster_copy"]["phones"]
     for fmt in FORMATS:
-        assert finished["svg"][fmt].is_file()
-        assert finished["png"][fmt].is_file()
-        assert finished["jpeg"][fmt].is_file()
+        svg=result["svg"][fmt].read_bytes()
+        root=ET.fromstring(svg)
+        facts=[node.get("data-exact-copy") for node in root.iter()
+               if node.get("data-verified-role")=="specs"]
+        assert facts==[
+            "Грузоподъёмность: 44 т","Объём кузова: 55 м³",
+            "Собственный вес: 8,3 т",
+        ]
+        assert result["png"][fmt].is_file()
     assert pipeline._load_json(cache,"layout_raw.json")==raw
-    assert pipeline._load_json(cache,"poster_copy.json")==finished["poster_copy"]
+    assert all((cache/(fmt+".png")).is_file() for fmt in FORMATS)
 
 
 def test_native_raster_worker_oom_failure_is_reported(monkeypatch,tmp_path):
@@ -262,3 +253,42 @@ def test_uploaded_large_logo_is_downscaled_before_rgba_embedding(monkeypatch):
     assert name=="exact-uploaded-logo"
     assert w<=900 and h<=175,(
         "Full-size logo was converted before downsampling: "+str((w,h)))
+
+
+def test_failed_paid_exact_copy_gives_private_partial_art_zip(monkeypatch,tmp_path):
+    """A text-zone failure must not leave the customer empty-handed."""
+    import zipfile
+    from app import main
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setenv("PROMO_AI_IMAGE_CALLS_PER_DAY","0")
+    monkeypatch.setenv("PROMO_AI_TEXT_CALLS_PER_DAY","0")
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    source=png()
+    monkeypatch.setattr(main,"cached_rebrand_photo",lambda folder:None)
+    monkeypatch.setattr(main,"rebrand_selected_photo",
+                        lambda brief,raw,**kwargs:source)
+    def failure_after_one_paid_art(brief,rebranded,*,output_dir,**kwargs):
+        assert rebranded==source
+        (output_dir/"ai_template_4x3.png").write_bytes(source)
+        raise ValueError("AI не оставил достаточно свободного места для «model» (9x16)")
+    monkeypatch.setattr(main,"generate_exact_typography_posters",
+                        failure_after_one_paid_art)
+    with pytest.raises(main.PartialPosterFailure) as failure:
+        main._exact_typography_posters_sync(
+            brief(),source,None,None,None,"gpt-image-2.5-flare","medium")
+    assert failure.value.cause_type=="ValueError"
+    url=failure.value.recovery_zip
+    assert url.startswith("/files/") and url.endswith("/ai_failed_generation.zip")
+    job_id=url.split("/")[2]
+    archive=tmp_path/job_id/"ai_failed_generation.zip"
+    with zipfile.ZipFile(archive) as bundle:
+        names=bundle.namelist()
+        assert "ai_template_4x3.png" in names
+        assert "rebranded_product.png" in names
+        assert "READ_ME_FIRST.txt" in names
+        assert bundle.read("ai_template_4x3.png")==source
+        assert "ai_poster_9x16.png" not in bundle.namelist()
+        assert "Генерация НЕ завершена" in bundle.read(
+            "READ_ME_FIRST.txt").decode("utf-8")
+    # Never present partial files as a finished advertising ZIP.
+    assert not (tmp_path/job_id/"ai_typographic_posters.zip").is_file()

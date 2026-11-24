@@ -5,6 +5,8 @@
   --blue:#315ddc;--blue-hover:#224ec7;--blue-light:#eef3ff;--good:#178a61;
   --radius:20px;--shadow:0 14px 45px rgba(16,24,40,.055);
 }
+/* HTML embeds a minimal fallback notice when this stylesheet is missing. */
+#stylesheet-error{display:none!important}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;min-width:320px;color:var(--ink);background:var(--bg);font:15px/1.52 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
@@ -513,3 +515,46 @@ button:disabled{cursor:not-allowed;opacity:.48}
   .generated-previews{grid-template-columns:1fr}
   .generated-previews img{max-height:460px}
 }
+
+
+/* Key customer facts are first-class visible fields, not buried under
+   Pro -> Advanced -> Facts (three nested closed disclosures). */
+.technical-main{
+  display:block;margin:8px 28px 24px;border:1px solid #c6d6ef;
+  border-radius:14px;background:#f9fbff;overflow:hidden;
+}
+.technical-main>summary{
+  list-style:none;cursor:pointer;display:flex;justify-content:space-between;
+  align-items:center;gap:12px;padding:18px 20px;
+  background:#eff4ff;color:#203a66;font-size:14px;
+}
+.technical-main>summary::-webkit-details-marker{display:none}
+.technical-main>summary>span:first-child{display:flex;flex-direction:column;gap:4px}
+.technical-main>summary small{display:block;color:#506683;font-size:11px;font-weight:400}
+.technical-main>.data-group-body{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px;padding:17px 20px 23px;
+}
+.technical-main>.data-group-body>label.field{min-width:0}
+.technical-main>.data-group-body .document-tools,
+.technical-main>.data-group-body .extract-box,
+.technical-main>.data-group-body .check-field{grid-column:1/-1}
+.technical-main #specs,.technical-main #dimensions{min-height:132px}
+:root[data-theme="dark"] .technical-main{background:#1a293c;border-color:#435c7b}
+:root[data-theme="dark"] .technical-main>summary{background:#253c58;color:#e2ecfd}
+:root[data-theme="dark"] .technical-main>summary small{color:#b5c9e6}
+@media(max-width:700px){
+  .technical-main{margin:8px 14px 20px}
+  .technical-main>.data-group-body{grid-template-columns:1fr;padding:15px}
+}
+
+/* Masked finishing: a real pixel-coordinate selection, never a fixed-size
+   canvas that forces a horizontal scrollbar on mobile. */
+.refine-controls{display:flex;flex-direction:column;gap:12px;padding:14px;min-width:0}
+.refine-controls label{display:flex;flex-direction:column;gap:6px;min-width:0}
+.refine-controls label.check-field{flex-direction:row;align-items:flex-start}
+.refine-controls input,.refine-controls select,.refine-controls textarea{max-width:100%;min-width:0;box-sizing:border-box}
+.refine-controls button{align-self:flex-start;max-width:100%;white-space:normal}
+#refine-canvas{display:block;width:100%;max-width:680px;height:auto;border:1px solid var(--line);cursor:crosshair;touch-action:none;background:var(--surface-soft)}
+#refine-canvas[hidden]{display:none}
+#refine-panel,#refine-import-panel{margin-top:12px}

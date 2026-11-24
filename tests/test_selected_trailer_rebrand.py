@@ -15,15 +15,15 @@ from app.ai_quota import QuotaExceeded
 from app.render import default_brief
 
 
-def png(color):
+def png(color, size=(420,270)):
     buffer = io.BytesIO()
-    Image.new("RGB", (420, 270), color).save(buffer, "PNG")
+    Image.new("RGB", size, color).save(buffer, "PNG")
     return buffer.getvalue()
 
 
-def reply(color):
+def reply(color, size=(420,270)):
     data = type("Datum", (), {
-        "b64_json": base64.b64encode(png(color)).decode("ascii"),
+        "b64_json": base64.b64encode(png(color,size)).decode("ascii"),
     })()
     return type("Response", (), {"data": [data]})()
 
@@ -51,9 +51,10 @@ def selected_image_calls(monkeypatch):
             calls["posters"].append({
                 "pixel": pixel,
                 "size": kw["size"],
+                "input_names":[part.name for part in kw["image"]],
                 "prompt": kw["prompt"],
             })
-            return reply((25, 180, 170))
+            return reply((25, 180, 170),tuple(map(int,kw["size"].split("x"))))
 
     monkeypatch.setattr(
         product_rebrand_service, "client",
@@ -67,36 +68,6 @@ def selected_image_calls(monkeypatch):
 
 
 
-def stub_exact_ai_renderer(monkeypatch, tmp_path):
-    """New main route: verify it gets the ONE selected and rebranded photo."""
-    observed = []
-
-    def render(brief, rebranded, *, logo, drawing, reference, model, quality,
-               output_dir=None):
-        with Image.open(io.BytesIO(rebranded)) as image:
-            pixel = image.getpixel((12, 12))
-        observed.append({
-            "pixel": pixel, "logo": logo, "model": model, "quality": quality,
-        })
-        svg = (
-            '<svg xmlns="http://www.w3.org/2000/svg">'
-            '<text data-verified-role="model">OUR TRAILER 500</text></svg>'
-        ).encode()
-        art = {
-            "4x3": Image.new("RGB", (1440, 1080), "white"),
-            "9x16": Image.new("RGB", (1080, 1920), "white"),
-        }
-        return {
-            "png": {fmt:png((70, 120, 150)) for fmt in art},
-            "jpeg": {fmt:png((70, 120, 150)) for fmt in art},
-            "svg": {fmt:svg for fmt in art},
-            "artwork":art, "layout":{}, "typography":{},
-            "verified_copy":{"model":["OUR TRAILER 500"]},
-            "cache_dir":tmp_path / "not-a-real-cache",
-        }
-
-    monkeypatch.setattr(main, "generate_exact_typography_posters", render)
-    return observed
 
 
 def payload():
@@ -127,7 +98,6 @@ def test_multiple_photos_ai_picks_second_and_only_second_is_rebranded(
     from app import openai_service
     monkeypatch.setattr(openai_service, "assess_asset_images", choose_best)
     calls = selected_image_calls(monkeypatch)
-    assembled = stub_exact_ai_renderer(monkeypatch, tmp_path)
     with TestClient(main.app) as app:
         result = app.post("/api/generate", data={
             "payload": payload(), "generation_mode": "hybrid",
@@ -148,21 +118,33 @@ def test_multiple_photos_ai_picks_second_and_only_second_is_rebranded(
         assert len(calls["rebrand"]) == 1, "Never rebrand all uploaded photos"
         assert calls["rebrand"][0]["pixel"] == (20, 70, 220)
         assert calls["rebrand"][0]["image_count"] == 2, "Chosen photo + logo only"
-        assert not calls["posters"], "Main mode must not call legacy raster engine"
-        assert len(assembled) == 1
-        assert assembled[0]["pixel"] == (180, 20, 180)
-        assert assembled[0]["logo"] == logo
-        assert data["generation_mode"] == "ai_template_exact_copy"
-        assert data["raster_only"] is False
-        assert data["corel"]["4x3"].endswith(".svg")
+        assert len(calls["posters"])==2, (
+            "Main mode must make TWO genuine OpenAI artwork edits"
+        )
+        assert [c["size"] for c in calls["posters"]]==[
+            "1536x1152","1152x2048",
+        ]
+        assert all(c["pixel"]==(180,20,180)
+                   for c in calls["posters"]), (
+            "Both posters must use the ONE selected, rebranded photo"
+        )
+        assert all(c["input_names"]==["01_real_product.png","02_logo.png"]
+                   for c in calls["posters"]), "Raw secondary angle must not reach Images"
+        assert data["secondary_used_in_artwork"] is False
+        assert data["generation_mode"]=="openai_full_poster"
+        assert data["raster_only"] is True
+        assert "corel" not in data
         with zipfile.ZipFile(io.BytesIO(app.get(data["zip"]).content)) as z:
             assert z.read("originals/product_photo.png") == photos[1]
             assert z.read("originals/customer_logo.png") == logo
             assert "rebranded_product.png" in z.namelist()
+            assert "approved_copy.json" in z.namelist()
+            assert z.read("originals/secondary_photo.png")==photos[0]
             chosen = json.loads(z.read("selected_photo.json"))
             assert chosen["selected_primary"]["id"] == "photo_2"
             assert chosen["rebranded_only_this_photo"] is True
             assert chosen["other_uploaded_photos_untouched"] is True
+            assert chosen["secondary_used_in_artwork"] is False
             with Image.open(io.BytesIO(z.read("rebranded_product.png"))) as image:
                 assert image.getpixel((12, 12)) == (180, 20, 180)
     assert photos[0] == png((250, 210, 30)), "Photo 1 bytes unchanged"
@@ -180,7 +162,6 @@ def test_manual_photo_choice_wins_and_does_not_pay_for_vision(
         lambda *a, **kw: pytest.fail("Manual selection must skip paid AI ranking"),
     )
     calls = selected_image_calls(monkeypatch)
-    assembled = stub_exact_ai_renderer(monkeypatch, tmp_path)
     with TestClient(main.app) as app:
         response = app.post("/api/generate", data={
             "payload": payload(), "generation_mode": "hybrid",
@@ -195,6 +176,8 @@ def test_manual_photo_choice_wins_and_does_not_pay_for_vision(
     assert response.json()["selected_photo"]["id"] == "photo_1"
     assert len(calls["rebrand"]) == 1
     assert calls["rebrand"][0]["pixel"] == (250, 210, 30)
+    assert len(calls["posters"]) == 2
+    assert all(c["pixel"]==(180,20,180) for c in calls["posters"])
 
 
 def test_rebrand_cache_is_bound_to_selected_photo_logo_brand_and_model(

@@ -7,14 +7,68 @@
   let latest = null;
   let apiReady = false;
   let isBusy = false;
+  let pollingPaidTask = false;
+  let pendingPaidTask='';
+  try{pendingPaidTask=window.sessionStorage.getItem('promoeditor-ai-task')||'';}catch{}
+  if(!/^[a-f0-9]{32}$/.test(pendingPaidTask))pendingPaidTask='';
+
+  function rememberPaidTask(id){
+    pendingPaidTask=id;
+    try{
+      if(id)window.sessionStorage.setItem('promoeditor-ai-task',id);
+      else window.sessionStorage.removeItem('promoeditor-ai-task');
+    }catch{}
+  }
+  function updatePendingTaskControls(){
+    if($('recover-paid-task'))$('recover-paid-task').hidden=!pendingPaidTask||isBusy;
+    if($('resume-paid-task'))$('resume-paid-task').disabled=isBusy;
+    if(pendingPaidTask){
+      for(const id of ['generate-btn','new-variation-btn','generate-ai-posters-btn',
+                       'generate-concepts-btn','refine-repair','refine-expand','refine-review-only'])
+        if($(id))$(id).disabled=true;
+    }
+  }
+
+  // Bound the entire status response, including reading its body. Only GET
+  // status is retried; never repeat a POST that could spend money.
+  async function readTaskStatus(endpoint){
+    const controller=new AbortController();
+    const timer=window.setTimeout(()=>controller.abort(),8000);
+    try{
+      const response=await fetch(endpoint,{cache:'no-store',signal:controller.signal});
+      const state=response.ok?await response.json():null;
+      return {response,state};
+    }finally{window.clearTimeout(timer);}
+  }
   let hasDemo = false;
   let isDemoLoading = false;
   let promptDirty = true;
   let aiConceptSet = null;
   let selectedAiConcept = null;
+  let posterVariation='';
+  try{posterVariation=window.sessionStorage.getItem('promoeditor-poster-variation')||'';}catch{}
+  if(!/^[a-f0-9]{32}$/.test(posterVariation))posterVariation='';
 
   // Optional new fields should not disable the entire UI if an older HTML
   // document briefly remains in the browser cache after deployment.
+  // A successful /static/*.css HTTP status alone does not guarantee
+  // the customer's browser actually applied the styles. Guard the paid
+  // workflow if the page looks like the reported unstyled screenshot.
+  window.addEventListener('load',()=>{
+    const grid=document.querySelector('.composer-grid');
+    const icon=document.querySelector('.dropzone .drop-icon svg');
+    const healthy=Boolean(grid&&icon
+      &&window.getComputedStyle(grid).display==='grid'
+      &&icon.getBoundingClientRect().width<=35
+      &&window.getComputedStyle(document.body).fontFamily
+        .toLowerCase().includes('sans-serif'));
+    if(!healthy){
+      const notice=$('stylesheet-error');
+      if(notice)notice.style.setProperty('display','block','important');
+      const generate=$('generate-btn');
+      if(generate)generate.disabled=true;
+    }
+  },{once:true});
   const get = id => $(id)?.value ?? '';
   const checked = id => Boolean($(id)?.checked);
   const set = (id,val) => { const field=$(id);if(field)field.value = val ?? ''; };
@@ -68,6 +122,12 @@
     banner.classList.toggle('is-done',state==='done');
     banner.querySelector('strong').textContent=title;
     banner.querySelector('small').textContent=message;
+    // The visible loading panel, not just the separate mode banner, must
+    // report the real server stage and never mask it with a generic spinner.
+    if(isBusy&&state==='working'){
+      $('loading').querySelector('strong').textContent=title;
+      $('loading').querySelector('small').textContent=message;
+    }
   }
   function showError(message,focusId){
     $('error-box').hidden=false;
@@ -93,10 +153,13 @@
       throw new Error('Сервер не вернул корректный номер AI-задачи.');
     const endpoint='/api/generate/status/'+taskId;
     let temporaryFailures=0;
+    let shownReadyJob='';
+    pollingPaidTask=true;
+    try{
     for(;;){
       await new Promise(resolve=>window.setTimeout(resolve,2400));
-      let response;
-      try{response=await fetch(endpoint,{cache:'no-store'});}
+      let response,state;
+      try{({response,state}=await readTaskStatus(endpoint));}
       catch{
         temporaryFailures++;
         if(temporaryFailures<7){
@@ -112,26 +175,42 @@
             'Пытаемся получить статус уже созданной задачи, не оплачивая повторный запрос.','working');
           continue;
         }
-        throw new Error((await readError(response))+' Номер задачи: '+taskId);
+        // No unbounded second read of a non-responding error body.
+        throw new Error('Не удалось получить статус (HTTP '+response.status+'). Номер задачи: '+taskId+'. Повторно не запускайте.');
       }
       temporaryFailures=0;
-      const state=await response.json();
+      if(!state||typeof state!=='object')throw new Error('Некорректный статус задачи.');
       if(state.status==='complete'){
-        try{window.sessionStorage.removeItem('promoeditor-ai-task');}catch{}
+        rememberPaidTask('');
         if(!state.result||!state.result.images)
           throw new Error('Задача завершена без файлов. Номер: '+taskId);
         return state.result;
       }
       if(state.status==='failed'){
-        try{window.sessionStorage.removeItem('promoeditor-ai-task');}catch{}
-        throw new Error((state.error||'Не удалось создать AI-макет.')+
+        rememberPaidTask('');
+        const error=new Error((state.error||'Не удалось создать AI-макет.')+
           ' (задача '+taskId+'). Повторный запрос не запускался.');
+        // Only allow the exact, private recovery archive route.
+        if(typeof state.recovery_zip==='string'&&
+           /^\/files\/[a-f0-9]{32}\/ai_failed_generation\.zip$/.test(state.recovery_zip))
+          error.recoveryZip=state.recovery_zip;
+        throw error;
       }
       if(state.status!=='running')
         throw new Error('Неизвестное состояние AI-задачи: '+taskId);
-      setStatus('AI-генерация выполняется',state.stage||
-        'OpenAI обрабатывает выбранный прицеп и два рекламных макета.','working');
+      if(state.result?.review_pending&&state.result?.images&&state.result?.zip&&
+          state.result.job_id!==shownReadyJob){
+        shownReadyJob=state.result.job_id;
+        latest=state.result;
+        presentGeneratedResult();
+      }
+      const age=Number.isFinite(state.stage_age_seconds)?
+        ' · На этом этапе: '+Math.floor(state.stage_age_seconds/60)+' мин '+(state.stage_age_seconds%60)+' с.':'';
+      setStatus(state.result?.review_pending?'Плакаты готовы — AI-сверка отдельно':'AI-генерация выполняется',
+        (state.stage||'OpenAI обрабатывает выбранный прицеп и два рекламных макета.')+age,
+        'working');
     }
+    }finally{pollingPaidTask=false;}
   }
   function invalidateResult(){
     if(isBusy||!latest)return;
@@ -177,7 +256,7 @@
       $(id).closest('label').classList.toggle('is-disabled',!apiReady);
     }
     $('hybrid-mode-hint').textContent=apiReady?
-      'AI выберет ракурс, ребрендирует прицеп, нарисует два рекламных шаблона БЕЗ текста. Программа вставит точные слова/цифры в SVG, а AI выберет финальные стили шрифта. 3 Images + 2 платных текстово-визуальных AI-запроса, при нескольких фото возможен третий для выбора ракурса.':
+      'OpenAI Images самостоятельно оформляет ДВА цельных рекламных плаката: композиция, фото, типографика, ТТХ, габариты, цена и контакты. Оригинал чертежа сохраняется отдельно. Без программных плашек. До 3 платных Images; возможно платное ранжирование фото. PNG/JPEG, без обрезки. Все цифры перепроверить.':
       'Недоступно: на сервере не подключён OpenAI. Выберите бесплатный вариант.';
     refreshGenerationMode();
   }
@@ -193,8 +272,9 @@
   function refreshGenerationMode(){
     const ai=isAiPro();
     const hybrid=isHybrid();
-    // Primary AI path: full art without copy -> verified editable SVG
-    // text layers -> typography-only AI vision finish, no AI copy edits.
+    const referencePro=get('style')==='reference_pro';
+    // Reference PRO is a full OpenAI art brief, NOT a deterministic
+    // reference renderer. Technical correctness of AI raster is not proven.
     if(hybrid)$('use-openai').checked=true;
     $('use-openai').disabled=hybrid || !apiReady;
     $('use-openai').closest('.ai-choice').classList.toggle('is-disabled',!apiReady);
@@ -202,12 +282,16 @@
     const paidInTemplate=!hybrid&&!ai&&checked('use-openai');
     simple.checked=hybrid||paidInTemplate;
     simple.disabled=!apiReady||ai;
+    if($('verify-posters'))$('verify-posters').disabled=!apiReady||!hybrid||isBusy;
+    if($('verify-posters-option'))$('verify-posters-option').hidden=!hybrid;
     simple.closest('.one-ai-choice').classList.toggle('is-disabled',!apiReady||ai);
     $('quick-ai-description').textContent=apiReady
       ?(ai
         ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
         :hybrid
-          ?'AI создаёт два постера без надписей, алгоритм вставляет ваши точные факты, затем AI гармонизирует шрифты. 3 платных Images + 2 текстово-визуальных AI-запроса, до 1 дополнительного при нескольких фото. PNG/JPEG/SVG.'
+          ?(referencePro
+            ?'Рекламный PRO: OpenAI самостоятельно разрабатывает два полноценных плаката с одним выбранным ребрендированным ракурсом. Эталон необязателен. Сразу 4:3 и 9:16, без добавления полей. До 3 платных Images; возможен AI-выбор фото. Дополнительные исходные ракурсы сохраняются отдельно. PNG/JPEG и ZIP без SVG.'
+            :'OpenAI целиком рисует 4:3 и самостоятельный 9:16 в одном выбранном ребрендированном ракурсе. Сразу 4:3 и 9:16, без добавления полей. До 3 платных Images; возможен AI-выбор фото. PNG/JPEG, локальные правки доступны после генерации.')
           :paidInTemplate
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
@@ -220,17 +304,22 @@
       $(id).hidden=true;
     $('generate-btn').textContent=ai
       ?'Собрать выбранную AI-концепцию →':'Создать промо →';
-    $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
+    $('generate-btn').disabled=isBusy||Boolean(pendingPaidTask)||(ai && selectedAiConcept===null);
     $('generate-concepts-btn').disabled=isBusy||!apiReady;
     $('generate-ai-posters-btn').disabled=isBusy||!apiReady;
-    if(!isBusy){
+    updatePendingTaskControls();
+    if(!isBusy&&pendingPaidTask){
+      setStatus('Статус оплаченной задачи неизвестен','Проверьте её статус бесплатно. Новая генерация заблокирована.');
+    }else if(!isBusy){
       if(ai){
         setStatus(apiReady?'AI PRO · OpenAI':'AI PRO недоступен',
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
-        setStatus(apiReady?'AI-постеры · 3 платных вызова OpenAI Images':'AI недоступен',
-          apiReady?'Цельные AI-дизайны с точными редактируемыми текстами; единый шрифт подбирает AI после вставки.':
+        setStatus(apiReady?'AI-постеры · до 3 платных вызовов OpenAI Images':'AI недоступен',
+          apiReady?(referencePro
+            ?'Рекламный PRO: AI самостоятельно создаёт оба плаката, даже без эталона. При наличии эталон подсказывает стиль. Все исходные ТТХ передаются модели; точность растра нужно проверить.'
+            :'AI создаёт ЦЕЛЫЙ рекламный плакат, без алгоритмического наложения текстовых блоков. Результат растровый.'):
             'Выберите бесплатный шаблон.');
       }else{
         setStatus(checked('use-openai')?'Шаблон с AI-фоном':'Без AI · бесплатно',
@@ -315,6 +404,7 @@
   }
 
   async function generateFullAiPosters(){
+    if(isBusy||pendingPaidTask)return;
     clearError();
     if(!apiReady){showError('Для генерации AI-постеров необходим OpenAI API.');return;}
     if(!get('model').trim()){showError('Укажите модель техники.','model');return;}
@@ -325,11 +415,12 @@
     if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
       showError('Сначала проанализируйте материалы и подтвердите выбор.');return;
     }
+    if(!window.confirm('Создать два платных AI-постера? До 3 вызовов OpenAI Images, возможен платный выбор фото. Результат PNG/JPEG, не SVG.'))return;
     invalidateFullAiPosters();busy(true);
     $('openai-posters-status').textContent=
-      'OpenAI создаёт два текстless AI-макета, программа вставляет точные данные и AI подбирает единый стиль шрифтов. 3 Images + 2 платных AI-анализа, возможен дополнительный выбор фото.';
+      'OpenAI создаёт два цельных растровых плаката с типографикой. До 3 Images, возможен платный выбор фото. Текст нужно сверить.';
     setStatus('Художественная генерация OpenAI',
-      'Готовим AI-оформление, точные SVG-тексты и AI-типографику для 4:3 и 9:16.','working');
+      'Готовим два полностью AI-созданных растровых изображения 4:3 и 9:16.','working');
     try{
       const form=new FormData();
       form.append('payload',JSON.stringify(formBrief()));
@@ -364,6 +455,7 @@
   }
 
   async function generateAiConcepts(){
+    if(isBusy||pendingPaidTask)return;
     clearError();
     if(!apiReady){showError('Для AI PRO требуется OPENAI_API_KEY. Переключитесь на быстрый шаблон.');return;}
     if(!get('model').trim()){showError('Укажите модель товара.','model');return;}
@@ -417,6 +509,9 @@
   function busy(on){
     isBusy=on;
     $('generate-btn').disabled=on;
+    if($('new-variation-btn'))$('new-variation-btn').disabled=on;
+    if($('verify-posters'))$('verify-posters').disabled=on||!apiReady||!isHybrid();
+    refreshRefinementControls();
     $('generate-concepts-btn').disabled=on || !apiReady;
     $('generate-ai-posters-btn').disabled=on || !apiReady;
     $('build-prompt-btn').disabled=on;
@@ -426,9 +521,14 @@
     $('approved-preset-btn').disabled=on;
     $('inspect-btn').disabled=on||!$('documents').files.length;
     $('loading').hidden=!on;
+    if(on){
+      $('loading').querySelector('strong').textContent='Подготавливаем материалы…';
+      $('loading').querySelector('small').textContent='Ожидаем текущий этап сервера.';
+    }
     const button=$('generate-btn');
     if(on)button.textContent='Создаём изображения…';
     else refreshGenerationMode();
+    updatePendingTaskControls();
   }
   function appendFiles(form,id){for(const file of $(id).files)form.append(id,file,file.name);}
   function download(path){
@@ -477,9 +577,58 @@
           $('generated-preview-link-'+fmt).href=path;
         }
       }
+      const technical=latest.technical_sheet;
+      const showTechnical=Boolean(technical?.png&&technical?.svg);
+      $('generated-preview-link-technical').hidden=!showTechnical;
+      $('technical-sheet-downloads').hidden=!showTechnical;
+      if(showTechnical){
+        $('generated-preview-technical').src=technical.png;
+        $('generated-preview-link-technical').href=technical.png;
+      }
+      $('download-technical-png').disabled=!showTechnical;
+      $('download-technical-svg').disabled=!showTechnical;
       $('generated-previews').hidden=false;
       $('download-panel').hidden=false;
       const rasterOnly=Boolean(latest.raster_only);
+      if($('new-variation-btn'))$('new-variation-btn').hidden=!rasterOnly||Boolean(latest.refinement);
+      if($('poster-review-status')){
+        const review=latest.poster_review;
+        $('poster-review-status').hidden=!rasterOnly;
+        if(!rasterOnly&&$('poster-review-details'))$('poster-review-details').hidden=true;
+        if(rasterOnly){
+          const messages={issues_found:'НЕ ДЛЯ ПУБЛИКАЦИИ: AI-сверка выявила расхождения или непроверенные данные: '+(review?.issues_count??'—')+'.',no_issues_detected:'AI-сверка не выявила расхождений в проверенных полях. Это не гарантия точности.',unavailable:'AI-сверка недоступна; изображения сохранены, требуется ручная сверка.',not_requested:'AI-сверка не запускалась; требуется ручная сверка.'};
+          $('poster-review-status').textContent=(latest.review_pending?
+            'Плакаты уже доступны. AI-сверка выполняется отдельно; в скачанном сейчас ZIP она отмечена как незавершённая. После окончания скачайте обновлённый ZIP.':
+            (messages[review?.status]||messages.not_requested)+(review?.reason?' '+review.reason:''))+
+            ' Подробности в poster_review.json. Не публикуйте без проверки.';
+          const details=$('poster-review-details');
+          if(details){
+            details.replaceChildren();
+            for(const fmt of ['4x3','9x16']){
+              const report=review?.formats?.[fmt];
+              if(!report)continue;
+              const items=[
+                ...(report.vehicle_check?.issues||[]),
+                ...(report.visuals||[]).filter(x=>x.status!=='no_issue_detected').map(x=>x.observation||x.id),
+                ...(report.fields||[]).filter(x=>x.status!=='match').map(x=>x.label+': ожидается «'+x.expected+'», обнаружено «'+(x.observed||'не подтверждено')+'»')
+              ];
+              for(const message of items.slice(0,8)){
+                const item=document.createElement('li');
+                item.textContent=fmt+' — '+message;
+                details.appendChild(item);
+              }
+              if(items.length>8){
+                const item=document.createElement('li');
+                item.textContent=fmt+' — остальные замечания в poster_review.json';
+                details.appendChild(item);
+              }
+            }
+            details.hidden=!details.childElementCount;
+          }
+        }
+      }
+      $('download-title').textContent=rasterOnly?
+        (latest.review_pending?'Плакаты доступны — сверка продолжается':'AI-черновики для проверки'):'Файлы готовы к скачиванию';
       for(const id of ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16'])
         $(id).disabled=false;
       for(const fmt of ['4x3','9x16']){
@@ -491,19 +640,237 @@
         ?'Скачать отдельные PNG или JPEG'
         :'Скачать отдельные PNG, JPEG или SVG';
       document.querySelector('.prompt-download-note').textContent=rasterOnly
-        ?'ZIP содержит два AI-постера, исходное выбранное фото и отдельно ребрендированный прицеп (rebranded_product.png). Остальные фото не изменяются. SVG нет.'
-        :'ZIP содержит оба AI-дизайна, точные редактируемые SVG, AI-зоны текста, стилевые параметры, ребрендированное и исходное фото.';
+        ?'ZIP содержит PNG/JPEG без обрезки, исходные AI-растры без полей, approved_copy.json, export_geometry.json, poster_review.json, оригинал чертежа при наличии и исходные фото. Текст растра не редактируется, SVG нет.'
+        :(showTechnical
+          ?'ZIP содержит оба плаката С ОРИГИНАЛЬНЫМ ЧЕРТЕЖОМ и ключевыми ТТХ, а также дополнительный редактируемый лист со всеми характеристиками.'
+          :'ZIP содержит оба AI-дизайна, точные редактируемые SVG, стилевые параметры и исходные материалы.');
       document.querySelector('.result-disclaimer').textContent=rasterOnly
-        ?'AI изменил фото выбранного прицепа, а не реальную технику. Проверьте точность нового логотипа, бренда, модели, цены, характеристик и геометрии перед публикацией; остальные фото не изменялись. Текст растра не редактируется.'
+        ?'AI создал весь художественный дизайн и текст. Габариты — текстом, оригинал чертежа сохранён отдельно. ОБЯЗАТЕЛЬНО сверьте растр с approved_copy.json и оригиналами. Не публикуйте без ручного утверждения.'
         :'Текст и числа вставлены точно из вашей формы; AI лишь подбирал шрифт, цвет и масштаб. Проверьте читаемость, фотографию и логотип. SVG можно исправить в CorelDRAW.';
-      setStatus('Готово',rasterOnly
-        ?('Созданы два постера 4:3 и 9:16; ребрендирован только прицеп на фото «'+(latest.selected_photo?.name||'выбранное главное')+'». Проверьте логотип и ТТХ.')
+      setStatus(rasterOnly?'Требуется проверка':'Готово',rasterOnly
+        ?('Сохранены два AI-черновика 4:3 и 9:16 без обрезки; ребрендирован только прицеп на фото «'+(latest.selected_photo?.name||'выбранное главное')+'». Проверьте все факты.')
         :(isHybrid()?'AI-макет с точным текстом и AI-типографикой':isAiPro()?'Выбранный AI-дизайн':'Шаблон')+': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
+      presentRefinement();
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
   }
 
-  async function generate(){
+  let refineImage=null,refineDrag=null,refineLoad=0;
+  const refineFormats=['4x3','9x16'];
+  function canRefine(){
+    return Boolean(latest?.raster_only&&/^[a-f0-9]{32}$/.test(latest?.job_id||'')&&latest.export_geometry);
+  }
+  function pendingBleeds(){
+    if(!canRefine())return [];
+    return refineFormats.filter(fmt=>{
+      const g=latest.export_geometry[fmt];
+      return g?.content_box&&g?.target_size&&
+        !['complete','not_needed'].includes(g?.outpaint?.status)&&
+        (g.content_box[0]!==0||g.content_box[1]!==0||
+         g.content_box[2]!==g.target_size[0]||g.content_box[3]!==g.target_size[1]);
+    });
+  }
+  function refreshRefinementControls(){
+    if($('refine-import'))$('refine-import').disabled=isBusy;
+    if($('refine-import-file'))$('refine-import-file').disabled=isBusy;
+    if(!$('refine-panel'))return;
+    const available=canRefine();
+    const needsBleed=available&&pendingBleeds().length>0;
+    $('refine-expand').hidden=!needsBleed;
+    $('refine-expand').disabled=isBusy||Boolean(pendingPaidTask)||!apiReady||!needsBleed;
+    $('refine-repair').disabled=isBusy||Boolean(pendingPaidTask)||!apiReady||!available||!refineImage;
+    $('refine-review-only').disabled=isBusy||Boolean(pendingPaidTask)||!apiReady||!available;
+    for(const id of ['refine-format','refine-issue','refine-region','refine-instruction','refine-review'])
+      $(id).disabled=isBusy;
+  }
+  function regionValue(){
+    const parts=get('refine-region').split(',').map(v=>v.trim());
+    if(parts.length!==4||parts.some(v=>!/^\d+$/.test(v)))return null;
+    const rect=parts.map(Number);
+    if(!refineImage||!rect.every(Number.isSafeInteger)||
+       !(0<=rect[0]&&rect[0]<rect[2]&&rect[2]<=refineImage.naturalWidth&&
+         0<=rect[1]&&rect[1]<rect[3]&&rect[3]<=refineImage.naturalHeight))return null;
+    return rect;
+  }
+  function drawRefineRegion(){
+    const canvas=$('refine-canvas');
+    if(!canvas||!refineImage)return;
+    const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(refineImage,0,0,canvas.width,canvas.height);
+    const rect=regionValue();
+    if(rect){
+      ctx.fillStyle='rgba(255,40,60,.15)';
+      ctx.fillRect(rect[0],rect[1],rect[2]-rect[0],rect[3]-rect[1]);
+      ctx.strokeStyle='#ed2648';ctx.lineWidth=Math.max(3,canvas.width/350);
+      ctx.strokeRect(rect[0],rect[1],rect[2]-rect[0],rect[3]-rect[1]);
+    }
+  }
+  function refillIssueOptions(){
+    const select=$('refine-issue');
+    if(!select)return;
+    select.replaceChildren(new Option('Выбрать область вручную',''));
+    const report=latest?.poster_review?.formats?.[get('refine-format')]||{};
+    const fields=report.fields||[];
+    const benefits=fields.filter(v=>v.id?.startsWith('benefit_'));
+    const add=(label,field)=>{
+      const option=new Option(label,'issue-'+select.options.length);
+      option.dataset.field=JSON.stringify(field);
+      select.appendChild(option);
+    };
+    if(benefits.some(v=>v.status!=='match')){
+      add('Восстановить весь блок преимуществ ('+benefits.length+')',{
+        region:null,instruction:'В выделенном блоке разместить все преимущества полностью, '
+          +'читабельно, каждое отдельным пунктом, без изменения других блоков: '
+          +benefits.map(v=>v.expected).join(' | ')+'. Без общих замен и выдуманных тезисов.'
+      });
+    }
+    fields.filter(v=>v.status!=='match').forEach(v=>{
+      add(v.label+': '+(v.observed||'не подтверждено'),v);
+    });
+    const visualLabels={price_integrity:'Цена / НДС',pictograms:'Пиктограммы',
+      claim_integrity:'Рекламные утверждения',logo:'Логотип',product:'Техника',
+      source_geometry:'Геометрия',drawing_consistency:'Чертёж и размеры',
+      readability:'Читаемость',unwanted_blueprint:'Лишний чертёж'};
+    for(const v of (report.visuals||[]).filter(v=>v.status!=='no_issue_detected')){
+      let instruction='Исправить только замечание в выделенной области: '+(v.observation||visualLabels[v.id]||v.id)+'. ';
+      if(v.id==='price_integrity'){
+        const price=fields.find(f=>f.id==='price')?.expected;
+        instruction+='Убрать лишние и искажённые дубли, сохранить единственный уже верный ценовой блок'
+          +(price?' «'+price+'»':'')+'. Не добавлять новую цену или повторную отметку НДС.';
+      }else if(v.id==='pictograms'){
+        instruction+='Заменить только ошибочные значки подходящими по смыслу; если это невозможно, убрать их, сохранив подписи, значения, фон и читаемость.';
+      }else{
+        instruction+='Не менять верные числа, надписи, логотип и соседние элементы.';
+      }
+      add((visualLabels[v.id]||'Визуальная ошибка')+': '+(v.observation||'проверьте вручную'),
+          {region:v.region,instruction});
+    }
+  }
+  function loadRefinePreview(){
+    const canvas=$('refine-canvas');
+    if(!canvas)return;
+    const stamp=++refineLoad;
+    refineImage=null;refineDrag=null;canvas.hidden=true;
+    $('refine-region').value='';$('refine-instruction').value='';
+    refillIssueOptions();refreshRefinementControls();
+    if(!canRefine())return;
+    const image=new Image();
+    image.onload=()=>{
+      if(stamp!==refineLoad)return;
+      refineImage=image;canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+      canvas.hidden=false;drawRefineRegion();refreshRefinementControls();
+    };
+    image.onerror=()=>{
+      if(stamp===refineLoad)$('refine-status').textContent='Не удалось открыть PNG. Импортируйте сохранённый ZIP.';
+    };
+    image.src=latest.images[get('refine-format')];
+  }
+  function presentRefinement(){
+    if(!$('refine-panel'))return;
+    const available=canRefine();
+    $('refine-panel').hidden=!available;
+    $('outpaint-status').hidden=!available;
+    if(!available){refineImage=null;return;}
+    const notes=refineFormats.map(fmt=>{
+      const g=latest.export_geometry[fmt]||{};
+      const state=g.outpaint?.status;
+      return fmt+': '+(state==='complete'?'AI-дорисовка выполнена; проверьте стыки':
+        state==='not_needed'?'точные пропорции, дорисовка не нужна':state==='failed'?'дорисовка не завершена; сохранены поля':
+        'исходный черновик; поля ещё не дорисованы');
+    });
+    $('outpaint-status').textContent=notes.join(' · ');
+    const rev=latest.refinement;
+    $('refine-status').textContent=rev?.status==='failed'?(rev.reason||'Операция не завершена; исходный ZIP сохранён.'):
+      rev?.action==='review'?'Изображения не изменены. Состояние новой сверки указано в отчёте выше.':
+      rev?.status==='complete'?'Новый ZIP создан. Изменены форматы: '+(rev.changed_formats||[]).join(', ')+'. Исходный ZIP не изменён.':
+      rev?.status==='no_change'?'Новые пиксели не получены. Исходный комплект сохранён.':
+      'Исходный ZIP не изменяется. Новая версия сохраняется отдельно.';
+    loadRefinePreview();
+  }
+  function pickRefineIssue(){
+    const selected=$('refine-issue').selectedOptions[0];
+    if(!selected?.dataset.field)return;
+    const field=JSON.parse(selected.dataset.field);
+    $('refine-instruction').value=field.instruction||('Строка «'+field.label+'»: должно быть ровно «'+field.expected+
+      '». Удалить ошибочные и дублирующиеся символы, не изменяя соседние строки и оформление.');
+    const box=field.region;
+    if(refineImage&&Array.isArray(box)&&box.length===4){
+      const w=refineImage.naturalWidth,h=refineImage.naturalHeight;
+      $('refine-region').value=[Math.floor(box[0]*w/1000),Math.floor(box[1]*h/1000),
+        Math.ceil(box[2]*w/1000),Math.ceil(box[3]*h/1000)].join(', ');
+    }else $('refine-region').value='';
+    drawRefineRegion();
+  }
+  function refinePoint(event){
+    const c=$('refine-canvas'),bounds=c.getBoundingClientRect();
+    return [Math.max(0,Math.min(c.width,Math.round((event.clientX-bounds.left)*c.width/bounds.width))),
+            Math.max(0,Math.min(c.height,Math.round((event.clientY-bounds.top)*c.height/bounds.height)))];
+  }
+  async function importExistingBundle(){
     if(isBusy)return;
+    clearError();
+    const file=$('refine-import-file')?.files[0];
+    if(!file){showError('Выберите ранее скачанный ZIP PromoEditor.');return;}
+    if(file.size>68*1024*1024){showError('ZIP превышает 68 МБ.');return;}
+    busy(true);
+    setStatus('Открываем сохранённый комплект','Это бесплатная операция без OpenAI.','working');
+    try{
+      const form=new FormData();form.append('archive',file,file.name);
+      const response=await fetch('/api/poster-archive/import',{method:'POST',body:form});
+      if(!response.ok)throw new Error(await readError(response));
+      latest=await response.json();
+      presentGeneratedResult();
+      $('refine-panel').open=true;
+    }catch(error){showError(error.message||'Не удалось открыть ZIP.');}
+    finally{busy(false);}
+  }
+  async function runRefinement(action){
+    if(isBusy||pendingPaidTask||!apiReady||!canRefine())return;
+    clearError();
+    const format=get('refine-format'),region=regionValue(),instruction=get('refine-instruction').trim();
+    const reviewOnly=action==='review';
+    const count=reviewOnly?0:action==='expand'?pendingBleeds().length:1;
+    if(!reviewOnly&&!count)return;
+    if(action==='repair'){
+      if(!region||region[2]-region[0]<6||region[3]-region[1]<6||
+         (region[2]-region[0])*(region[3]-region[1])>refineImage.naturalWidth*refineImage.naturalHeight/2){
+        showError('Выделите локальную область от 6 пикселей, не более половины плаката.');return;
+      }
+      if(!instruction||instruction.length>2500){showError('Укажите точную правку.');return;}
+    }
+    const verify=reviewOnly||checked('refine-review');
+    const confirmation=reviewOnly?
+      'Проверить оба существующих плаката без изменения изображений. 0 Images-запросов, до 1 платного Responses-запроса при достаточной памяти. Исходный ZIP не меняется; автоматических повторов нет. Продолжить?':
+      (action==='expand'?'Дорисовать только поля существующих плакатов. ':'Исправить только выбранную область '+format+'. ')+
+      'До '+count+' платных Images-запросов.'+(verify?' При изменении изображений — ещё 1 платный Responses-запрос.':' Повторная AI-сверка отключена.')+
+      ' Центральная защищённая область или остальные пиксели сохраняются. Исходный ZIP не изменяется. Автоповторов нет. Продолжить?';
+    if(!window.confirm(confirmation))return;
+    const form=new FormData();
+    form.append('generation_mode','refine_posters');
+    form.append('source_job',latest.job_id);
+    form.append('refine_action',action);
+    form.append('refine_format',format);
+    form.append('refine_region',JSON.stringify(region));
+    form.append('refine_instruction',instruction);
+    form.append('refine_attempt',Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join(''));
+    form.append('verify_posters',String(verify));
+    form.append('model',get('image-model'));form.append('quality',get('image-quality'));
+    busy(true);
+    setStatus('Дорабатываем оплаченный комплект','Не создаём новые базовые плакаты.','working');
+    try{
+      const response=await fetch('/api/generate/start',{method:'POST',body:form});
+      if(!response.ok)throw new Error(await readError(response));
+      const result=await response.json();
+      rememberPaidTask(result.task_id);
+      latest=await pollAiGeneration(result.task_id);
+      presentGeneratedResult();
+      $('refine-panel').open=true;
+    }catch(error){showError(error.message||'Не удалось доработать комплект. Исходный ZIP сохранён.');}
+    finally{busy(false);}
+  }
+
+  async function generate(newVariation=false){
+    if(isBusy||pendingPaidTask)return;
     clearError();
     if(!get('model').trim()){
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
@@ -529,13 +896,22 @@
     }
     const paidRendering=isHybrid()||checked('use-openai');
     if(isHybrid()&&!window.confirm(
-      'OpenAI отредактирует только выбранное фото прицепа и создаст два цельных художественных макета без надписей. Алгоритм вставит ТОЧНЫЙ текст, цену, телефоны и характеристики в SVG. После вставки AI проанализирует оба макета и подберёт единый шрифт, цвета и масштаб, но НЕ изменит слова. Цена: 3 платных вызова Images + 2 платных текстово-визуальных AI-запроса, при нескольких фото возможен ещё 1 платный AI-запрос для выбора ракурса. Тексты SVG редактируются, фото и логотип проверьте. Продолжить?'
+      (newVariation?'Создать НОВЫЙ художественный вариант с новыми платными вызовами? ':'')+
+      'OpenAI создаст два цельных плаката с надписями и габаритами. Только выбранный ребрендированный ракурс попадёт в Images; остальные фото и чертёж сохраняются отдельно. До 3 платных вызовов OpenAI Images: ребрендинг и два формата, возможен платный выбор главного фото. '+
+      'Плакаты сразу генерируются в точных пропорциях 4:3 и 9:16; без автоматической дорисовки и добавления полей. '+
+      (checked('verify-posters')?'Дополнительно: 1 платный Responses-запрос для сверки обоих плакатов, осей, всех маркировок, логотипа и исходной геометрии. ':'AI-сверка отключена. ')+
+      'Повтор того же варианта использует сохранённый кэш, пока он не истёк. Результат PNG/JPEG, НЕ SVG, без обрезки. Данные и логотип требуют ручного утверждения. Продолжить?'
     ))return;
+    if(isHybrid()&&newVariation){
+      posterVariation=Array.from(crypto.getRandomValues(new Uint8Array(16)),
+        n=>n.toString(16).padStart(2,'0')).join('');
+      try{window.sessionStorage.setItem('promoeditor-poster-variation',posterVariation);}catch{}
+    }
     invalidateResult();busy(true);
     setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
     const loadingMessage=$('loading').querySelector('small');
     loadingMessage.textContent=paidRendering
-      ?'AI рисует два рекламных макета без текста, программа вставляет ваши точные данные, а AI подбирает стиль шрифта. Оригиналы и SVG сохранятся в ZIP.'
+      ?'OpenAI рисует оба готовых рекламных плаката с текстом. Оригиналы, PNG/JPEG и данные для сверки сохранятся в ZIP.'
       :'Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
     const elapsed=$('generate-elapsed');
     const started=Date.now();
@@ -549,7 +925,7 @@
     const slowWarning=window.setTimeout(()=>{
       // A stalled HTTP request may still be rendering on the server. Avoid
       // pretending it was cancelled or encouraging costly duplicate jobs.
-      if(!isBusy)return;
+      if(!isBusy||pollingPaidTask)return;
       loadingMessage.textContent=paidRendering
         ?'OpenAI всё ещё выполняет запросы. Это может занимать несколько минут. Не запускайте генерацию повторно.'
         :'Создание макета затянулось. Не нажимайте повторно; проверьте нагрузку тестовой службы на VPS.';
@@ -570,7 +946,7 @@
       if(isHybrid()&&window.PromoAssets?.hasFiles()&&!selected?.selected_assets?.primary_photo)
         throw new Error('Не найдено главное фото товара. Откройте проверку материалов и назначьте главный ракурс.');
       setStatus(paidRendering?'Создаём AI-постеры':'Создаём оба макета',
-        isHybrid()?'AI-дизайн 4:3 и 9:16, точные редактируемые тексты, AI-подбор единого шрифта.':
+        isHybrid()?'OpenAI полностью создаёт художественную композицию и типографику 4:3 и 9:16. Это платные растровые изображения, проверьте значения.':
           paidRendering?'Создаём макеты с OpenAI. Это платные вызовы.':
           'Горизонтальный 4:3 и вертикальный 9:16, включая редактируемые SVG.','working');
       const prompt=isHybrid()?'':
@@ -582,13 +958,15 @@
       form.append('use_openai',String(isHybrid()||checked('use-openai')));
       form.append('use_demo',String(checked('use-demo')));
       form.append('generation_mode',isAiPro()?'ai_pro':isHybrid()?'hybrid':'template');
+      if(isHybrid()&&posterVariation)form.append('poster_variation',posterVariation);
+      if(isHybrid()&&checked('verify-posters'))form.append('verify_posters','true');
       if(isAiPro()){
         form.append('concept_set_id',aiConceptSet.concept_set_id);
         form.append('concept_index',String(selectedAiConcept));
       }
       form.append('model',get('image-model'));
       form.append('quality',get('image-quality'));
-      // A paid 3-Images + 2-vision workflow must NEVER depend on a single
+      // A paid 3-Images workflow must NEVER depend on a single
       // long HTTP request. The server accepts one private task immediately,
       // and this page polls its status without repeating any paid API call.
       const endpoint=isHybrid()?'/api/generate/start':'/api/generate';
@@ -596,18 +974,28 @@
       if(!response.ok)throw new Error(await readError(response));
       const result=await response.json();
       if(isHybrid()){
-        try{window.sessionStorage.setItem('promoeditor-ai-task',result.task_id);}catch{}
+        rememberPaidTask(result.task_id);
         latest=await pollAiGeneration(result.task_id);
       }else latest=result;
       presentGeneratedResult();
     }catch(error){
-      setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
+      setStatus(latest?.review_pending?'Плакаты сохранены, статус сверки неизвестен':'Не удалось создать файлы',
+        'Проверьте статус задания. Не повторяйте платную генерацию автоматически.');
       if(/файл|фото|ракурс|материал/i.test(error.message||'')){
         $('pro-workspace').open=true;
         $('asset-review-details').open=true;
         $('asset-files-details').open=true;
       }
       showError(error.message||'Не удалось завершить генерацию.');
+      if(error.recoveryZip){
+        const note=document.createElement('p');
+        const link=document.createElement('a');
+        link.href=error.recoveryZip;
+        link.download='ai_failed_generation.zip';
+        link.textContent='Скачать сохранённые материалы неудачной генерации (ZIP)';
+        note.appendChild(link);
+        $('error-box').appendChild(note);
+      }
     }finally{
       window.clearTimeout(slowWarning);
       window.clearInterval(elapsedClock);
@@ -696,7 +1084,7 @@
       $('mode-ai-pro').checked=false;
       $('advanced-settings').open=false;
       $('brief-data-hint').hidden=false;
-      $('brief-data-hint').textContent='Эталон загружен: 10 ТТХ, 7 размеров, 6 527 000 ₽ и телефоны. Остальные поля — в «Дополнительно».';
+      $('brief-data-hint').textContent='Рекламный PRO: 10 ТТХ, 7 размеров текстом, преимущества, полный расчёт выгоды, цена 6 527 000 ₽ и контакты — на обоих плакатах. Оригинал чертежа сохраняется отдельно.';
       hasDemo=false;
       latest=null;$('download-panel').hidden=true;
       markPromptStale();
@@ -754,8 +1142,9 @@
   }
   async function init(){
     try {
-      const response=await fetch('/api/config');if(!response.ok)throw new Error('API недоступен');
-      const config=await response.json();apiReady=Boolean(config.openai_ready);
+      const {response,state:config}=await readTaskStatus('/api/config');
+      if(!response.ok||!config)throw new Error('API недоступен');
+      apiReady=Boolean(config.openai_ready);
       window.PromoAssets?.setAiReady(apiReady);
       $('logout-form').hidden=!config.auth_enabled;
       $('logout-csrf').value=config.logout_csrf_token||'';
@@ -766,23 +1155,27 @@
     }
     if(!apiReady && isHybrid())$('mode-template').checked=true;
     updateAi();refreshStyle();updateFileLabels();updateRoi();
-    // Recover already paid work after a refresh without another Images call.
-    let savedTask=null;
-    try{savedTask=window.sessionStorage.getItem('promoeditor-ai-task');}catch{}
-    if(apiReady&&isHybrid()&&savedTask&&/^[a-f0-9]{32}$/.test(savedTask)){
-      clearError();
-      busy(true);
-      setStatus('Восстанавливаем AI-генерацию',
-        'Получаем статус ранее запущенного платного задания. Новые вызовы не создаём.','working');
-      try{
-        latest=await pollAiGeneration(savedTask);
-        presentGeneratedResult();
-      }catch(error){
-        showError(error.message||'Не удалось восстановить статус AI-задачи.');
-      }finally{
-        busy(false);
+    // A refresh or the free recovery button resumes the SAME task.
+    if(pendingPaidTask)await resumePaidTask();
+  }
+  async function resumePaidTask(){
+    if(isBusy||!pendingPaidTask)return;
+    clearError();
+    busy(true);
+    setStatus('Восстанавливаем AI-генерацию',
+      'Получаем статус ранее запущенного платного задания. Новые вызовы не создаём.','working');
+    try{
+      latest=await pollAiGeneration(pendingPaidTask);
+      presentGeneratedResult();
+    }catch(error){
+      showError(error.message||'Не удалось восстановить статус AI-задачи.');
+      if(error.recoveryZip){
+        const link=document.createElement('a');
+        link.href=error.recoveryZip;link.download='ai_failed_generation.zip';
+        link.textContent=' Скачать сохранённые материалы (ZIP)';
+        $('error-box').appendChild(link);
       }
-    }
+    }finally{busy(false);}
   }
 
   for(const id of fileIds){
@@ -930,7 +1323,29 @@
       refreshGenerationMode();invalidateResult();clearError();
     });
   }
-  $('generate-btn').addEventListener('click',generate);
+  $('generate-btn').addEventListener('click',()=>generate(false));
+  $('resume-paid-task')?.addEventListener('click',resumePaidTask);
+  $('new-variation-btn')?.addEventListener('click',()=>generate(true));
+  $('refine-import')?.addEventListener('click',importExistingBundle);
+  $('refine-expand')?.addEventListener('click',()=>runRefinement('expand'));
+  $('refine-review-only')?.addEventListener('click',()=>runRefinement('review'));
+  $('refine-repair')?.addEventListener('click',()=>runRefinement('repair'));
+  $('refine-format')?.addEventListener('change',loadRefinePreview);
+  $('refine-issue')?.addEventListener('change',pickRefineIssue);
+  $('refine-region')?.addEventListener('input',drawRefineRegion);
+  $('refine-canvas')?.addEventListener('pointerdown',event=>{
+    if(isBusy||!refineImage)return;
+    refineDrag=refinePoint(event);event.currentTarget.setPointerCapture(event.pointerId);
+    $('refine-region').value='';drawRefineRegion();
+  });
+  $('refine-canvas')?.addEventListener('pointermove',event=>{
+    if(!refineDrag||isBusy)return;
+    const [x,y]=refinePoint(event),[sx,sy]=refineDrag;
+    $('refine-region').value=[Math.min(x,sx),Math.min(y,sy),Math.max(x,sx),Math.max(y,sy)].join(', ');
+    drawRefineRegion();
+  });
+  $('refine-canvas')?.addEventListener('pointerup',()=>{refineDrag=null;});
+  $('refine-canvas')?.addEventListener('pointercancel',()=>{refineDrag=null;});
   $('inspect-btn').addEventListener('click',inspect);
   $('apply-extracted').addEventListener('click',()=>{
     const values=$('extract-result').value.trim();
@@ -946,5 +1361,7 @@
   $('download-jpeg-9x16').addEventListener('click',()=>download(latest?.jpeg?.['9x16']));
   $('download-svg-4x3').addEventListener('click',()=>download(latest?.corel?.['4x3']));
   $('download-svg-9x16').addEventListener('click',()=>download(latest?.corel?.['9x16']));
+  $('download-technical-png').addEventListener('click',()=>download(latest?.technical_sheet?.png));
+  $('download-technical-svg').addEventListener('click',()=>download(latest?.technical_sheet?.svg));
   init();
 })();

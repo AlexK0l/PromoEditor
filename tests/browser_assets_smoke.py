@@ -46,7 +46,9 @@ def main():
         assert page.locator('#style').input_value()=='reference_pro'
         page.locator('#advanced-settings > summary').click()
         assert page.locator('#advanced-settings').evaluate('(el)=>el.open')
-        page.locator('#data-facts > summary').click()
+        assert page.locator('#data-facts').evaluate('(el)=>el.open')
+        assert page.locator('#specs').is_visible()
+        assert page.locator('#dimensions').is_visible()
         page.locator('#proof-points').fill('Старый факт из другого проекта')
         page.evaluate("document.getElementById('topbar-menu').open=true")
         page.evaluate("document.getElementById('reset-btn').click()")

@@ -13,7 +13,8 @@ def test_edit_workspace_is_collapsed_and_does_not_show_generated_previews():
     assert 'id="edit-workspace" class="edit-workspace" hidden' in html
     assert 'id="edit-canvas"' in html
     assert 'src="/static/editor.js?v=' in html
-    assert 'href="/static/editor.css?v=' in html
+    assert '<style id="promoeditor-embedded-styles">' in html
+    assert '#edit-body{border-top:1px solid var(--line)' in html
     assert 'id="preview-4x3"' not in html
     assert 'id="preview-9x16"' not in html
 

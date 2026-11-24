@@ -21,7 +21,7 @@ PROCESS_ID = secrets.token_hex(16)
 STATUS_NAME = "status.json"
 FORM_NAME = "form.json"
 ROOT_NAME = ".ai_generation_tasks"
-TTL = 7200
+TTL = max(300, int(os.getenv('PROMO_JOB_TTL_SECONDS', '7200')))
 MAX_TOTAL_BYTES = 68 * 1024 * 1024
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
@@ -52,14 +52,16 @@ def new_task(storage: Path) -> tuple[str, Path]:
 
 def set_status(folder: Path, status: str, *, stage: str = "",
                result: dict | None = None, error: str = "",
-               http_status: int = 200) -> None:
+               http_status: int = 200,
+               recovery_zip: str | None = None) -> None:
     if status not in ("running", "complete", "failed"):
         raise ValueError("Неизвестное состояние задачи.")
     record = {
         "status": status, "stage": str(stage)[:170],
-        "result": result if status == "complete" else None,
+        "result": result if status in ("running","complete") else None,
         "error": str(error)[:500] if status == "failed" else "",
         "http_status": int(http_status),
+        "recovery_zip": (recovery_zip if status == "failed" else None),
         "instance": PROCESS_ID, "updated_at": time.time(),
     }
     destination = folder / STATUS_NAME
@@ -90,6 +92,13 @@ def read_status(storage: Path, task_id: str) -> dict | None:
         # it on restart. This distinguishes a failed AI call from memory
         # pressure during SVG export, although it cannot prove OOM by itself.
         last = str(content.get("stage") or "этап не определён")[:150]
+        ready=content.get("result")
+        if isinstance(ready,dict) and ready.get("zip"):
+            # A complete archive was already published. Only the optional
+            # review was interrupted, so preserve the paid result.
+            return {"status":"complete","stage":"Плакаты сохранены; AI-сверка прервана перезапуском",
+                    "http_status":200,"result":{**ready,"review_pending":False},
+                    "error":"","recovery_zip":None,"stage_age_seconds":0}
         return {
             "status":"failed", "stage":last,
             "error":(
@@ -100,10 +109,12 @@ def read_status(storage: Path, task_id: str) -> dict | None:
                 "Платный запрос автоматически НЕ повторялся."
             ),
             "http_status":503, "result":None,
+            "recovery_zip":None,
         }
     return {
-        key:content.get(key) for key in
-        ("status","stage","error","http_status","result")
+        **{key:content.get(key) for key in
+           ("status","stage","error","http_status","result","recovery_zip")},
+        "stage_age_seconds":max(0,int(time.time()-float(content.get("updated_at") or time.time()))),
     }
 
 

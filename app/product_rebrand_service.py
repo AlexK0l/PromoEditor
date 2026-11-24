@@ -12,6 +12,7 @@ import json
 from PIL import Image
 
 from .ai_poster_service import _input_png
+from .ai_transport import edit_paid_image_once
 from .openai_service import (
     IMAGE_MODELS, IMAGE_QUALITIES, _cached_visual, _default_visual_cache,
     _save_visual, _visual_lock, as_image, client,
@@ -134,7 +135,7 @@ def rebrand_selected_photo(brief: dict, product_photo: bytes, *,
             "1536x1024" if w > h * 1.08 else
             "1024x1536" if h > w * 1.08 else "1024x1024"
         )
-        reply = client().images.edit(
+        reply = edit_paid_image_once(client(), "rebrand",
             model=model, image=inputs, prompt=prompt, size=request_size,
             quality=quality, output_format="png",
         )

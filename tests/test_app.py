@@ -168,7 +168,8 @@ def test_editor_without_layout_previews_keeps_downloads():
     assert 'id="preview-9x16"' not in html
     assert 'design-switcher' not in html
     assert 'src="/static/app.js?v=' in html
-    assert 'href="/static/app.css?v=' in html
+    assert '<style id="promoeditor-embedded-styles">' in html
+    assert '.composer-grid{display:grid;' in html
     js=client.get('/static/app.js').text
     assert "$('download-panel').hidden=false;" in js
     assert "$('download-panel').hidden=true;" in js

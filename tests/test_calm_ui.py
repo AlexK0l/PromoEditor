@@ -67,7 +67,7 @@ def test_essential_first_view_is_one_form_one_switch_one_button():
     assert "pro-workspace" in parser.parents["mode-ai-pro"]
 
 
-def test_technical_controls_remain_under_single_closed_workspace():
+def test_technical_specs_visible_but_optional_expert_controls_remain_collapsed():
     _, parser = parse_page()
     mapping = {
         "mode-ai-pro": "expert-modes",
@@ -78,16 +78,17 @@ def test_technical_controls_remain_under_single_closed_workspace():
         "design-actions": "creative-notes",
         "promo-prompt": "expert-prompt",
         "asset-approve": "asset-review-details",
-        "specs": "advanced-settings",
-        "dimensions": "advanced-settings",
         "show-roi": "advanced-settings",
     }
     for ident, detail in mapping.items():
         assert detail in parser.parents.get(ident, ()), (ident, parser.parents.get(ident))
         assert detail in parser.closed_by_default, detail
         assert "pro-workspace" in parser.parents[ident]
+    for ident in ("specs", "dimensions", "claims", "benefits"):
+        assert parser.parents[ident] == ("data-facts",)
+        assert "data-facts" not in parser.closed_by_default
+        assert "pro-workspace" not in parser.parents[ident]
     for ident, subgroup in {
-        "specs": "data-facts", "dimensions": "data-facts",
         "show-roi": "data-roi", "image-quality": "data-design",
     }.items():
         assert subgroup in parser.parents[ident]
@@ -97,11 +98,12 @@ def test_technical_controls_remain_under_single_closed_workspace():
     assert "editing-suite" in parser.closed_by_default
     # Action is the primary experience; fine settings come afterwards.
     html = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert html.index('id="data-facts"') < html.index('id="generate-btn"')
     assert html.index('id="generate-btn"') < html.index('id="advanced-settings"')
 
 def test_one_click_free_asset_selection_precedes_any_potentially_paid_generation():
     script = (ROOT / "app.js").read_text(encoding="utf-8")
-    begin = script.index("  async function generate(){")
+    begin = script.index("  async function generate(")
     body = script[begin:script.index("  async function inspect(){", begin)]
     assert "window.PromoAssets.analyze(formBrief(),{freeOnly:true})" in body
     assert "window.PromoAssets.isReady()" in body
@@ -110,7 +112,7 @@ def test_one_click_free_asset_selection_precedes_any_potentially_paid_generation
     assert "pollAiGeneration(result.task_id)" in body
     assert "isHybrid()" in body
     assert "const selected=window.PromoAssets?.getReport?.()" in body
-    assert "if(isBusy)return;" in body
+    assert "if(isBusy||pendingPaidTask)return;" in body
 
 
 def test_design_css_supports_keyboard_focus_small_screen_and_dark_theme():
@@ -152,7 +154,12 @@ def test_paid_progress_is_explicit_and_cancelling_confirmation_sends_nothing():
     js = (ROOT / "app.js").read_text(encoding="utf-8")
     assert "generate-elapsed" in parser.parents
     assert "if(isHybrid()&&!window.confirm(" in js
-    assert "3 платных вызова OpenAI Images" in js
+    assert "До 3 платных вызовов OpenAI Images" in js
+    assert "сразу генерируются в точных пропорциях 4:3 и 9:16" in js
+    assert "до 2 платных Images-запросов для дорисовки полей" not in js
+    assert 'id="expand-posters"' not in html
+    assert "form.append('expand_posters'" not in js
+    assert 'id="refine-expand"' in html
     assert "window.setInterval(updateElapsed,1000)" in js
     assert "window.clearInterval(elapsedClock)" in js
     assert "elapsed.hidden=true" in js
@@ -181,3 +188,40 @@ def test_production_screen_hides_all_retired_demo_and_experimental_controls():
     assert '<div class="preset-shortcut">' in html
     assert "Заполнить пример ZubrTrail 500" in html
     assert "Проверяем режим" in html
+
+
+def test_native_poster_confirmation_and_explicit_new_variant():
+    html, _ = parse_page()
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    confirm = js.split("if(isHybrid()&&!window.confirm(",1)[1].split("))return;",1)[0]
+    assert "PNG/JPEG, НЕ SVG" in confirm
+    assert "Алгоритм вставит" not in confirm
+    assert "2 платных текстово-визуальных" not in confirm
+    assert 'id="new-variation-btn"' in html
+    assert "form.append('poster_variation',posterVariation)" in js
+    assert "new-variation-btn')?.addEventListener('click',()=>generate(true))" in js
+
+
+def test_reference_is_optional_in_every_ui_mode():
+    html, _ = parse_page()
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    validate = js.split("function validateFiles(){",1)[1].split("function busy(",1)[0]
+    assert "Для стиля «Рекламный PRO» загрузите" not in validate
+    assert "Рекламный эталон · необязательно" in html
+    assert "для PRO обязателен" not in html
+    assert "обязательно загрузите хотя бы один" not in html
+
+
+def test_poster_visual_review_is_explicitly_disclosed_and_opt_out_available():
+    html, _ = parse_page()
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert 'id="verify-posters" type="checkbox">' in html
+    assert 'id="verify-posters" type="checkbox" checked' not in html
+    assert 'id="resume-paid-task"' in html
+    assert "new AbortController()" in js
+    assert "controller.abort(),8000" in js
+    assert "if(isBusy||pendingPaidTask)return;" in js
+    assert "1 платный Responses-запрос" in js
+    assert "checked('verify-posters'))form.append('verify_posters','true')" in js
+    assert "poster_review.json" in js
+    assert "AI-черновики для проверки" in js

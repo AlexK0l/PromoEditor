@@ -60,9 +60,11 @@ def main():
         page.locator("#pro-workspace > summary").click()
         page.locator("#advanced-settings > summary").click()
         page.locator("#data-contacts > summary").click()
-        page.locator("#data-facts > summary").click()
+        assert page.locator("#data-facts").evaluate("(el)=>el.open")
+        assert page.locator("#specs").is_visible()
+        assert page.locator("#dimensions").is_visible()
         assert page.locator("#price").input_value() == "6527000"
-        page.locator("#advanced-settings").screenshot(
+        page.locator("#data-facts").screenshot(
             path=OUTPUT / "03-zubrtrail-data-fields.png", animations="disabled")
 
         mobile = browser.new_context(
