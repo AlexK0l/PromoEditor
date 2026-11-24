@@ -435,6 +435,13 @@
   }
 
   function validateFiles(){
+    if(isHybrid() && get('style')==='reference_pro' &&
+       !$('reference_example').files.length &&
+       !$('references').files.length){
+      return 'Для стиля «Рекламный PRO» загрузите рекламный эталон. '+
+        'Изображения из переписки не попадают на VPS автоматически. '+
+        'Желательно добавить оба примера: 4:3 и 9:16.';
+    }
     const all=fileIds.flatMap(id=>Array.from($(id).files));
     if(all.length>16)return 'Слишком много вложений: не более 16 файлов за один комплект.';
     // Можно загрузить несколько референсов: только два будут выбраны.
