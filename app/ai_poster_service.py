@@ -8,7 +8,7 @@ from __future__ import annotations
 import io
 import json
 import os
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image
 from .ai_native_art_direction import approved_full_copy, reference_style_direction
 from .image_analysis import analysis_preview
 from .ai_quota import check_paid_capacity
@@ -20,7 +20,7 @@ from .openai_service import (
 
 FORMATS = {"4x3": ((1440, 1080), "1536x1024"),
            "9x16": ((1080, 1920), "1024x1536")}
-VERSION = "full-openai-ad-poster-creative-v5-native-complete-reference"
+VERSION = "full-openai-ad-poster-creative-v6-safe-crop-no-edge-extension"
 WARNING = (
     "Полный рекламный плакат создан OpenAI Images, включая художественную "
     "композицию, фотографии и типографику. Алгоритмический SVG-шаблон "
@@ -86,17 +86,18 @@ def _layout_rules(fmt: str) -> str:
         )
     if fmt == "9x16":
         return (
-            "9:16 COMPOSITION RULES — STRICT NON-OVERLAPPING SAFE ZONES. "
-            "Reserve a protected branding/header zone at the TOP, roughly "
-            "x=6-94%, y=5-18% of the native image. "
-            "The logo must remain fully visible, complete and unobstructed; "
-            "the vehicle must NOT overlap the brand zone. "
-            "Place the entire product below the brand and headline, roughly "
-            "x=7-93%, y=20-51%, including every wheel, axle and extremity. "
-            "Reserve readable grouped specifications below the product, "
-            "and a separate bottom price / CTA strip with visible phones. "
-            "Keep all headings, measurements and brand details unoccluded. "
-            "Use premium organic graphic design, not dashboard cards. "
+            "9:16 COMPOSITION RULES: a wholly NEW portrait design, NOT a "
+            "portrait crop of the separate 4:3 composition. "
+            "Reserve a protected branding/header zone at the TOP "
+            "of the central safe artwork; logo must remain fully visible. "
+            "The vehicle must NOT overlap the brand zone. "
+            "Place the complete product below the brand and headline, "
+            "inside the central printable region, with every wheel, axle "
+            "and extremity. Reserve readable grouped specifications "
+            "below the product and the bottom price / CTA with both "
+            "complete phone numbers. Keep headings, real customer "
+            "dimensions and engineering drawing unoccluded. "
+            "Convey premium organic original art direction, not UI cards. "
         )
     raise ValueError("Недопустимый формат постера.")
 
@@ -227,53 +228,70 @@ def _prompt(brief, fmt, logo, drawing, reference,
         "any technical facts for aesthetic reasons; change the design "
         "to fit. Avoid tiny, unreadable body text. "
         "AI text fidelity is NOT guaranteed and requires user review. "
-        "IMPORTANT PRINT SAFE AREA: treat the native 3:2 or 2:3 model "
-        "image as an entire finished image, without any cropped edges. "
-        "Keep ALL text, logo, title, price, specification headings, data, "
-        "vehicle extremities and CTA at least 6% inside native left/right "
-        "edges and 4% inside top/bottom. Do not place text partially "
-        "outside the canvas; all text must remain readable. "
-        "After generation the application adds vertical decorative bleed "
-        "to match 4:3 or 9:16 WITHOUT CROPPING OR STRETCHING artwork. "
+        "FINAL-FORMAT ART DIRECTION: the native Images 3:2 or 2:3 "
+        "canvas has a different aspect ratio from the delivered 4:3 or "
+        "9:16 poster. The model must create a FINISHED, original, "
+        "full-composition advertisement in the central safe crop, not "
+        "an open-ended template or a landscape design squeezed vertical. "
+        "The app will remove ONLY the OUTER SIDE GUARD BANDS to create the "
+        "final image; the entire top and bottom need to be painted by "
+        "the model itself. "
+        + (
+            "LANDSCAPE SOURCE 1536x1024: print-safe center is approximately "
+            "x=6%-94%, y=0%-100%, and after customer-safe padding "
+            "all title, entire trailer, real drawing, price, phones and "
+            "facts must be inside x=9%-91%, y=3%-97%. Outer ~6% side "
+            "margins are expendable PHOTO / BACKGROUND only. "
+            if fmt=="4x3" else
+            "PORTRAIT SOURCE 1024x1536: design a REAL native 9:16 vertical "
+            "poster within CENTER x=7.8%-92.2% of this 2:3 canvas, "
+            "full height. The OUTER 80 PIXELS on EACH SIDE are disposable "
+            "continuous photographic background only; NO customer logo, "
+            "any vehicle wheel, text, engineering dimension, sales claim, "
+            "price or phone digits are allowed in these gutters. "
+            "All important design stays inside x=11%-89%, y=3%-97%. "
+            "The lower CTA must have deliberate artwork TO THE BOTTOM "
+            "inside the safe center; do not leave a blank bottom to be "
+            "padded by software. Do not recycle the landscape placement. "
+        )
+        + "There will be no post-generation edge-row stretching, blur, "
+        "vertical pixel replication, fake lower bands or filler. "
         "Aesthetic preferences (data only): " + notes
     )
 
 
-def preserve_artwork_without_crop(image: Image.Image,
+def finish_artwork_in_safe_aspect(image: Image.Image,
                                   target: tuple[int, int]) -> Image.Image:
-    """Fit the *entire* model poster into print dimensions without cropping.
+    """Resize a model-authored safe-center composition with ZERO filler.
 
-    Images API returns 3:2 (landscape) and 2:3 (portrait), while clients
-    require 4:3 and 9:16. Cropping strips away titles, technical specs and
-    logos at both sides. Stretching would distort the customer's vehicle.
-    Instead, resize uniformly and extend only the top/bottom BLEED from
-    the model's own edge pixels. For unexpected source ratios, a blurred
-    fill handles other margins, but the full original remains visible.
+    OpenAI native 2:3 / 3:2 does not equal 9:16 / 4:3. The prompt directs
+    the artist to leave disposable SIDE gutters, not content. Crop only
+    those side gutters, then uniformly resample into the final canvas.
+
+    1024x1536 -> x=[80,944), exact 864x1536 -> 1080x1920.
+    1536x1024 -> approx x=[86,1450), y=[0,1023) -> 1440x1080.
+    NO stretched rows, mirrored edges, Gaussian bleed or distortion.
     """
-    artwork = ImageOps.contain(image.convert("RGB"), target,
-                               method=Image.Resampling.LANCZOS)
-    width, height = target
-    x = (width - artwork.width) // 2
-    y = (height - artwork.height) // 2
-    if artwork.width == width:
-        finished = Image.new("RGB", target)
-        if y:
-            top_row = artwork.crop((0, 0, width, 1))
-            finished.paste(top_row.resize((width, y)), (0, 0))
-        lower_bleed = height - y - artwork.height
-        if lower_bleed:
-            bottom_row = artwork.crop((0, artwork.height - 1,
-                                      width, artwork.height))
-            finished.paste(bottom_row.resize((width, lower_bleed)),
-                           (0, y + artwork.height))
-    else:
-        # Fallback for a provider unexpectedly returning a different ratio.
-        # Blurred bleed fills uncovered canvas without losing model pixels.
-        finished = ImageOps.fit(
-            artwork, target, method=Image.Resampling.LANCZOS,
-        ).filter(ImageFilter.GaussianBlur(radius=22))
-    finished.paste(artwork, (x, y))
-    return finished
+    if target not in ((1440, 1080), (1080, 1920)):
+        raise ValueError("Недопустимые размеры рекламного постера.")
+    rgb=image.convert("RGB")
+    w,h=rgb.size
+    target_w,target_h=target
+    from math import gcd
+    common=gcd(target_w,target_h)
+    unit_w,unit_h=target_w//common,target_h//common
+    n=min(w//unit_w,h//unit_h)
+    if n<1:
+        raise ValueError("OpenAI вернул слишком маленький художественный макет.")
+    crop_w,crop_h=n*unit_w,n*unit_h
+    x=(w-crop_w)//2
+    y=(h-crop_h)//2
+    safe=rgb.crop((x,y,x+crop_w,y+crop_h))
+    return safe.resize(target,Image.Resampling.LANCZOS)
+
+
+# Keep a backwards-compatible import name. No bleed occurs in either route.
+preserve_artwork_without_crop=finish_artwork_in_safe_aspect
 
 
 def generate_full_posters(brief: dict, product_photo: bytes, *,
@@ -336,7 +354,7 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
                         "PROMO_OPENAI_ART_TIMEOUT_SECONDS","480")))))
                 image = as_image(response)
                 _save_visual(cache_dir, fmt, image)
-            output[fmt] = preserve_artwork_without_crop(image, target)
+            output[fmt] = finish_artwork_in_safe_aspect(image,target)
         # Do not consume chargeable image outputs before downstream ZIP export.
         if consume_cache:
             _finish_visual_cache(cache_dir)
