@@ -22,6 +22,9 @@ def test_exact_copy_preview_is_branch_pinned_and_isolated():
     assert 'systemctl is-active --quiet "$service"' in script
     assert "for service in promoeditor regionalresearch caddy" in script
     assert "MemoryMax=$worker_max" in script
+    assert "worker_high=infinity" in script
+    assert "worker_high=660M\n" not in script
+    assert "PROMO_LOW_MEMORY_QA=1" in script
     assert "worker_max=760M" in script
     assert "worker_max=480M" in script
     assert 'MemAvailable:' in script

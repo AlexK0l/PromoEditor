@@ -8,6 +8,38 @@
   let apiReady = false;
   let isBusy = false;
   let pollingPaidTask = false;
+  let pendingPaidTask='';
+  try{pendingPaidTask=window.sessionStorage.getItem('promoeditor-ai-task')||'';}catch{}
+  if(!/^[a-f0-9]{32}$/.test(pendingPaidTask))pendingPaidTask='';
+
+  function rememberPaidTask(id){
+    pendingPaidTask=id;
+    try{
+      if(id)window.sessionStorage.setItem('promoeditor-ai-task',id);
+      else window.sessionStorage.removeItem('promoeditor-ai-task');
+    }catch{}
+  }
+  function updatePendingTaskControls(){
+    if($('recover-paid-task'))$('recover-paid-task').hidden=!pendingPaidTask||isBusy;
+    if($('resume-paid-task'))$('resume-paid-task').disabled=isBusy;
+    if(pendingPaidTask){
+      for(const id of ['generate-btn','new-variation-btn','generate-ai-posters-btn',
+                       'generate-concepts-btn','refine-repair','refine-expand'])
+        if($(id))$(id).disabled=true;
+    }
+  }
+
+  // Bound the entire status response, including reading its body. Only GET
+  // status is retried; never repeat a POST that could spend money.
+  async function readTaskStatus(endpoint){
+    const controller=new AbortController();
+    const timer=window.setTimeout(()=>controller.abort(),8000);
+    try{
+      const response=await fetch(endpoint,{cache:'no-store',signal:controller.signal});
+      const state=response.ok?await response.json():null;
+      return {response,state};
+    }finally{window.clearTimeout(timer);}
+  }
   let hasDemo = false;
   let isDemoLoading = false;
   let promptDirty = true;
@@ -126,8 +158,8 @@
     try{
     for(;;){
       await new Promise(resolve=>window.setTimeout(resolve,2400));
-      let response;
-      try{response=await fetch(endpoint,{cache:'no-store'});}
+      let response,state;
+      try{({response,state}=await readTaskStatus(endpoint));}
       catch{
         temporaryFailures++;
         if(temporaryFailures<7){
@@ -143,18 +175,19 @@
             'Пытаемся получить статус уже созданной задачи, не оплачивая повторный запрос.','working');
           continue;
         }
-        throw new Error((await readError(response))+' Номер задачи: '+taskId);
+        // No unbounded second read of a non-responding error body.
+        throw new Error('Не удалось получить статус (HTTP '+response.status+'). Номер задачи: '+taskId+'. Повторно не запускайте.');
       }
       temporaryFailures=0;
-      const state=await response.json();
+      if(!state||typeof state!=='object')throw new Error('Некорректный статус задачи.');
       if(state.status==='complete'){
-        try{window.sessionStorage.removeItem('promoeditor-ai-task');}catch{}
+        rememberPaidTask('');
         if(!state.result||!state.result.images)
           throw new Error('Задача завершена без файлов. Номер: '+taskId);
         return state.result;
       }
       if(state.status==='failed'){
-        try{window.sessionStorage.removeItem('promoeditor-ai-task');}catch{}
+        rememberPaidTask('');
         const error=new Error((state.error||'Не удалось создать AI-макет.')+
           ' (задача '+taskId+'). Повторный запрос не запускался.');
         // Only allow the exact, private recovery archive route.
@@ -271,10 +304,13 @@
       $(id).hidden=true;
     $('generate-btn').textContent=ai
       ?'Собрать выбранную AI-концепцию →':'Создать промо →';
-    $('generate-btn').disabled=isBusy||(ai && selectedAiConcept===null);
+    $('generate-btn').disabled=isBusy||Boolean(pendingPaidTask)||(ai && selectedAiConcept===null);
     $('generate-concepts-btn').disabled=isBusy||!apiReady;
     $('generate-ai-posters-btn').disabled=isBusy||!apiReady;
-    if(!isBusy){
+    updatePendingTaskControls();
+    if(!isBusy&&pendingPaidTask){
+      setStatus('Статус оплаченной задачи неизвестен','Проверьте её статус бесплатно. Новая генерация заблокирована.');
+    }else if(!isBusy){
       if(ai){
         setStatus(apiReady?'AI PRO · OpenAI':'AI PRO недоступен',
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
@@ -368,6 +404,7 @@
   }
 
   async function generateFullAiPosters(){
+    if(isBusy||pendingPaidTask)return;
     clearError();
     if(!apiReady){showError('Для генерации AI-постеров необходим OpenAI API.');return;}
     if(!get('model').trim()){showError('Укажите модель техники.','model');return;}
@@ -418,6 +455,7 @@
   }
 
   async function generateAiConcepts(){
+    if(isBusy||pendingPaidTask)return;
     clearError();
     if(!apiReady){showError('Для AI PRO требуется OPENAI_API_KEY. Переключитесь на быстрый шаблон.');return;}
     if(!get('model').trim()){showError('Укажите модель товара.','model');return;}
@@ -490,6 +528,7 @@
     const button=$('generate-btn');
     if(on)button.textContent='Создаём изображения…';
     else refreshGenerationMode();
+    updatePendingTaskControls();
   }
   function appendFiles(form,id){for(const file of $(id).files)form.append(id,file,file.name);}
   function download(path){
@@ -637,8 +676,8 @@
     const available=canRefine();
     const needsBleed=available&&pendingBleeds().length>0;
     $('refine-expand').hidden=!needsBleed;
-    $('refine-expand').disabled=isBusy||!apiReady||!needsBleed;
-    $('refine-repair').disabled=isBusy||!apiReady||!available||!refineImage;
+    $('refine-expand').disabled=isBusy||Boolean(pendingPaidTask)||!apiReady||!needsBleed;
+    $('refine-repair').disabled=isBusy||Boolean(pendingPaidTask)||!apiReady||!available||!refineImage;
     for(const id of ['refine-format','refine-issue','refine-region','refine-instruction','refine-review'])
       $(id).disabled=isBusy;
   }
@@ -754,7 +793,7 @@
     finally{busy(false);}
   }
   async function runRefinement(action){
-    if(isBusy||!apiReady||!canRefine())return;
+    if(isBusy||pendingPaidTask||!apiReady||!canRefine())return;
     clearError();
     const format=get('refine-format'),region=regionValue(),instruction=get('refine-instruction').trim();
     const count=action==='expand'?pendingBleeds().length:1;
@@ -786,7 +825,7 @@
       const response=await fetch('/api/generate/start',{method:'POST',body:form});
       if(!response.ok)throw new Error(await readError(response));
       const result=await response.json();
-      try{window.sessionStorage.setItem('promoeditor-ai-task',result.task_id);}catch{}
+      rememberPaidTask(result.task_id);
       latest=await pollAiGeneration(result.task_id);
       presentGeneratedResult();
       $('refine-panel').open=true;
@@ -795,7 +834,7 @@
   }
 
   async function generate(newVariation=false){
-    if(isBusy)return;
+    if(isBusy||pendingPaidTask)return;
     clearError();
     if(!get('model').trim()){
       showError('Укажите название или модель товара — это нужно для заголовка промо-листа.','model');return;
@@ -899,7 +938,7 @@
       if(!response.ok)throw new Error(await readError(response));
       const result=await response.json();
       if(isHybrid()){
-        try{window.sessionStorage.setItem('promoeditor-ai-task',result.task_id);}catch{}
+        rememberPaidTask(result.task_id);
         latest=await pollAiGeneration(result.task_id);
       }else latest=result;
       presentGeneratedResult();
@@ -1079,23 +1118,27 @@
     }
     if(!apiReady && isHybrid())$('mode-template').checked=true;
     updateAi();refreshStyle();updateFileLabels();updateRoi();
-    // Recover already paid work after a refresh without another Images call.
-    let savedTask=null;
-    try{savedTask=window.sessionStorage.getItem('promoeditor-ai-task');}catch{}
-    if(apiReady&&savedTask&&/^[a-f0-9]{32}$/.test(savedTask)){
-      clearError();
-      busy(true);
-      setStatus('Восстанавливаем AI-генерацию',
-        'Получаем статус ранее запущенного платного задания. Новые вызовы не создаём.','working');
-      try{
-        latest=await pollAiGeneration(savedTask);
-        presentGeneratedResult();
-      }catch(error){
-        showError(error.message||'Не удалось восстановить статус AI-задачи.');
-      }finally{
-        busy(false);
+    // A refresh or the free recovery button resumes the SAME task.
+    if(pendingPaidTask)await resumePaidTask();
+  }
+  async function resumePaidTask(){
+    if(isBusy||!pendingPaidTask)return;
+    clearError();
+    busy(true);
+    setStatus('Восстанавливаем AI-генерацию',
+      'Получаем статус ранее запущенного платного задания. Новые вызовы не создаём.','working');
+    try{
+      latest=await pollAiGeneration(pendingPaidTask);
+      presentGeneratedResult();
+    }catch(error){
+      showError(error.message||'Не удалось восстановить статус AI-задачи.');
+      if(error.recoveryZip){
+        const link=document.createElement('a');
+        link.href=error.recoveryZip;link.download='ai_failed_generation.zip';
+        link.textContent=' Скачать сохранённые материалы (ZIP)';
+        $('error-box').appendChild(link);
       }
-    }
+    }finally{busy(false);}
   }
 
   for(const id of fileIds){
@@ -1244,6 +1287,7 @@
     });
   }
   $('generate-btn').addEventListener('click',()=>generate(false));
+  $('resume-paid-task')?.addEventListener('click',resumePaidTask);
   $('new-variation-btn')?.addEventListener('click',()=>generate(true));
   $('refine-import')?.addEventListener('click',importExistingBundle);
   $('refine-expand')?.addEventListener('click',()=>runRefinement('expand'));

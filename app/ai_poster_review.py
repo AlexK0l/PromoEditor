@@ -17,10 +17,11 @@ import secrets
 import unicodedata
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 from .ai_quota import check_paid_capacity, QuotaExceeded, QuotaStoreUnavailable
 from .openai_service import async_client
-from .image_analysis import analysis_preview
+from .image_analysis import validate_image_dimensions
+from .ai_review_memory import check_review_memory, ReviewMemoryUnavailable
 from .ai_native_art_direction import approved_axle_count
 
 VERSION = "poster-review-v3-located-fields"
@@ -255,17 +256,38 @@ def compare_review(approved, raw, visual_keys):
     return result
 
 
-def _image_item(raw):
-    image,_ = analysis_preview(raw,max_edge=1920)
-    if "A" in image.getbands():
-        base=Image.new("RGBA",image.size,(255,255,255,255))
-        base.alpha_composite(image.convert("RGBA"))
-        image=base.convert("RGB")
-    else:
-        image=image.convert("RGB")
-    with io.BytesIO() as buf:
-        image.save(buf,format="JPEG",quality=94,subsampling=0)
-        encoded=base64.b64encode(buf.getvalue()).decode("ascii")
+MAX_REVIEW_DECODE_PIXELS = 8_000_000
+MAX_REVIEW_PAYLOAD_CHARS = 8 * 1024 * 1024
+
+
+def _image_item(raw, *, max_edge=1920):
+    # Pillow's PNG/WebP thumbnail() may decode the ENTIRE source first.
+    # Reject a source that cannot be decoded in a bounded working image
+    # rather than risking several full-size RGBA copies or silently omitting it.
+    check_review_memory()
+    with Image.open(io.BytesIO(raw)) as source:
+        validate_image_dimensions(*source.size)
+        if source.format == "JPEG":
+            source.draft("RGB",(max_edge,max_edge))
+        if source.width * source.height > MAX_REVIEW_DECODE_PIXELS:
+            raise ReviewMemoryUnavailable(
+                "AI-сверка пропущена до платного запроса: один из исходников "
+                "слишком велик для безопасной распаковки. Плакаты и оригиналы "
+                "сохранены; требуется ручная проверка.")
+        source.thumbnail((max_edge,max_edge),Image.Resampling.LANCZOS)
+        image=ImageOps.exif_transpose(source)
+        if "A" in image.getbands() or "transparency" in image.info:
+            rgba=image.convert("RGBA")
+            base=Image.new("RGBA",rgba.size,(255,255,255,255))
+            base.alpha_composite(rgba)
+            image=base.convert("RGB")
+        elif image.mode!="RGB":
+            image=image.convert("RGB")
+        with io.BytesIO() as buf:
+            # Keep full poster resolution for small-print review; only
+            # supporting reference previews use a smaller edge.
+            image.save(buf,format="JPEG",quality=92,subsampling=0)
+            encoded=base64.b64encode(buf.getvalue()).decode("ascii")
     return {"type":"input_image","image_url":"data:image/jpeg;base64,"+encoded,
             "detail":"high"}
 
@@ -330,6 +352,7 @@ def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
                 return cached["review"]
         except (OSError,ValueError,AttributeError):
             pass
+        check_review_memory()
         check_paid_capacity("text",1)
         fields=[{"id":f["id"],"label":f["label"]} for f in expected_fields(approved)]
         visuals=_visual_keys(logo,drawing,product,original_product)
@@ -389,7 +412,12 @@ def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
         for label,raw in sources:
             if raw:
                 content.append({"type":"input_text","text":label})
-                content.append(_image_item(raw))
+                content.append(_image_item(raw,max_edge=1280))
+        if sum(len(item.get("image_url","")) for item in content)>MAX_REVIEW_PAYLOAD_CHARS:
+            raise ReviewMemoryUnavailable("AI-сверка пропущена: слишком большой объём изображений. Платный запрос не отправлялся.")
+        check_review_memory()
+    except ReviewMemoryUnavailable as exc:
+        return _unavailable(str(exc))
     except (QuotaExceeded,QuotaStoreUnavailable):
         return _unavailable("Недостаточно доступной квоты для AI-сверки.")
     except Exception:

@@ -118,7 +118,7 @@
               <small id="quick-ai-description">OpenAI создаёт два цельных рекламных плаката сразу в 4:3 и 9:16. До 3 платных вызовов Images, возможен AI-выбор фото. Экспорт PNG/JPEG без обрезки и добавления полей; оригинальный чертёж и исходные AI-изображения в ZIP.</small>
             </span>
           </label>
-          <label class="check-field" id="verify-posters-option"><input id="verify-posters" type="checkbox" checked><span>Предварительная AI-сверка обоих плакатов <small>1 дополнительный платный Responses-запрос; не заменяет ручную проверку</small></span></label>
+          <label class="check-field" id="verify-posters-option"><input id="verify-posters" type="checkbox"><span>Предварительная AI-сверка обоих плакатов <small>По желанию: 1 дополнительный платный Responses-запрос при достаточной памяти VPS; не заменяет ручную проверку</small></span></label>
         </div>
         <div class="generate-row">
           <div class="generate-description">
@@ -319,6 +319,10 @@
 
     <div id="loading" class="loading" hidden role="status" aria-live="polite"><span class="loader" aria-hidden="true"></span><div class="loading-copy"><strong>Создаём промоматериалы…</strong><small>OpenAI рисует оба плаката. Не закрывайте вкладку и не запускайте повторно.</small><span id="generate-elapsed" class="loading-elapsed" aria-label="Время генерации" hidden></span></div></div>
 
+    <div id="recover-paid-task" class="field-tip" hidden role="status">
+      <p>Связь с уже запущенной задачей потеряна. Не запускайте новую генерацию.</p>
+      <button type="button" id="resume-paid-task" class="secondary-button">Проверить статус задачи бесплатно</button>
+    </div>
     <section id="download-panel" class="download-panel" hidden aria-labelledby="download-title">
       <span class="success-icon" aria-hidden="true">✓</span>
       <div class="result-heading"><div><span class="step-label">ГОТОВО</span><h2 id="download-title">Файлы готовы к скачиванию</h2></div><button type="button" id="download-all" class="primary-button" disabled>Скачать всё ZIP ↓</button></div>
@@ -360,7 +364,7 @@
         <div class="refine-controls">
           <p id="refine-status" role="status" aria-live="polite" class="field-tip">Исходный ZIP не изменяется. Результат сохраняется новым комплектом.</p>
           <button type="button" id="refine-expand" class="secondary-button">AI-дорисовать поля старого ZIP (платно)</button>
-          <label class="check-field"><input id="refine-review" type="checkbox" checked><span>Повторная сверка после правок <small>1 дополнительный платный Responses-запрос только если изображение изменилось</small></span></label>
+          <label class="check-field"><input id="refine-review" type="checkbox"><span>Повторная сверка после правок <small>1 дополнительный платный Responses-запрос только если изображение изменилось</small></span></label>
           <h3>Исправить отдельную область</h3>
           <label>Плакат <select id="refine-format"><option value="9x16">Вертикальный 9:16</option><option value="4x3">Горизонтальный 4:3</option></select></label>
           <label>Замечание из AI-сверки <select id="refine-issue"><option value="">Выбрать область вручную</option></select></label>
@@ -481,7 +485,7 @@
     <footer class="footer">PromoEditor · AI-дизайн, проверяемые данные в редактируемом SVG и исходное выбранное фото в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261124-native-aspects-v10" defer></script>
+  <script src="/static/app.js?v=20261124-memory-pressure-v11" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>

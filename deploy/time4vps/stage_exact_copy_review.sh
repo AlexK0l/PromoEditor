@@ -143,6 +143,7 @@ install -o root -g root -m 0600 /dev/null "$ENV_FILE"
     # This is the isolated private staging data directory, NOT production.
     printf 'PROMO_JOB_TTL_SECONDS=86400\n'
     printf 'PROMO_OPENAI_ART_TIMEOUT_SECONDS=480\n'
+    printf 'PROMO_LOW_MEMORY_QA=1\n'
     # Only OpenAI credentials; no production auth/password/session secret.
     grep -E '^[[:space:]]*(OPENAI_API_KEY|OPENAI_ORG_ID|OPENAI_PROJECT)[[:space:]]*=' "$PROD_ENV" || true
     # Honor configured call limits, using a separate preview counter DB.
@@ -161,7 +162,11 @@ chmod 0600 "$ENV_FILE"
 worker_high=420M
 worker_max=480M
 if [[ "$MODE" == "paid" ]]; then
-  worker_high=660M
+  # On the 1.9 GiB host, MemoryHigh=660M produced >98% full PSI
+  # while current was only ~676 MiB and MemoryMax was not reached.
+  # Remove that reclaim/throttling cliff, retain the existing hard cap,
+  # and reject optional QA when there is no safe working-memory reserve.
+  worker_high=infinity
   worker_max=760M
 fi
 systemd-run --quiet --collect --unit="$UNIT" \
@@ -229,7 +234,7 @@ info "Windows PowerShell: ssh -N -L 18082:127.0.0.1:18082 root@YOUR_VPS_IP"
 info "Browser: http://127.0.0.1:18082"
 info "Stop: systemctl stop promoeditor-exact-preview (or automatic stop in one hour)."
 if [[ "$MODE" == "paid" ]]; then
-  info "IMPORTANT: clicking Create now makes up to 3 PAID OpenAI Images requests (one rebrand + two complete AI-created posters at native 1536x1152 and 1152x2048); no automatic outpainting, crop or padding; optional paid photo ranking and one confirmed Responses QA call. Masked outpainting is available only as explicit refinement for old ZIPs. Existing ZIP can be reopened free and locally corrected with explicit paid confirmation. Only the selected rebranded view enters poster Images; secondary originals remain archive-only. NO algorithmic SVG text templates; source numbers in AI raster must be reviewed. Identical requests reuse cached posters; new variants require an explicit paid action."
+  info "IMPORTANT: clicking Create now makes up to 3 PAID OpenAI Images requests (one rebrand + two complete AI-created posters at native 1536x1152 and 1152x2048); no automatic outpainting, crop or padding; optional paid photo ranking and opt-in Responses QA (skipped before billing if memory admission fails). Masked outpainting is available only as explicit refinement for old ZIPs. Existing ZIP can be reopened free and locally corrected with explicit paid confirmation. Only the selected rebranded view enters poster Images; secondary originals remain archive-only. NO algorithmic SVG text templates; source numbers in AI raster must be reviewed. Identical requests reuse cached posters; new variants require an explicit paid action."
 else
   info "OpenAI key is absent in FREE staging; no paid calls possible."
 fi

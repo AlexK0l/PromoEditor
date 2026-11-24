@@ -141,6 +141,8 @@ def main():
                 ({selected_assets:{primary_photo:'photo_1'}});
         }""")
 
+        assert not page.locator("#verify-posters").is_checked()
+        page.locator("#verify-posters").check()
         confirmations = []
         def decline(dialog):
             confirmations.append(dialog.message)

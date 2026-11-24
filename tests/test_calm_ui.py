@@ -215,7 +215,12 @@ def test_reference_is_optional_in_every_ui_mode():
 def test_poster_visual_review_is_explicitly_disclosed_and_opt_out_available():
     html, _ = parse_page()
     js = (ROOT / "app.js").read_text(encoding="utf-8")
-    assert 'id="verify-posters" type="checkbox" checked' in html
+    assert 'id="verify-posters" type="checkbox">' in html
+    assert 'id="verify-posters" type="checkbox" checked' not in html
+    assert 'id="resume-paid-task"' in html
+    assert "new AbortController()" in js
+    assert "controller.abort(),8000" in js
+    assert "if(isBusy||pendingPaidTask)return;" in js
     assert "1 платный Responses-запрос" in js
     assert "checked('verify-posters'))form.append('verify_posters','true')" in js
     assert "poster_review.json" in js

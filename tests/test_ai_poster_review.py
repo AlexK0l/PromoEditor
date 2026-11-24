@@ -316,3 +316,64 @@ def test_background_generation_publishes_downloadable_zip_before_review(monkeypa
             assert len(calls)==3
         finally:
             release.set()
+
+
+
+def test_large_png_refused_before_decoding_and_before_any_paid_call(monkeypatch,tmp_path):
+    from app.ai_review_memory import ReviewMemoryUnavailable
+    import pytest
+    # Simulate a header for a 58 MP PNG without allocating its pixel buffer.
+    class LargeSource:
+        format="PNG"
+        width=8840
+        height=6614
+        size=(width,height)
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def thumbnail(self,*args): pytest.fail("Large PNG must not be decoded")
+    monkeypatch.setattr(ai_poster_review.Image,"open",lambda *args:LargeSource())
+    with pytest.raises(ReviewMemoryUnavailable,match="до платного запроса"):
+        ai_poster_review._image_item(b"fake-header")
+
+
+def test_pressure_skips_review_without_paid_request_or_cached_failure(monkeypatch,tmp_path):
+    from app.ai_review_memory import ReviewMemoryUnavailable
+    folder=tmp_path/"job"
+    folder.mkdir()
+    for fmt in ("4x3","9x16"):
+        (folder/f"ai_poster_{fmt}.png").write_bytes(_png())
+    calls=[]
+    def block():
+        raise ReviewMemoryUnavailable("AI-сверка пропущена до платного запроса: давление памяти.")
+    monkeypatch.setattr(ai_poster_review,"check_review_memory",block)
+    monkeypatch.setattr(ai_poster_review,"async_client",lambda:calls.append("paid"))
+    approved=approved_full_copy(approved_zubrtrail_500())
+    result=ai_poster_review.review_pair(approved,folder,tmp_path/"cache")
+    assert result["status"]=="unavailable"
+    assert "до платного запроса" in result["reason"]
+    assert not calls
+    assert not (tmp_path/"cache"/"poster_review_v3.json").exists()
+
+
+def test_shared_vps_memory_admission_rejects_observed_thrash(monkeypatch,tmp_path):
+    import pytest
+    from app.ai_review_memory import check_review_memory,ReviewMemoryUnavailable,MIB
+    monkeypatch.setenv("PROMO_LOW_MEMORY_QA","1")
+    mem=tmp_path/"meminfo"
+    mem.write_text("MemAvailable: 773000 kB\n")
+    (tmp_path/"memory.pressure").write_text("some avg10=99.20 avg60=99.20 avg300=95.70 total=975050026\nfull avg10=98.88 avg60=98.78 avg300=95.15 total=964037012\n")
+    (tmp_path/"memory.current").write_text("708349952")
+    (tmp_path/"memory.high").write_text("692060160")
+    (tmp_path/"memory.max").write_text("796917760")
+    (tmp_path/"memory.stat").write_text("inactive_file 0\n")
+    with pytest.raises(ReviewMemoryUnavailable):
+        check_review_memory(meminfo=mem,group=tmp_path)
+    # With the soft cliff removed, pressure relieved and reclaimable file
+    # cache, optional QA can proceed without raising the hard cap.
+    (tmp_path/"memory.pressure").write_text("full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n")
+    (tmp_path/"memory.high").write_text("max")
+    (tmp_path/"memory.stat").write_text(f"inactive_file {300*MIB}\n")
+    check_review_memory(meminfo=mem,group=tmp_path)
+    (tmp_path/"memory.stat").write_text("inactive_file 0\n")
+    with pytest.raises(ReviewMemoryUnavailable):
+        check_review_memory(meminfo=mem,group=tmp_path)
