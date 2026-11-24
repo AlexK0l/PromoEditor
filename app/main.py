@@ -1414,8 +1414,15 @@ async def _generate_from_form(form, progress=None):
             # Join up to two actual user-uploaded style references (landscape
             # and portrait) into an optional transient style board. Source
             # facts always come from the normalized brief, not the pictures.
+            # Use uploaded style FILES directly, not the asset ranker's
+            # optional selection. An approved example must never silently
+            # disappear before the expensive Images request.
+            customer_style_files=[
+                raw for _,raw in (
+                    groups['reference_examples']+groups['references'])][:2]
             style_board=combine_style_references(
-                reference_example_raw,references)
+                customer_style_files[0] if customer_style_files else None,
+                customer_style_files[1:])
             del groups,records,report,background_raw,references
             import gc
             gc.collect()
