@@ -778,7 +778,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 progress('AI сверяет оба готовых плаката с исходными данными')
             review=review_pair(approved,folder,paid_cache,
                                logo=logo_raw,drawing=drawing_raw,
-                               product=rebranded_raw)
+                               product=rebranded_raw,original_product=product_raw)
         else:
             review=skipped_review()
         (folder/'poster_review.json').write_text(
@@ -857,6 +857,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'rebranding_applied':True,
                 'publication_status':'human_review_required',
                 'secondary_used_in_artwork':False,
+                'review_gate':('blocked' if review['status']=='issues_found'
+                               else 'human_review_required'),
                 'poster_review':review,
                 'export_geometry':geometry,
                 'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]}

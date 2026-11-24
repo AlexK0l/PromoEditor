@@ -31,7 +31,14 @@ def _observations(approved, visual_keys, *, fail=True):
             rows=[r for r in rows if r["id"]!="roi_annual_additional_revenue"]
         formats.append({"format":fmt,"fields":rows,
                         "visuals":[{"id":v,"state":"no_issue_detected",
-                                    "observation":"Проверено визуально"} for v in visual_keys]})
+                                    "observation":"Проверено визуально"} for v in visual_keys],
+                        "vehicle_instances":[{
+                            "location":"Главное фото","view_state":"same_as_selected",
+                            "visible_axles":4,"axle_visibility":"complete",
+                            "observed_brand":approved["brand"],"observed_model":approved["model"],
+                            "manufacturer_marks":[approved["brand"],approved["model"]],
+                            "markings_readable":True,"observation":"Четыре оси, один ракурс",
+                        }]})
     return {"formats":formats}
 
 
@@ -83,14 +90,16 @@ def test_opted_in_http_route_reviews_both_real_final_rasters_once_and_caches(
         review_calls.append(kw)
         content=kw["input"][0]["content"]
         images=[x for x in content if x["type"]=="input_image"]
-        assert len(images)==4  # two final posters + drawing + rebranded photo
+        assert len(images)==5  # two final posters + drawing + original + rebranded photo
+        assert any("ORIGINAL SELECTED PRODUCT" in x.get("text","") for x in content)
+        assert "manufacturer_marks" in content[0]["text"]
         for item,size in zip(images,[(1440,1080),(1080,1920)]):
             with Image.open(io.BytesIO(base64.b64decode(item["image_url"].split(",",1)[1]))) as image:
                 assert image.size==size
         assert "7 550 мм" not in content[0]["text"]
         assert "6 527 000" not in content[0]["text"]
         return SimpleNamespace(output_text=json.dumps(_observations(
-            approved,["readability","unwanted_blueprint","product","drawing_consistency"])))
+            approved,["readability","unwanted_blueprint","product","source_geometry","drawing_consistency"])))
     api=SimpleNamespace(images=SimpleNamespace(edit=edit),responses=SimpleNamespace(create=create))
     monkeypatch.setattr(ai_poster_service,"client",lambda:api)
     monkeypatch.setattr(product_rebrand_service,"client",lambda:api)
@@ -111,6 +120,7 @@ def test_opted_in_http_route_reviews_both_real_final_rasters_once_and_caches(
         assert first.status_code==200,first.text
         result=first.json()
         assert result["publication_status"]=="human_review_required"
+        assert result["review_gate"]=="blocked"
         assert result["poster_review"]["status"]=="issues_found",result["poster_review"]
         assert len(image_calls)==3 and len(review_calls)==1
         archive=http.get(result["zip"])
@@ -140,3 +150,58 @@ def test_failed_review_does_not_discard_or_auto_retry_paid_images(monkeypatch,tm
     assert "secret" not in json.dumps(r)
     assert ai_poster_review.review_pair(approved,folder,tmp_path/"cache")==r
     assert len(calls)==1
+
+
+
+def test_roi_numeric_presentation_is_not_a_factual_mismatch():
+    approved=approved_full_copy(approved_zubrtrail_500())
+    keys=["readability","unwanted_blueprint"]
+    raw=_observations(approved,keys,fail=False)
+    for fmt in raw["formats"]:
+        fields={x["id"]:x for x in fmt["fields"]}
+        fields["roi_scenario_years"]["observed"]="5 лет"
+        fields["roi_net_economic_effect"]["observed"]="+3 115 550 ₽"
+        fields["roi_payback_years"]["observed"]="≈ 2.12 года"
+        fields["roi_trips_per_year"]["observed"]="240 рейсов в год"
+    clean=ai_poster_review.compare_review(approved,raw,keys)
+    assert clean["status"]=="no_issues_detected"
+    fields={x["id"]:x for x in raw["formats"][0]["fields"]}
+    fields["roi_net_economic_effect"]["observed"]="−3 115 550 ₽"
+    fields["roi_scenario_years"]["observed"]="5 месяцев"
+    fields["roi_payback_years"]["observed"]="≈ 2,13 года"
+    fields["roi_trips_per_year"]["observed"]="2400 рейсов"
+    fields["roi_annual_additional_revenue"]["observed"]="1 080 000 $"
+    fields["price"]["observed"]="6 527 000 ₽ без НДС"
+    assert ai_poster_review.compare_review(approved,raw,keys)["issues_count"]==6
+
+
+def test_visual_evidence_blocks_extra_axle_old_brand_and_unapproved_angle():
+    approved=approved_full_copy(approved_zubrtrail_500())
+    keys=["readability","unwanted_blueprint","product","logo"]
+    raw=_observations(approved,keys,fail=False)
+    assert ai_poster_review.compare_review(approved,raw,keys)["status"]=="no_issues_detected"
+    # A generic AI opinion cannot overrule structured observations.
+    wide,tall=raw["formats"]
+    wide["vehicle_instances"][0]["visible_axles"]=5
+    tall["vehicle_instances"][0]["manufacturer_marks"].append("OLD-MAKER")
+    tall["vehicle_instances"][0]["observed_model"]=""
+    tall["vehicle_instances"][0]["view_state"]="different"
+    tall["vehicle_instances"].append(dict(tall["vehicle_instances"][0],location="Вставка"))
+    report=ai_poster_review.compare_review(approved,raw,keys)
+    assert report["status"]=="issues_found"
+    assert report["formats"]["4x3"]["vehicle_check"]["expected_axles"]==4
+    assert report["formats"]["4x3"]["vehicle_check"]["status"]=="issue"
+    assert any("OLD-MAKER" in msg for msg in report["formats"]["9x16"]["vehicle_check"]["issues"])
+    assert report["human_review_required"] is True
+
+
+def test_missing_vehicle_evidence_cannot_pass():
+    approved=approved_full_copy(approved_zubrtrail_500())
+    keys=["product"]
+    raw=_observations(approved,keys,fail=False)
+    raw["formats"][0].pop("vehicle_instances")
+    raw["formats"][1]["vehicle_instances"][0]["axle_visibility"]="partial"
+    raw["formats"][1]["vehicle_instances"][0]["markings_readable"]=False
+    report=ai_poster_review.compare_review(approved,raw,keys)
+    assert report["status"]=="issues_found"
+    assert all(report["formats"][fmt]["vehicle_check"]["status"]=="issue" for fmt in ("4x3","9x16"))

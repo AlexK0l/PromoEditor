@@ -229,7 +229,7 @@ info "Windows PowerShell: ssh -N -L 18082:127.0.0.1:18082 root@YOUR_VPS_IP"
 info "Browser: http://127.0.0.1:18082"
 info "Stop: systemctl stop promoeditor-exact-preview (or automatic stop in one hour)."
 if [[ "$MODE" == "paid" ]]; then
-  info "IMPORTANT: clicking Create now makes up to 3 PAID OpenAI Images requests (one rebrand + two complete AI-created posters), with optional paid photo ranking. NO algorithmic SVG text templates; source numbers in AI raster must be reviewed. Identical requests reuse cached posters; new variants require an explicit paid action."
+  info "IMPORTANT: clicking Create now makes up to 3 PAID OpenAI Images requests (one rebrand + two complete AI-created posters), with optional paid photo ranking and one explicitly confirmed Responses QA call. Only the selected rebranded view enters poster Images; secondary originals remain archive-only. NO algorithmic SVG text templates; source numbers in AI raster must be reviewed. Identical requests reuse cached posters; new variants require an explicit paid action."
 else
   info "OpenAI key is absent in FREE staging; no paid calls possible."
 fi

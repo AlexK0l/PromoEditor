@@ -237,8 +237,8 @@
         ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
         :hybrid
           ?(referencePro
-            ?'Рекламный PRO: OpenAI самостоятельно разрабатывает два полноценных плаката. Эталон необязателен; при наличии используется как ориентир стиля. До 3 платных Images с ребрендингом, возможен AI-выбор фото. Данные передаются полностью, но требуют проверки. PNG/JPEG и ZIP без SVG.'
-            :'OpenAI целиком рисует 4:3 и самостоятельный 9:16. До 3 платных Images: один ребрендинг и два рекламных макета; возможен AI-выбор фото. PNG/JPEG, текст в растре не редактируется.')
+            ?'Рекламный PRO: OpenAI самостоятельно разрабатывает два полноценных плаката с одним выбранным ребрендированным ракурсом. Эталон необязателен. До 3 платных Images, возможен AI-выбор фото. Дополнительные исходные ракурсы сохраняются отдельно. PNG/JPEG и ZIP без SVG.'
+            :'OpenAI целиком рисует 4:3 и самостоятельный 9:16 в одном выбранном ребрендированном ракурсе. До 3 платных Images: один ребрендинг и два макета; возможен AI-выбор фото. PNG/JPEG, текст в растре не редактируется.')
           :paidInTemplate
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
@@ -530,9 +530,34 @@
       if($('poster-review-status')){
         const review=latest.poster_review;
         $('poster-review-status').hidden=!rasterOnly;
+        if(!rasterOnly&&$('poster-review-details'))$('poster-review-details').hidden=true;
         if(rasterOnly){
-          const messages={issues_found:'AI-сверка выявила расхождения или непроверенные данные: '+(review?.issues_count??'—')+'.',no_issues_detected:'AI-сверка не выявила расхождений в проверенных полях. Это не гарантия точности.',unavailable:'AI-сверка недоступна; изображения сохранены, требуется ручная сверка.',not_requested:'AI-сверка не запускалась; требуется ручная сверка.'};
+          const messages={issues_found:'НЕ ДЛЯ ПУБЛИКАЦИИ: AI-сверка выявила расхождения или непроверенные данные: '+(review?.issues_count??'—')+'.',no_issues_detected:'AI-сверка не выявила расхождений в проверенных полях. Это не гарантия точности.',unavailable:'AI-сверка недоступна; изображения сохранены, требуется ручная сверка.',not_requested:'AI-сверка не запускалась; требуется ручная сверка.'};
           $('poster-review-status').textContent=(messages[review?.status]||messages.not_requested)+' Подробности в poster_review.json. Не публикуйте без проверки.';
+          const details=$('poster-review-details');
+          if(details){
+            details.replaceChildren();
+            for(const fmt of ['4x3','9x16']){
+              const report=review?.formats?.[fmt];
+              if(!report)continue;
+              const items=[
+                ...(report.vehicle_check?.issues||[]),
+                ...(report.visuals||[]).filter(x=>x.status!=='no_issue_detected').map(x=>x.observation||x.id),
+                ...(report.fields||[]).filter(x=>x.status!=='match').map(x=>x.label+': ожидается «'+x.expected+'», обнаружено «'+(x.observed||'не подтверждено')+'»')
+              ];
+              for(const message of items.slice(0,8)){
+                const item=document.createElement('li');
+                item.textContent=fmt+' — '+message;
+                details.appendChild(item);
+              }
+              if(items.length>8){
+                const item=document.createElement('li');
+                item.textContent=fmt+' — остальные замечания в poster_review.json';
+                details.appendChild(item);
+              }
+            }
+            details.hidden=!details.childElementCount;
+          }
         }
       }
       $('download-title').textContent=rasterOnly?'AI-черновики для проверки':'Файлы готовы к скачиванию';
@@ -588,8 +613,8 @@
     const paidRendering=isHybrid()||checked('use-openai');
     if(isHybrid()&&!window.confirm(
       (newVariation?'Создать НОВЫЙ художественный вариант с новыми платными вызовами? ':'')+
-      'OpenAI создаст два цельных плаката с надписями и габаритами. Оригинал чертежа сохраняется отдельно. До 3 платных вызовов OpenAI Images: ребрендинг и два формата, возможен платный выбор главного фото. '+
-      (checked('verify-posters')?'Дополнительно: 1 платный Responses-запрос для предварительной сверки обоих плакатов. ':'AI-сверка отключена. ')+
+      'OpenAI создаст два цельных плаката с надписями и габаритами. Только выбранный ребрендированный ракурс попадёт в Images; остальные фото и чертёж сохраняются отдельно. До 3 платных вызовов OpenAI Images: ребрендинг и два формата, возможен платный выбор главного фото. '+
+      (checked('verify-posters')?'Дополнительно: 1 платный Responses-запрос для сверки обоих плакатов, осей, всех маркировок, логотипа и исходной геометрии. ':'AI-сверка отключена. ')+
       'Повтор того же варианта использует сохранённый кэш, пока он не истёк. Результат PNG/JPEG, НЕ SVG, без обрезки. Данные и логотип требуют ручного утверждения. Продолжить?'
     ))return;
     if(isHybrid()&&newVariation){

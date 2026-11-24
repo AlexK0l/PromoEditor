@@ -47,7 +47,10 @@ def main():
             "zip": "/files/" + "a" * 32 + "/ai_posters.zip",
             "warnings": [],
             "poster_review": {"status":"issues_found","issues_count":3,
-                              "human_review_required":True},
+                              "human_review_required":True,
+                              "formats":{"4x3":{"vehicle_check":{"issues":["Оси: ожидается 4, обнаружено 5."]}},
+                                         "9x16":{"fields":[{"label":"Модель","expected":"TEST",
+                                                             "observed":"","status":"missing"}]}}},
         }
         status_requests = []
         def begin_reply(route):
@@ -156,6 +159,8 @@ def main():
         assert page.locator("#poster-review-status").is_visible()
         assert "расхождения" in page.locator("#poster-review-status").inner_text()
         assert "3" in page.locator("#poster-review-status").inner_text()
+        assert "НЕ ДЛЯ ПУБЛИКАЦИИ" in page.locator("#poster-review-status").inner_text()
+        assert "ожидается 4, обнаружено 5" in page.locator("#poster-review-details").inner_text()
         for selector in ("#generation-mode",
                          "#ai-concepts-workflow", "#openai-posters-workflow"):
             assert page.locator(selector).is_hidden(), selector
