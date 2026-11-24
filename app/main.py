@@ -702,7 +702,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
 
     The original photo is immutable. The one paid rebranding edit is cached
     by original bytes/logo/brand/model. Partial paid outputs survive ZIP
-    failures. A secondary photo may inform poster composition, not rebranding.
+    failures. Secondary photos remain archive-only, never Images inputs.
     """
     if progress:
         progress('Проверяем оплаченный кэш изображений и доступные лимиты')
@@ -716,7 +716,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
         check_paid_capacity('image', 3)
     else:
         previous_sources=[rebranded_raw]+[raw for raw in
-                            (logo_raw,drawing_raw,secondary_raw,reference_raw)
+                            (logo_raw,drawing_raw,reference_raw)
                             if raw]
         previous_posters=_default_visual_cache(
             brief,True,previous_sources,model,quality,
@@ -736,9 +736,9 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             rebranded_raw = rebrand_selected_photo(
                 brief, product_raw, logo=logo_raw, model=model, quality=quality,
                 folder=rebrand_dir)
-        # The original secondary camera view is supplied only as reference.
+        # Only the selected rebranded product view may reach Images.
         poster_sources=[rebranded_raw]+[raw for raw in
-            (logo_raw,drawing_raw,secondary_raw,reference_raw) if raw]
+            (logo_raw,drawing_raw,reference_raw) if raw]
         paid_cache=_default_visual_cache(
             brief,True,poster_sources,model,quality,
             AI_POSTER_VERSION,cache_direction)
@@ -746,7 +746,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             progress('OpenAI создаёт ДВА полноценных рекламных дизайна 4:3 и 9:16')
         posters = generate_full_posters(
             brief,rebranded_raw,logo=logo_raw,drawing=drawing_raw,
-            reference=reference_raw,secondary_photo=secondary_raw,
+            reference=reference_raw,
             model=model,quality=quality,cache_dir=paid_cache,
             consume_cache=False,product_is_rebranded=True)
         (folder/'rebranded_product.png').write_bytes(rebranded_raw)
@@ -811,6 +811,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'selected_primary':selected_source or {},
                 'rebranded_only_this_photo':True,
                 'other_uploaded_photos_untouched':True,
+                'poster_product_input':'rebranded_selected_photo_only',
+                'secondary_used_in_artwork':False,
             },ensure_ascii=False,indent=2))
             z.writestr('REVIEW_BEFORE_PUBLICATION.txt',
                        AI_POSTER_WARNING+'\n'+REBRAND_WARNING+'\n'
@@ -827,7 +829,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        'быть указаны точным текстом. '
                        'Изменённый кадр: rebranded_product.png. '
                        'Оригинал: originals/product_photo.*. '
-                       'Дополнительные фото НЕ ребрендировались. '
+                       'Дополнительные фото НЕ ребрендировались и НЕ передавались '
+                       'в Images для отрисовки плакатов. '
                        'Перед публикацией ВРУЧНУЮ проверьте весь текст. '
                        'Текст AI-растра не редактируется как SVG.\n')
             for name,raw in (('product_photo',product_raw),
@@ -853,6 +856,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'rebranded_photo':f'/files/{job_id}/rebranded_product.png',
                 'rebranding_applied':True,
                 'publication_status':'human_review_required',
+                'secondary_used_in_artwork':False,
                 'poster_review':review,
                 'export_geometry':geometry,
                 'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]}

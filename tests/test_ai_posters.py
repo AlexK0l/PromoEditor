@@ -355,3 +355,19 @@ def test_both_paid_image_edit_requests_include_safe_layout_not_old_cache(
     assert "logo must remain fully visible" in portrait
     assert images.calls[0]["size"] == "1536x1024"
     assert images.calls[1]["size"] == "1024x1536"
+
+
+
+def test_legacy_secondary_argument_never_reaches_images_or_changes_cache(monkeypatch,tmp_path):
+    images=Images()
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(ai_poster_service,"client",lambda:type("API",(),{"images":images})())
+    brief=default_brief()
+    for alternate in (_png("red"),_png("blue")):
+        ai_poster_service.generate_full_posters(brief,_png(),logo=_png("white"),
+                                               secondary_photo=alternate,
+                                               consume_cache=False,product_is_rebranded=True)
+    assert len(images.calls)==2
+    for call in images.calls:
+        assert [f.name for f in call["image"]]==["01_real_product.png","02_logo.png"]
+        assert "ONLY ONE AUTHORIZED PRODUCT VIEW" in call["prompt"]

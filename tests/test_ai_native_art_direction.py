@@ -184,3 +184,26 @@ def test_customer_reference_pro_describes_editorial_campaign_not_template():
                 or "ui panels" in direction.lower())
         assert "cinematic" in direction.lower() or "professional" in direction
         assert "full native canvas" in direction
+
+
+
+def test_explicit_geometry_and_complete_finance_checklist_for_both_formats():
+    from app.ai_native_art_direction import approved_axle_count, mandatory_copy_direction, ROI_DISPLAY_LABELS
+    brief=approved_zubrtrail_500()
+    source=approved_full_copy(brief)
+    assert approved_axle_count(source)==4
+    assert approved_axle_count({"technical_specifications":[["Нагрузка","9 т"]]}) is None
+    assert approved_axle_count({"technical_specifications":[["Оси","4 оси"],["Количество осей","5"]]}) is None
+    assert approved_axle_count({"technical_specifications":[["Оси","4 оси SAF, нагрузка 9 т"]]})==4
+    checklist=mandatory_copy_direction(source)
+    assert "Модель: ZubrTrail 500" in checklist
+    assert "Категория: ПОЛУПРИЦЕП-ЗЕРНОВОЗ" in checklist
+    for fmt in ("4x3","9x16"):
+        prompt=ai_poster_service._prompt(brief,fmt,logo=True,drawing=True,reference=True,
+                                         product_is_rebranded=True,secondary_photo=True)
+        assert "exactly 4 road axles" in prompt
+        assert "ONLY ONE AUTHORIZED PRODUCT VIEW" in prompt
+        assert "rear crossbar" in prompt
+        assert "negative spaces" in prompt
+        for key,label in ROI_DISPLAY_LABELS.items():
+            assert label+": "+source["verified_economic_scenario"][key] in prompt

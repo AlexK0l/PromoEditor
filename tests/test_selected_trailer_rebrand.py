@@ -51,6 +51,7 @@ def selected_image_calls(monkeypatch):
             calls["posters"].append({
                 "pixel": pixel,
                 "size": kw["size"],
+                "input_names":[part.name for part in kw["image"]],
                 "prompt": kw["prompt"],
             })
             return reply((25, 180, 170))
@@ -127,6 +128,9 @@ def test_multiple_photos_ai_picks_second_and_only_second_is_rebranded(
                    for c in calls["posters"]), (
             "Both posters must use the ONE selected, rebranded photo"
         )
+        assert all(c["input_names"]==["01_real_product.png","02_logo.png"]
+                   for c in calls["posters"]), "Raw secondary angle must not reach Images"
+        assert data["secondary_used_in_artwork"] is False
         assert data["generation_mode"]=="openai_full_poster"
         assert data["raster_only"] is True
         assert "corel" not in data
@@ -135,11 +139,12 @@ def test_multiple_photos_ai_picks_second_and_only_second_is_rebranded(
             assert z.read("originals/customer_logo.png") == logo
             assert "rebranded_product.png" in z.namelist()
             assert "approved_copy.json" in z.namelist()
-            assert "originals/secondary_photo.png" in z.namelist()
+            assert z.read("originals/secondary_photo.png")==photos[0]
             chosen = json.loads(z.read("selected_photo.json"))
             assert chosen["selected_primary"]["id"] == "photo_2"
             assert chosen["rebranded_only_this_photo"] is True
             assert chosen["other_uploaded_photos_untouched"] is True
+            assert chosen["secondary_used_in_artwork"] is False
             with Image.open(io.BytesIO(z.read("rebranded_product.png"))) as image:
                 assert image.getpixel((12, 12)) == (180, 20, 180)
     assert photos[0] == png((250, 210, 30)), "Photo 1 bytes unchanged"

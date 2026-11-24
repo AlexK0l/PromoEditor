@@ -8,6 +8,8 @@ must not paint boxes/cards/text over the generated art in this mode.
 """
 from __future__ import annotations
 
+import re
+
 from .ai_exact_copy_render import _format_money
 from .render import compute_roi
 
@@ -74,6 +76,60 @@ def approved_full_copy(brief: dict) -> dict:
     return approved
 
 
+def approved_axle_count(approved: dict) -> int | None:
+    """Derive axle count only from explicit approved axle specifications."""
+    counts = set()
+    for label, value in approved.get("technical_specifications") or []:
+        if not re.fullmatch(r"(?:оси|ось|количество осей|число осей|axles?|axle count|number of axles)", label.strip(), re.I):
+            continue
+        match = re.match(r"^\s*(\d{1,2})\s*(?:оси|осей|ось|axles?)\b", value, re.I)
+        if match is None:
+            match = re.fullmatch(r"\s*(\d{1,2})\s*", value)
+        if match is None:
+            return None
+        count = int(match.group(1))
+        if not 1 <= count <= 30:
+            return None
+        counts.add(count)
+    return next(iter(counts)) if len(counts) == 1 else None
+
+
+ROI_DISPLAY_LABELS = {
+    "additional_revenue_per_trip": "Доп. выручка за рейс",
+    "trips_per_year": "Рейсов в год",
+    "annual_additional_revenue": "Доп. выручка за год",
+    "scenario_years": "Срок расчёта, лет",
+    "total_additional_revenue": "Доп. выручка за весь срок",
+    "difference_in_purchase_price": "Разница в цене покупки",
+    "net_economic_effect": "Итоговый эффект",
+    "payback_years": "Окупаемость, лет",
+}
+
+
+def mandatory_copy_direction(approved: dict) -> str:
+    """Explicit visible-copy checklist, not an algorithmic page layout."""
+    lines = [
+        "MANDATORY VISIBLE COPY IN THIS INDIVIDUAL POSTER, not just on the vehicle.",
+        "Give the model its own legible headline text and display the category separately.",
+    ]
+    for key, label in (("brand","Бренд"),("model","Модель"),("category","Категория")):
+        if approved.get(key):
+            lines.append(label + ": " + approved[key])
+    roi = approved.get("verified_economic_scenario")
+    if roi:
+        lines.append("Print a complete readable finance table, one distinct labelled row "
+                     "per non-null result below. Neither the total nor a proof-point "
+                     "summary substitutes for individual rows. Reduce ornamental "
+                     "illustration before dropping data.")
+        for key, label in ROI_DISPLAY_LABELS.items():
+            if roi.get(key) is not None:
+                lines.append(label + ": " + str(roi[key]))
+    lines.append("Price/VAT must appear accurately, once, without malformed repeated tax text. "
+                 "Before returning the image verify EVERY required row, model, category "
+                 "and both supplied phone numbers. Never sacrifice them to enlarge photography.")
+    return "\n".join(lines)
+
+
 def reference_style_direction(fmt: str) -> str:
     """Independent premium art direction; external examples are optional.
 
@@ -116,8 +172,8 @@ def reference_style_direction(fmt: str) -> str:
         return common+(
             "LANDSCAPE 4:3: design a balanced, high-information AGENCY "
             "PRINT POSTER: striking masthead and slogan when supplied; "
-            "large real product photo and meaningfully different secondary "
-            "photo if supplied; attractive callouts for actual supplied "
+            "one large real product hero in the selected original camera "
+            "view; no second product inset; attractive callouts for supplied "
             "claims; carefully typeset full TTH table and every approved "
             "dimension as exact text, actual proof points "
             "and advantages; coherent finance section only if verified; "
@@ -135,10 +191,9 @@ def reference_style_direction(fmt: str) -> str:
             "PORTRAIT 9:16: create a BRAND NEW naturally vertical print "
             "composition; NEVER reflow, crop or squeeze the landscape "
             "poster. Present a cohesive masthead, full actual product "
-            "hero and engaging illustrated units for supplied claims. If the "
-            "customer supplied an authentic secondary photo, create "
-            "a second visual inset; otherwise do not manufacture a "
-            "false camera angle. Then design the complete specification "
+            "hero and engaging illustrated units for supplied claims. Use "
+            "exactly one product depiction in the selected rebranded camera "
+            "view; no second visual inset or invented angle. Then design the complete specification "
             "table and exact textual dimensions as polished "
             "portrait information, followed by provided comparison "
             "arguments, advantages, verified economic story, "
