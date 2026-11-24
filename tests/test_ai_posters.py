@@ -348,7 +348,8 @@ def test_both_paid_image_edit_requests_include_safe_layout_not_old_cache(
         cache_dir=tmp_path / "safe_brand_test",
     )
     assert len(images.calls) == 2
-    assert "v6-safe-crop-no-edge-extension" in ai_poster_service.VERSION
+    assert "safe-crop-no-edge-extension" in ai_poster_service.VERSION
+    assert ai_poster_service.VERSION != "full-openai-ad-poster-creative-v6-safe-crop-no-edge-extension"
     landscape, portrait = [call["prompt"].lower() for call in images.calls]
     assert "trailer must never overlap the logo area" in landscape
     assert "protected branding/header zone at the top" in portrait

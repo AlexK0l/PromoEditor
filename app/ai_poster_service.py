@@ -20,7 +20,7 @@ from .openai_service import (
 
 FORMATS = {"4x3": ((1440, 1080), "1536x1024"),
            "9x16": ((1080, 1920), "1024x1536")}
-VERSION = "full-openai-ad-poster-creative-v7-optional-style"
+VERSION = "full-openai-ad-poster-creative-v7-optional-style-safe-crop-no-edge-extension"
 WARNING = (
     "Полный рекламный плакат создан OpenAI Images, включая художественную "
     "композицию, фотографии и типографику. Алгоритмический SVG-шаблон "
