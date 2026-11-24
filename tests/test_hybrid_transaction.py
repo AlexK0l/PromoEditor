@@ -12,9 +12,9 @@ from app import ai_poster_service, main, openai_service, product_rebrand_service
 from app.render import default_brief
 
 
-def _png(color="yellow"):
+def _png(color="yellow",size=(300,180)):
     out = io.BytesIO()
-    Image.new("RGB", (300, 180), color).save(out, "PNG")
+    Image.new("RGB", size, color).save(out, "PNG")
     return out.getvalue()
 
 
@@ -28,11 +28,11 @@ def _api():
 
         def edit(self, **kwargs):
             calls.append(("edit", kwargs["size"]))
-            return self._result()
+            return self._result(tuple(map(int,kwargs["size"].split("x"))))
 
-        def _result(self):
+        def _result(self,size=(300,180)):
             datum = type("Datum", (), {
-                "b64_json": base64.b64encode(_png("lightblue")).decode("ascii")
+                "b64_json": base64.b64encode(_png("lightblue",size)).decode("ascii")
             })()
             return type("Result", (), {"data": [datum]})()
 

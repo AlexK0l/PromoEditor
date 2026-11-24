@@ -16,9 +16,9 @@ from app.ai_native_art_direction import approved_full_copy
 from app.approved_presets import approved_zubrtrail_500
 
 
-def _png():
+def _png(size=(420,270)):
     buf=io.BytesIO()
-    Image.new("RGB",(420,270),"yellow").save(buf,"PNG")
+    Image.new("RGB",size,"yellow").save(buf,"PNG")
     return buf.getvalue()
 
 
@@ -88,7 +88,7 @@ def test_opted_in_http_route_reviews_both_real_final_rasters_once_and_caches(
     def edit(**kw):
         image_calls.append(kw)
         return SimpleNamespace(data=[SimpleNamespace(
-            b64_json=base64.b64encode(_png()).decode("ascii"))])
+            b64_json=base64.b64encode(_png(tuple(map(int,kw["size"].split("x"))))).decode("ascii"))])
     async def create(**kw):
         review_calls.append(kw)
         content=kw["input"][0]["content"]
@@ -270,7 +270,7 @@ def test_background_generation_publishes_downloadable_zip_before_review(monkeypa
     def edit(**kw):
         calls.append(kw)
         return SimpleNamespace(data=[SimpleNamespace(
-            b64_json=base64.b64encode(_png()).decode("ascii"))])
+            b64_json=base64.b64encode(_png(tuple(map(int,kw["size"].split("x"))))).decode("ascii"))])
     api=SimpleNamespace(images=SimpleNamespace(edit=edit))
     monkeypatch.setattr(ai_poster_service,"client",lambda:api)
     monkeypatch.setattr(product_rebrand_service,"client",lambda:api)

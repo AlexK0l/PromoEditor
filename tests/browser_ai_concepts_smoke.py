@@ -40,8 +40,8 @@ def main():
             "job_id": "a"*32,
             "generation_mode": "openai_full_poster",
             "export_geometry": {
-                "4x3":{"target_size":[1440,1080],"content_box":[0,60,1440,1020],"outpaint":{"status":"complete"}},
-                "9x16":{"target_size":[1080,1920],"content_box":[0,150,1080,1770],"outpaint":{"status":"not_requested"}},
+                "4x3":{"target_size":[1440,1080],"content_box":[0,0,1440,1080],"outpaint":{"status":"not_needed"}},
+                "9x16":{"target_size":[1080,1920],"content_box":[0,0,1080,1920],"outpaint":{"status":"not_needed"}},
             },
             "ai_used": True,
             "raster_only": True,
@@ -67,7 +67,7 @@ def main():
                 assert b'name="refine_attempt"' in body
                 assert b'name="refine_action"' in body
             else:
-                assert b'name="expand_posters"' in body
+                assert b'name="expand_posters"' not in body
             route.fulfill(status=202, content_type="application/json",
                           body=json.dumps({
                 "task_id": "b" * 32, "status": "running",
@@ -151,7 +151,8 @@ def main():
         assert "PNG/JPEG, НЕ SVG" in confirmations[0]
         assert "кэш" in confirmations[0]
         assert "1 платный Responses-запрос" in confirmations[0]
-        assert "до 2 платных Images-запросов" in confirmations[0]
+        assert "до 2 платных Images-запросов" not in confirmations[0]
+        assert "точных пропорциях 4:3 и 9:16" in confirmations[0]
         assert not posts, "Rejecting a paid call must make ZERO requests"
         assert page.locator("#loading").is_hidden()
 
@@ -193,16 +194,12 @@ def main():
 
         assert page.locator("#refine-panel").is_visible()
         page.locator("#refine-panel summary").click()
-        assert "поля ещё не дорисованы" in page.locator("#outpaint-status").inner_text()
-        page.once("dialog",decline)
-        page.locator("#refine-expand").click()
-        assert len(posts)==1
-        assert "До 1 платных Images-запросов" in confirmations[-1]
-        page.once("dialog",lambda dialog:dialog.accept())
-        page.locator("#refine-expand").click()
-        page.wait_for_function("() => !document.getElementById('refine-expand').disabled")
-        assert len(posts)==2
+        assert "точные пропорции, дорисовка не нужна" in page.locator("#outpaint-status").inner_text()
+        assert page.locator("#refine-expand").is_hidden()
+        assert page.locator("#refine-expand").is_disabled()
+        assert page.locator("#refine-repair").is_visible()
         assert page.locator("#refine-import-panel").is_visible()
+        assert len(posts)==1
 
         # Production interface remains usable on a phone.
         page.set_viewport_size({"width": 390, "height": 820})

@@ -28,7 +28,8 @@ from .openai_service import (analyze_documents, generate_visuals,
                              _cached_visual, _default_visual_cache,
                              _finish_visual_cache)
 from .ai_poster_service import (generate_full_posters, WARNING as AI_POSTER_WARNING,
-                                VERSION as AI_POSTER_VERSION)
+                                VERSION as AI_POSTER_VERSION,
+                                NativePosterSizeMismatch)
 from . import ai_job_queue
 from .product_rebrand_service import (
     rebrand_selected_photo, cache_dir as rebrand_cache_dir,
@@ -45,7 +46,6 @@ from .ai_native_art_direction import (
 )
 from .ai_transport import OpenAIImageConnectionFailure
 from .ai_artwork_fit import artwork_geometry
-from .ai_poster_finish import try_expand_artwork
 from .ai_poster_revision import import_bundle, revise_bundle, FORMATS as REVISION_FORMATS
 from .ai_poster_review import review_pair, skipped_review, pending_review
 from .ai_review_archive import attach_review
@@ -92,7 +92,7 @@ class PartialPosterFailure(RuntimeError):
         # Only expose fixed, allowlisted network explanations, never raw
         # SDK exception strings, customer prompts, file paths or headers.
         self.public_reason = (cause.public_reason if isinstance(
-            cause, OpenAIImageConnectionFailure) else None)
+            cause, (OpenAIImageConnectionFailure, NativePosterSizeMismatch)) else None)
 
 # Bound 6-preview renders inside a worker, especially on the 2-GB VPS.
 CONCEPT_RENDER_SLOTS=threading.BoundedSemaphore(1)
@@ -668,11 +668,15 @@ def _native_poster_recovery(folder, job_id, brief, rebranded_raw, paid_cache, ex
             if diagnostic:
                 archive.writestr('openai_connection_diagnostic.json',
                     json.dumps(diagnostic, ensure_ascii=False, indent=2))
+            if isinstance(exc, NativePosterSizeMismatch):
+                archive.writestr('native_size_diagnostic.json',
+                    json.dumps(exc.report, ensure_ascii=False, indent=2))
             archive.writestr('READ_ME_FIRST.txt',
                 'Генерация НЕ завершена. Эти материалы не предназначены для публикации.\n'
                 'Сохранены только полученные этапы, без автоматических повторных запросов.\n'
                 'Тип ошибки: '+type(exc).__name__+'.\n'
-                + ('Безопасная диагностика: '+exc.public_reason+'\n' if diagnostic else '')
+                + ('Безопасная диагностика: '+exc.public_reason+'\n'
+                   if diagnostic or isinstance(exc, NativePosterSizeMismatch) else '')
                 + 'При сетевом сбое запрос мог быть оплачен даже без полученного ответа.\n')
         return f'/files/{job_id}/ai_failed_generation.zip'
     except Exception:
@@ -701,7 +705,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        reference_raw, model, quality, selected_source=None,
                        progress=None, secondary_raw=None, variation_id='',
                        verify_posters=False, drawing_source_pdf=None,
-                       expand_posters=False, on_ready=None):
+                       on_ready=None):
     """Rebrand ONLY the selected photo before authoring both full AI posters.
 
     The original photo is immutable. The one paid rebranding edit is cached
@@ -717,7 +721,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
     rebranded_raw = cached_rebrand_photo(rebrand_dir)
     if rebranded_raw is None:
         # Fail BEFORE ANY paid Images call if capacity cannot fund all three.
-        check_paid_capacity('image', 5 if expand_posters else 3)
+        check_paid_capacity('image', 3)
     else:
         previous_sources=[rebranded_raw]+[raw for raw in
                             (logo_raw,drawing_raw,reference_raw)
@@ -727,7 +731,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             AI_POSTER_VERSION,cache_direction)
         missing=sum(_cached_visual(previous_posters,fmt) is None
                     for fmt in ('4x3','9x16'))
-        check_paid_capacity('image',missing+(2 if expand_posters and missing else 0))
+        check_paid_capacity('image',missing)
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
@@ -747,7 +751,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             brief,True,poster_sources,model,quality,
             AI_POSTER_VERSION,cache_direction)
         if progress:
-            progress('OpenAI создаёт ДВА полноценных рекламных дизайна 4:3 и 9:16')
+            progress('OpenAI сразу создаёт плакаты 4:3 (1536×1152) и 9:16 (1152×2048)')
         posters = generate_full_posters(
             brief,rebranded_raw,logo=logo_raw,drawing=drawing_raw,
             reference=reference_raw,
@@ -762,13 +766,12 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             if native.is_file():
                 with Image.open(native) as original:
                     geometry[fmt]=artwork_geometry(original.size,posters[fmt].size)
-            if expand_posters and fmt in geometry:
-                if progress:
-                    progress('OpenAI дорисовывает поля '+fmt+' без изменения исходной композиции')
-                posters[fmt],geometry[fmt]['outpaint']=try_expand_artwork(
-                    posters[fmt],geometry[fmt],model=model,quality=quality)
-            elif fmt in geometry:
-                geometry[fmt]['outpaint']={'status':'not_requested'}
+            if fmt in geometry:
+                g=geometry[fmt]
+                if g['content_box'] != [0,0,*g['target_size']]:
+                    raise RuntimeError('Native poster export cannot require padding')
+                g['outpaint']={'status':'not_needed','protected_box':g['content_box']}
+                g['generation']='native_target_aspect'
             posters[fmt].save(folder/png,format='PNG')
             posters[fmt].save(folder/jpg,format='JPEG',
                               quality=93,subsampling=0)
@@ -825,9 +828,10 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        'не является источником цены или телефонов. '
                        'approved_copy.json содержит ВСЕ исходные факты '
                        'и расчёты для сверки обоих изображений. '
-                       'В export_geometry.json — геометрия без обрезки и статус AI-дорисовки. '
-                       'Если дорисовка не запрошена или не завершена, поля остались. '
-                       'При дорисовке исходная центральная область PNG сохранена точно. '
+                       'OpenAI сразу создаёт точные пропорции 4:3 и 9:16; '
+                       'при экспорте применяется только равномерное масштабирование. '
+                       'В export_geometry.json — геометрия без обрезки и добавления полей. '
+                       'Дорисовка новых плакатов не выполняется. '
                        'В poster_review.json — статус и результаты предварительной '
                        'AI-сверки (если запрошена), НЕ подтверждение точности. '
                        'Оригинальный чертёж сохранён отдельно, габариты должны '
@@ -862,16 +866,12 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'rebranding_applied':True,
                 'publication_status':'human_review_required',
                 'secondary_used_in_artwork':False,
-                'review_gate':('blocked' if review['status']=='issues_found' or
-                               any(g.get('outpaint',{}).get('status')=='failed'
-                                   for g in geometry.values())
+                'review_gate':('blocked' if review['status']=='issues_found'
                                else 'human_review_required'),
                 'poster_review':review,
                 'review_pending':pending,
                 'export_geometry':geometry,
-                'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]+[
-                    g['outpaint']['reason'] for g in geometry.values()
-                    if g.get('outpaint',{}).get('status')=='failed']}
+                'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]}
         if verify_posters:
             if on_ready:
                 on_ready(result_for(review,True))
@@ -1189,7 +1189,6 @@ async def create_full_ai_posters(request:Request):
             secondary_raw=chosen_bytes(report,records,'secondary_photo'),
             **({'variation_id':variation_id} if variation_id else {}),
                 **({'verify_posters':True} if str(form.get('verify_posters','false')).lower()=='true' else {}),
-                **({'expand_posters':True} if str(form.get('expand_posters','false')).lower()=='true' else {}),
                 **({'drawing_source_pdf':drawing_source_pdf} if drawing_source_pdf else {}))
     except QuotaExceeded as exc:
         raise HTTPException(429,detail=str(exc)) from exc
@@ -1601,7 +1600,6 @@ async def _generate_from_form(form, progress=None, on_ready=None):
                 **({'on_ready':on_ready} if on_ready else {}),
                 **({'variation_id':variation_id} if variation_id else {}),
                 **({'verify_posters':True} if str(form.get('verify_posters','false')).lower()=='true' else {}),
-                **({'expand_posters':True} if str(form.get('expand_posters','false')).lower()=='true' else {}),
                 **({'drawing_source_pdf':drawing_source_pdf} if drawing_source_pdf else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references

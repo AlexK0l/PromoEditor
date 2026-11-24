@@ -123,7 +123,7 @@ def test_reference_pro_without_example_uses_actual_full_image_pipeline(
         calls.append(options)
         assert len(options["image"]) == 1
         return SimpleNamespace(data=[SimpleNamespace(
-            b64_json=base64.b64encode(image).decode("ascii"))])
+            b64_json=base64.b64encode(_png(*map(int,options["size"].split("x")),"#FFDD00")).decode("ascii"))])
     api=SimpleNamespace(images=SimpleNamespace(edit=edit))
     monkeypatch.setattr(ai_poster_service,"client",lambda:api)
     monkeypatch.setattr(product_rebrand_service,"client",lambda:api)
@@ -162,7 +162,7 @@ def test_reference_pro_without_example_uses_actual_full_image_pipeline(
             assert result["raster_only"] is True
             assert result["reference_used"] is False
             assert len(calls)-before==3
-            assert [c["size"] for c in calls[-2:]]==["1536x1024","1024x1536"]
+            assert [c["size"] for c in calls[-2:]]==["1536x1152","1152x2048"]
             for call in calls[-2:]:
                 assert "NO EXAMPLE IMAGE WAS PROVIDED" in call["prompt"]
                 assert brief["model"] in call["prompt"]

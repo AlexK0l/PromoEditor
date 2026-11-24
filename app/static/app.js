@@ -251,16 +251,14 @@
     simple.disabled=!apiReady||ai;
     if($('verify-posters'))$('verify-posters').disabled=!apiReady||!hybrid||isBusy;
     if($('verify-posters-option'))$('verify-posters-option').hidden=!hybrid;
-    if($('expand-posters'))$('expand-posters').disabled=!apiReady||!hybrid||isBusy;
-    if($('expand-posters-option'))$('expand-posters-option').hidden=!hybrid;
     simple.closest('.one-ai-choice').classList.toggle('is-disabled',!apiReady||ai);
     $('quick-ai-description').textContent=apiReady
       ?(ai
         ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
         :hybrid
           ?(referencePro
-            ?'Рекламный PRO: OpenAI самостоятельно разрабатывает два полноценных плаката с одним выбранным ребрендированным ракурсом. Эталон необязателен. До 3 платных Images для основы, до 2 для выбранной дорисовки полей; возможен AI-выбор фото. Дополнительные исходные ракурсы сохраняются отдельно. PNG/JPEG и ZIP без SVG.'
-            :'OpenAI целиком рисует 4:3 и самостоятельный 9:16 в одном выбранном ребрендированном ракурсе. До 3 платных Images для основы, до 2 для выбранной дорисовки полей; возможен AI-выбор фото. PNG/JPEG, локальные правки доступны после генерации.')
+            ?'Рекламный PRO: OpenAI самостоятельно разрабатывает два полноценных плаката с одним выбранным ребрендированным ракурсом. Эталон необязателен. Сразу 4:3 и 9:16, без добавления полей. До 3 платных Images; возможен AI-выбор фото. Дополнительные исходные ракурсы сохраняются отдельно. PNG/JPEG и ZIP без SVG.'
+            :'OpenAI целиком рисует 4:3 и самостоятельный 9:16 в одном выбранном ребрендированном ракурсе. Сразу 4:3 и 9:16, без добавления полей. До 3 платных Images; возможен AI-выбор фото. PNG/JPEG, локальные правки доступны после генерации.')
           :paidInTemplate
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
@@ -282,7 +280,7 @@
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
-        setStatus(apiReady?('AI-постеры · до '+(checked('expand-posters')?'5':'3')+' платных вызовов OpenAI Images'):'AI недоступен',
+        setStatus(apiReady?'AI-постеры · до 3 платных вызовов OpenAI Images':'AI недоступен',
           apiReady?(referencePro
             ?'Рекламный PRO: AI самостоятельно создаёт оба плаката, даже без эталона. При наличии эталон подсказывает стиль. Все исходные ТТХ передаются модели; точность растра нужно проверить.'
             :'AI создаёт ЦЕЛЫЙ рекламный плакат, без алгоритмического наложения текстовых блоков. Результат растровый.'):
@@ -475,7 +473,6 @@
     $('generate-btn').disabled=on;
     if($('new-variation-btn'))$('new-variation-btn').disabled=on;
     if($('verify-posters'))$('verify-posters').disabled=on||!apiReady||!isHybrid();
-    if($('expand-posters'))$('expand-posters').disabled=on||!apiReady||!isHybrid();
     refreshRefinementControls();
     $('generate-concepts-btn').disabled=on || !apiReady;
     $('generate-ai-posters-btn').disabled=on || !apiReady;
@@ -638,7 +635,9 @@
     if($('refine-import-file'))$('refine-import-file').disabled=isBusy;
     if(!$('refine-panel'))return;
     const available=canRefine();
-    $('refine-expand').disabled=isBusy||!apiReady||!available||!pendingBleeds().length;
+    const needsBleed=available&&pendingBleeds().length>0;
+    $('refine-expand').hidden=!needsBleed;
+    $('refine-expand').disabled=isBusy||!apiReady||!needsBleed;
     $('refine-repair').disabled=isBusy||!apiReady||!available||!refineImage;
     for(const id of ['refine-format','refine-issue','refine-region','refine-instruction','refine-review'])
       $(id).disabled=isBusy;
@@ -706,7 +705,7 @@
       const g=latest.export_geometry[fmt]||{};
       const state=g.outpaint?.status;
       return fmt+': '+(state==='complete'?'AI-дорисовка выполнена; проверьте стыки':
-        state==='not_needed'?'поля не нужны':state==='failed'?'дорисовка не завершена; сохранены поля':
+        state==='not_needed'?'точные пропорции, дорисовка не нужна':state==='failed'?'дорисовка не завершена; сохранены поля':
         'исходный черновик; поля ещё не дорисованы');
     });
     $('outpaint-status').textContent=notes.join(' · ');
@@ -824,7 +823,7 @@
     if(isHybrid()&&!window.confirm(
       (newVariation?'Создать НОВЫЙ художественный вариант с новыми платными вызовами? ':'')+
       'OpenAI создаст два цельных плаката с надписями и габаритами. Только выбранный ребрендированный ракурс попадёт в Images; остальные фото и чертёж сохраняются отдельно. До 3 платных вызовов OpenAI Images: ребрендинг и два формата, возможен платный выбор главного фото. '+
-      (checked('expand-posters')?'Дополнительно: до 2 платных Images-запросов для дорисовки полей без изменения центральной композиции. ':'Дорисовка отключена: поля могут остаться. ')+
+      'Плакаты сразу генерируются в точных пропорциях 4:3 и 9:16; без автоматической дорисовки и добавления полей. '+
       (checked('verify-posters')?'Дополнительно: 1 платный Responses-запрос для сверки обоих плакатов, осей, всех маркировок, логотипа и исходной геометрии. ':'AI-сверка отключена. ')+
       'Повтор того же варианта использует сохранённый кэш, пока он не истёк. Результат PNG/JPEG, НЕ SVG, без обрезки. Данные и логотип требуют ручного утверждения. Продолжить?'
     ))return;
@@ -886,7 +885,6 @@
       form.append('generation_mode',isAiPro()?'ai_pro':isHybrid()?'hybrid':'template');
       if(isHybrid()&&posterVariation)form.append('poster_variation',posterVariation);
       if(isHybrid()&&checked('verify-posters'))form.append('verify_posters','true');
-      if(isHybrid()&&checked('expand-posters'))form.append('expand_posters','true');
       if(isAiPro()){
         form.append('concept_set_id',aiConceptSet.concept_set_id);
         form.append('concept_index',String(selectedAiConcept));
@@ -1247,7 +1245,6 @@
   }
   $('generate-btn').addEventListener('click',()=>generate(false));
   $('new-variation-btn')?.addEventListener('click',()=>generate(true));
-  $('expand-posters')?.addEventListener('change',refreshGenerationMode);
   $('refine-import')?.addEventListener('click',importExistingBundle);
   $('refine-expand')?.addEventListener('click',()=>runRefinement('expand'));
   $('refine-repair')?.addEventListener('click',()=>runRefinement('repair'));

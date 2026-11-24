@@ -12,22 +12,24 @@ from app import ai_poster_service, product_rebrand_service, main
 from app.render import default_brief
 
 
-def _png(color="red"):
+def _png(color="red", size=(640,420)):
     file=io.BytesIO()
-    Image.new("RGB", (640, 420), color).save(file, "PNG")
+    Image.new("RGB", size, color).save(file, "PNG")
     return file.getvalue()
 
 
 class Images:
-    def __init__(self, fail_portrait=False):
+    def __init__(self, fail_portrait=False, wrong_size=False):
         self.calls=[]
         self.fail_portrait=fail_portrait
+        self.wrong_size=wrong_size
 
     def edit(self, **kwargs):
         self.calls.append(kwargs)
-        if self.fail_portrait and kwargs["size"]=="1024x1536":
+        if self.fail_portrait and kwargs["size"]=="1152x2048":
             raise RuntimeError("simulated second API failure")
-        encoded=base64.b64encode(_png()).decode("ascii")
+        size=(640,420) if self.wrong_size else tuple(map(int,kwargs["size"].split("x")))
+        encoded=base64.b64encode(_png(size=size)).decode("ascii")
         return type("Reply",(),{
             "data":[type("Datum",(),{"b64_json":encoded})()]})()
 
@@ -43,8 +45,8 @@ def test_no_exemplar_full_image_generator_uses_two_actual_paid_image_edits(
     assert out["9x16"].size==(1080,1920)
     assert len(images.calls)==2
     assert all(len(item["image"])==1 for item in images.calls)
-    assert images.calls[0]["size"]=="1536x1024"
-    assert images.calls[1]["size"]=="1024x1536"
+    assert images.calls[0]["size"]=="1536x1152"
+    assert images.calls[1]["size"]=="1152x2048"
     prompt=images.calls[0]["prompt"]
     assert "NO EXAMPLE IMAGE WAS PROVIDED" in prompt
     assert "not a JSON plan" in prompt
@@ -113,7 +115,8 @@ def test_ai_poster_route_without_exemplar_downloads_raster_and_originals(
     with TestClient(main.app) as client:
         response=client.post(
             "/api/ai-posters",
-            data={"payload":json.dumps(default_brief(),ensure_ascii=False)},
+            data={"payload":json.dumps(default_brief(),ensure_ascii=False),
+                  "expand_posters":"true"},  # stale clients must not buy outpainting
             files={"hero":("vehicle.png",_png(),"image/png")})
         assert response.status_code==200,response.text
         result=response.json()
@@ -147,6 +150,18 @@ def test_ai_poster_route_without_exemplar_downloads_raster_and_originals(
             assert review["human_review_required"] is True
             geometry=json.loads(z.read("export_geometry.json"))
             assert all(not info["crop"] for info in geometry.values())
+            assert geometry==result["export_geometry"]
+            from PIL import ImageChops
+            for fmt,(target,api_size) in ai_poster_service.FORMATS.items():
+                g=geometry[fmt]
+                assert g["source_size"]==list(map(int,api_size.split("x")))
+                assert g["content_box"]==[0,0,*target]
+                assert g["outpaint"]["status"]=="not_needed"
+                assert g["generation"]=="native_target_aspect"
+                with Image.open(io.BytesIO(z.read(f"native_ai_artwork_{fmt}.png"))) as native:
+                    with Image.open(io.BytesIO(z.read(f"ai_poster_{fmt}.png"))) as final:
+                        assert ImageChops.difference(final,native.resize(target,Image.Resampling.LANCZOS)).getbbox() is None
+            assert [call["size"] for call in images.calls[-2:]]==["1536x1152","1152x2048"]
 
 
 def test_ai_poster_route_requires_actual_product_photo_without_spending(
@@ -224,7 +239,7 @@ def test_partial_cached_poster_needs_only_one_remaining_daily_call(
                    (_utc_day(),"image",1))
     cache=tmp_path/"existing"
     cache.mkdir()
-    Image.new("RGB",(640,420),"red").save(cache/"4x3.png","PNG")
+    Image.new("RGB",(1536,1152),"red").save(cache/"4x3.png","PNG")
     images=Images()
     monkeypatch.setattr(ai_poster_service,"client",
                         lambda:type("API",(),{"images":images})())
@@ -233,7 +248,7 @@ def test_partial_cached_poster_needs_only_one_remaining_daily_call(
     assert out["4x3"].size==(1440,1080)
     assert out["9x16"].size==(1080,1920)
     assert len(images.calls)==1
-    assert images.calls[0]["size"]=="1024x1536"
+    assert images.calls[0]["size"]=="1152x2048"
 
 
 
@@ -254,6 +269,8 @@ def test_transparent_vehicle_png_gets_a_clean_light_model_reference():
 @pytest.mark.parametrize(
     "native_size,target,box",
     [
+        ((1536,1152), (1440,1080), [0,0,1440,1080]),
+        ((1152,2048), (1080,1920), [0,0,1080,1920]),
         ((1536, 1024), (1440, 1080), [0,60,1440,1020]),
         ((1024, 1536), (1080, 1920), [0,150,1080,1770]),
         ((1080,1920), (1080,1920), [0,0,1080,1920]),
@@ -294,14 +311,16 @@ def test_ai_prompt_demands_full_native_canvas_and_no_fabricated_blueprint():
         prompt=ai_poster_service._prompt(brief,fmt,logo=False,drawing=True,reference=False)
         assert "no post-generation edge-row stretching" in prompt.lower()
         assert "no cropping" in prompt.lower()
-        assert "3:2 or 2:3" in prompt
+        assert "3:2 or 2:3" not in prompt
+        assert "FINAL aspect ratio" in prompt
+        assert "no padding and no additional outpainting" in prompt
         assert "vertical pixel replication" in prompt
         assert "OUTER SIDE GUARD BANDS" not in prompt
         assert "preserve the whole native artwork" in prompt
         assert "NEVER redraw, reinterpret, relabel" in prompt
         assert "annual additional revenue" in prompt
         assert "difference in purchase price" in prompt
-        assert "1536x1024" in prompt if fmt=="4x3" else "1024x1536" in prompt
+        assert "1536x1152" in prompt if fmt=="4x3" else "1152x2048" in prompt
 
 
 def test_4x3_ai_prompt_protects_logo_from_trailer_overlap():
@@ -353,8 +372,8 @@ def test_both_paid_image_edit_requests_include_safe_layout_not_old_cache(
     assert "protected branding/header zone at the top" in portrait
     assert "logo must remain fully visible" in landscape
     assert "logo must remain fully visible" in portrait
-    assert images.calls[0]["size"] == "1536x1024"
-    assert images.calls[1]["size"] == "1024x1536"
+    assert images.calls[0]["size"] == "1536x1152"
+    assert images.calls[1]["size"] == "1152x2048"
 
 
 
@@ -371,3 +390,42 @@ def test_legacy_secondary_argument_never_reaches_images_or_changes_cache(monkeyp
     for call in images.calls:
         assert [f.name for f in call["image"]]==["01_real_product.png","02_logo.png"]
         assert "ONLY ONE AUTHORIZED PRODUCT VIEW" in call["prompt"]
+
+
+
+def test_wrong_native_size_is_saved_and_never_automatically_rebought(monkeypatch,tmp_path):
+    images=Images(wrong_size=True)
+    monkeypatch.setattr(ai_poster_service,"client",lambda:type("API",(),{"images":images})())
+    cache=tmp_path/"cache"
+    for _ in range(2):
+        with pytest.raises(ai_poster_service.NativePosterSizeMismatch) as error:
+            ai_poster_service.generate_full_posters(default_brief(),_png(),cache_dir=cache)
+        assert error.value.report=={"format":"4x3","requested_size":[1536,1152],
+                                    "received_size":[640,420],"automatic_retry":False}
+        assert (cache/"4x3.png").is_file()
+        assert not (cache/"9x16.png").exists()
+    assert len(images.calls)==1
+
+
+def test_wrong_size_http_response_has_recovery_zip_not_a_padded_poster(monkeypatch,tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY","mock-no-network-key")
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    images=Images(wrong_size=True)
+    monkeypatch.setattr(ai_poster_service,"client",lambda:type("API",(),{"images":images})())
+    monkeypatch.setattr(product_rebrand_service,"client",lambda:type("API",(),{"images":images})())
+    with TestClient(main.app) as http:
+        for _ in range(2):
+            result=http.post("/api/ai-posters",data={"payload":json.dumps(default_brief())},
+                             files={"hero":("photo.png",_png(),"image/png")})
+            assert result.status_code==502,result.text
+            data=result.json()
+            assert "1536×1152" in data["detail"]
+            archive=http.get(data["recovery_zip"])
+            assert archive.status_code==200
+            with zipfile.ZipFile(io.BytesIO(archive.content)) as z:
+                assert json.loads(z.read("native_size_diagnostic.json"))["received_size"]==[640,420]
+                assert "native_ai_artwork_4x3.png" in z.namelist()
+                assert "ai_poster_4x3.png" not in z.namelist()
+        assert len(images.calls)==2 # one rebrand and one paid wrong-size image

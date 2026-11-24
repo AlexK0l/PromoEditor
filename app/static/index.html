@@ -115,10 +115,9 @@
           <label for="quick-ai-toggle" class="one-ai-choice">
             <input id="quick-ai-toggle" type="checkbox" checked role="switch">
             <span class="one-ai-text"><strong>Оформить с помощью OpenAI</strong>
-              <small id="quick-ai-description">OpenAI создаёт два цельных рекламных плаката с типографикой. До 3 платных вызовов Images, возможен AI-выбор фото. Экспорт PNG/JPEG без обрезки; оригинальный чертёж и исходные AI-изображения в ZIP.</small>
+              <small id="quick-ai-description">OpenAI создаёт два цельных рекламных плаката сразу в 4:3 и 9:16. До 3 платных вызовов Images, возможен AI-выбор фото. Экспорт PNG/JPEG без обрезки и добавления полей; оригинальный чертёж и исходные AI-изображения в ZIP.</small>
             </span>
           </label>
-          <label class="check-field" id="expand-posters-option"><input id="expand-posters" type="checkbox" checked><span>AI-дорисовка до края плаката <small>До 2 дополнительных платных Images-запросов. Центральная композиция не меняется; без дорисовки могут остаться поля.</small></span></label>
           <label class="check-field" id="verify-posters-option"><input id="verify-posters" type="checkbox" checked><span>Предварительная AI-сверка обоих плакатов <small>1 дополнительный платный Responses-запрос; не заменяет ручную проверку</small></span></label>
         </div>
         <div class="generate-row">
@@ -360,7 +359,7 @@
         <summary>Доработать уже созданные плакаты без полной перегенерации</summary>
         <div class="refine-controls">
           <p id="refine-status" role="status" aria-live="polite" class="field-tip">Исходный ZIP не изменяется. Результат сохраняется новым комплектом.</p>
-          <button type="button" id="refine-expand" class="secondary-button">AI-дорисовать пустые поля обоих форматов (платно)</button>
+          <button type="button" id="refine-expand" class="secondary-button">AI-дорисовать поля старого ZIP (платно)</button>
           <label class="check-field"><input id="refine-review" type="checkbox" checked><span>Повторная сверка после правок <small>1 дополнительный платный Responses-запрос только если изображение изменилось</small></span></label>
           <h3>Исправить отдельную область</h3>
           <label>Плакат <select id="refine-format"><option value="9x16">Вертикальный 9:16</option><option value="4x3">Горизонтальный 4:3</option></select></label>
@@ -482,7 +481,7 @@
     <footer class="footer">PromoEditor · AI-дизайн, проверяемые данные в редактируемом SVG и исходное выбранное фото в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261124-review-deadline-v9" defer></script>
+  <script src="/static/app.js?v=20261124-native-aspects-v10" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>

@@ -19,9 +19,9 @@ from app.ai_transport import OpenAIImageConnectionFailure, connection_report
 from app import ai_exact_copy_template as workflow
 
 
-def _png():
+def _png(size=(350,200)):
     buf=BytesIO()
-    Image.new("RGB",(350,200),"white").save(buf,format="PNG")
+    Image.new("RGB",size,"white").save(buf,format="PNG")
     return buf.getvalue()
 
 
@@ -173,10 +173,10 @@ def test_native_paid_portrait_network_failure_has_recovery_zip_and_reuses_landsc
     def edit(**kwargs):
         calls.append(kwargs["size"])
         assert kwargs["timeout"] >= 180
-        if kwargs["size"] == "1024x1536" and failed[0]:
+        if kwargs["size"] == "1152x2048" and failed[0]:
             raise _fake_error("APIConnectionError", "ReadTimeout")
         return SimpleNamespace(data=[SimpleNamespace(
-            b64_json=base64.b64encode(png).decode("ascii"))])
+            b64_json=base64.b64encode(_png(tuple(map(int,kwargs["size"].split("x"))))).decode("ascii"))])
     api = SimpleNamespace(images=SimpleNamespace(edit=edit))
     monkeypatch.setattr(ai_poster_service, "client", lambda: api)
     monkeypatch.setattr(product_rebrand_service, "client", lambda: api)
@@ -196,4 +196,4 @@ def test_native_paid_portrait_network_failure_has_recovery_zip_and_reuses_landsc
     failed[0] = False
     assert main._full_posters_sync(*args)["raster_only"]
     assert len(calls) == 4, "Only the failed portrait is retried on explicit user action"
-    assert calls[-1] == "1024x1536"
+    assert calls[-1] == "1152x2048"

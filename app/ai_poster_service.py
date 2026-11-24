@@ -22,9 +22,34 @@ from .openai_service import (
     _cached_visual, _save_visual, _finish_visual_cache,
 )
 
-FORMATS = {"4x3": ((1440, 1080), "1536x1024"),
-           "9x16": ((1080, 1920), "1024x1536")}
-VERSION = "full-openai-ad-poster-creative-v9-single-view-full-image-no-crop"
+# Both configured GPT Image 2.5 models support custom sizes, divisible by 16.
+# Request the FINAL aspect natively. Both exports use a uniform 15/16 scale.
+FORMATS = {"4x3": ((1440, 1080), "1536x1152"),
+           "9x16": ((1080, 1920), "1152x2048")}
+VERSION = "full-openai-ad-poster-creative-v10-native-aspects-full-image-no-crop"
+
+
+class NativePosterSizeMismatch(RuntimeError):
+    """A paid image was received but its dimensions differ from the request."""
+
+    def __init__(self, fmt, requested, actual):
+        self.report = {
+            "format": fmt, "requested_size": list(requested),
+            "received_size": list(actual), "automatic_retry": False,
+        }
+        self.public_reason = (
+            f"OpenAI вернул для {fmt} размер {actual[0]}×{actual[1]} "
+            f"вместо запрошенных {requested[0]}×{requested[1]}. "
+            "Полученное изображение сохранено без обрезки. "
+            "Автоматической дорисовки и повторной покупки нет."
+        )
+        super().__init__(self.public_reason)
+
+
+def _require_native_size(image, fmt, api_size):
+    requested = tuple(map(int, api_size.split("x")))
+    if image.size != requested:
+        raise NativePosterSizeMismatch(fmt, requested, image.size)
 WARNING = (
     "Полный рекламный плакат создан OpenAI Images, включая художественную "
     "композицию, фотографии и типографику. Алгоритмический SVG-шаблон "
@@ -262,20 +287,19 @@ def _prompt(brief, fmt, logo, drawing, reference,
         "any technical facts for aesthetic reasons; change the design "
         "to fit. Avoid tiny, unreadable body text. "
         "AI text fidelity is NOT guaranteed and requires user review. "
-        "FINAL-FORMAT ART DIRECTION: the native Images 3:2 or 2:3 "
-        "canvas differs from the delivered 4:3 or 9:16 poster. "
-        "Compose a COMPLETE finished advertisement across the entire native "
-        "canvas with readable margins on all four sides. The application "
-        "will preserve the whole native artwork, uniformly scale it to fit "
-        "the exact target aspect. If needed, a separate explicitly authorized "
-        "masked AI outpainting step extends the outer margins. Until that step "
-        "the preview may have neutral matte. Keep all artwork inside the native canvas. "
+        "FINAL-FORMAT ART DIRECTION: design directly on the requested FINAL "
+        "aspect ratio, filling the full native canvas edge to edge with finished "
+        "art direction. No letterbox, pillarbox, blank bands, artificial frame "
+        "or placeholder margins. Keep all critical content legible inside "
+        "ordinary typographic print margins, but continue the background and "
+        "visual design naturally all the way to every edge. The application will "
+        "preserve the whole native artwork with uniform proportional resizing only. "
         "There is NO cropping, no post-generation edge-row stretching, "
-        "no vertical pixel replication, no mirrored or blurred filler. "
-        "The native original is also delivered without padding. "
-        + ("LANDSCAPE SOURCE 1536x1024: design an independent landscape campaign. "
+        "no vertical pixel replication, no mirrored or blurred filler, "
+        "no padding and no additional outpainting. "
+        + ("LANDSCAPE SOURCE 1536x1152, exact 4:3: design an independent landscape campaign. "
            if fmt=="4x3" else
-           "PORTRAIT SOURCE 1024x1536: design a completely separate vertical "
+           "PORTRAIT SOURCE 1152x2048, exact 9:16: design a completely separate vertical "
            "campaign, not a reflow of the landscape. ")
         + "Make all content complete inside the actual canvas, including the "
         "whole vehicle, both phone numbers, complete price, all facts, all "
@@ -325,6 +349,11 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
         # Before consuming even ONE image credit, require sufficient daily
         # quota for all missing aspects. Partial paid images are reused.
         cached = {fmt: _cached_visual(cache_dir, fmt) for fmt in FORMATS}
+        # Never silently buy another aspect after finding an incompatible
+        # paid response in this cache. Preserve it for the recovery ZIP.
+        for fmt, image in cached.items():
+            if image is not None:
+                _require_native_size(image, fmt, FORMATS[fmt][1])
         check_paid_capacity("image", sum(img is None for img in cached.values()))
         api = None
         for fmt, (target, api_size) in FORMATS.items():
@@ -350,7 +379,12 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
                     size=api_size, quality=quality, output_format="png")
                 image = as_image(response)
                 _save_visual(cache_dir, fmt, image)
-            output[fmt] = finish_artwork_in_safe_aspect(image,target)
+            # Save the paid native response BEFORE validating dimensions.
+            # Never crop, pad, stretch or request an extra generative edit.
+            _require_native_size(image, fmt, api_size)
+            if image.width * target[1] != image.height * target[0]:
+                raise RuntimeError("Configured native and export aspects differ")
+            output[fmt] = image.resize(target, Image.Resampling.LANCZOS)
         # Do not consume chargeable image outputs before downstream ZIP export.
         if consume_cache:
             _finish_visual_cache(cache_dir)

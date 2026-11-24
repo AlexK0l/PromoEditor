@@ -15,15 +15,15 @@ from app.ai_quota import QuotaExceeded
 from app.render import default_brief
 
 
-def png(color):
+def png(color, size=(420,270)):
     buffer = io.BytesIO()
-    Image.new("RGB", (420, 270), color).save(buffer, "PNG")
+    Image.new("RGB", size, color).save(buffer, "PNG")
     return buffer.getvalue()
 
 
-def reply(color):
+def reply(color, size=(420,270)):
     data = type("Datum", (), {
-        "b64_json": base64.b64encode(png(color)).decode("ascii"),
+        "b64_json": base64.b64encode(png(color,size)).decode("ascii"),
     })()
     return type("Response", (), {"data": [data]})()
 
@@ -54,7 +54,7 @@ def selected_image_calls(monkeypatch):
                 "input_names":[part.name for part in kw["image"]],
                 "prompt": kw["prompt"],
             })
-            return reply((25, 180, 170))
+            return reply((25, 180, 170),tuple(map(int,kw["size"].split("x"))))
 
     monkeypatch.setattr(
         product_rebrand_service, "client",
@@ -122,7 +122,7 @@ def test_multiple_photos_ai_picks_second_and_only_second_is_rebranded(
             "Main mode must make TWO genuine OpenAI artwork edits"
         )
         assert [c["size"] for c in calls["posters"]]==[
-            "1536x1024","1024x1536",
+            "1536x1152","1152x2048",
         ]
         assert all(c["pixel"]==(180,20,180)
                    for c in calls["posters"]), (
