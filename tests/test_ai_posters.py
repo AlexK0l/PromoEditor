@@ -293,7 +293,7 @@ def test_ai_prompt_requests_central_9x16_design_and_no_edge_extension():
             brief,fmt,logo=False,drawing=False,reference=False)
         assert "no post-generation edge-row stretching" in prompt.lower()
         assert "OUTER SIDE GUARD BANDS" in prompt
-        assert "do NOT compose for the entire native image" in prompt
+        assert "do not compose for the entire native image" in prompt.lower()
         assert "3:2 or 2:3" in prompt
         assert "vertical pixel replication" in prompt
         assert "adds vertical decorative bleed" not in prompt
