@@ -199,3 +199,47 @@ def test_revision_without_recheck_invalidates_previous_review(setup):
         assert state["status"]=="complete",state
         assert state["result"]["poster_review"]["status"]=="not_requested"
         assert len(calls)==1 and not reviews
+
+
+
+def test_revision_publishes_edited_zip_before_optional_review(setup,monkeypatch):
+    import threading
+    calls,reviews,storage=setup
+    entered=threading.Event()
+    release=threading.Event()
+    def review(approved,folder,cache,**kw):
+        entered.set()
+        assert release.wait(10)
+        raise RuntimeError("private upstream failure")
+    monkeypatch.setattr(revision,"review_pair",review)
+    with TestClient(main.app) as http:
+        loaded=_import(http,_bundle())
+        try:
+            response=http.post("/api/generate/start",data={
+                "generation_mode":"refine_posters","source_job":loaded["job_id"],
+                "refine_action":"repair","refine_format":"9x16",
+                "refine_region":"[800,1280,1040,1510]","refine_instruction":"Исправить 240.",
+                "refine_attempt":"a"*32,"verify_posters":"true",
+            })
+            assert response.status_code==202,response.text
+            assert entered.wait(10)
+            url=response.json()["status_url"]
+            state=http.get(url).json()
+            assert state["status"]=="running" and state["result"]["review_pending"]
+            ready=http.get(state["result"]["zip"]).content
+            with zipfile.ZipFile(io.BytesIO(ready)) as z:
+                assert z.testzip() is None
+                assert json.loads(z.read("poster_review.json"))["status"]=="unavailable"
+            release.set()
+            deadline=time.monotonic()+10
+            while time.monotonic()<deadline:
+                state=http.get(url).json()
+                if state["status"]=="complete":
+                    break
+                time.sleep(.04)
+            assert state["status"]=="complete",state
+            assert not state["result"]["review_pending"]
+            assert http.get(state["result"]["zip"]).content==ready
+            assert len(calls)==1
+        finally:
+            release.set()

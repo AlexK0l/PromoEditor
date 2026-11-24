@@ -3,6 +3,8 @@ import asyncio
 import base64
 import io
 import json
+import threading
+import time
 import zipfile
 from types import SimpleNamespace
 
@@ -254,3 +256,63 @@ def test_review_has_absolute_deadline_even_with_active_connection(monkeypatch,tm
     assert len(calls)==1 and cancelled==[True]
     assert ai_poster_review.review_pair(approved,folder,tmp_path/"cache")==result
     assert len(calls)==1
+
+
+
+def test_background_generation_publishes_downloadable_zip_before_review(monkeypatch,tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY","fake-test-key")
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    entered=threading.Event()
+    release=threading.Event()
+    calls=[]
+    def edit(**kw):
+        calls.append(kw)
+        return SimpleNamespace(data=[SimpleNamespace(
+            b64_json=base64.b64encode(_png()).decode("ascii"))])
+    api=SimpleNamespace(images=SimpleNamespace(edit=edit))
+    monkeypatch.setattr(ai_poster_service,"client",lambda:api)
+    monkeypatch.setattr(product_rebrand_service,"client",lambda:api)
+    def review(approved,folder,cache,**kw):
+        assert (folder/"ai_posters.zip").is_file()
+        entered.set()
+        assert release.wait(10)
+        return {"status":"issues_found","formats":{},"issues_count":1,"human_review_required":True}
+    monkeypatch.setattr(main,"review_pair",review)
+    with TestClient(main.app) as http:
+        try:
+            started=http.post("/api/generate/start",data={
+                "payload":json.dumps(approved_zubrtrail_500(),ensure_ascii=False),
+                "generation_mode":"hybrid","verify_posters":"true","use_openai":"true",
+            },files={"hero":("photo.png",_png(),"image/png")})
+            assert started.status_code==202,started.text
+            assert entered.wait(10)
+            url=started.json()["status_url"]
+            state=http.get(url).json()
+            assert state["status"]=="running"
+            assert state["result"]["review_pending"] is True
+            result=state["result"]
+            original=http.get(result["zip"]).content
+            with zipfile.ZipFile(io.BytesIO(original)) as z:
+                assert z.testzip() is None
+                assert json.loads(z.read("poster_review.json"))["status"]=="unavailable"
+                assert len([name for name in z.namelist() if name.startswith("native_ai_artwork")])==2
+            release.set()
+            deadline=time.monotonic()+10
+            while time.monotonic()<deadline:
+                state=http.get(url).json()
+                if state["status"]=="complete":
+                    break
+                time.sleep(.03)
+            assert state["status"]=="complete",state
+            assert state["result"]["review_pending"] is False
+            final=http.get(result["zip"]).content
+            with zipfile.ZipFile(io.BytesIO(original)) as a,zipfile.ZipFile(io.BytesIO(final)) as b:
+                assert json.loads(b.read("poster_review.json"))["status"]=="issues_found"
+                for name in a.namelist():
+                    if name!="poster_review.json":
+                        assert a.read(name)==b.read(name)
+            assert len(calls)==3
+        finally:
+            release.set()

@@ -7,6 +7,7 @@
   let latest = null;
   let apiReady = false;
   let isBusy = false;
+  let pollingPaidTask = false;
   let hasDemo = false;
   let isDemoLoading = false;
   let promptDirty = true;
@@ -89,6 +90,12 @@
     banner.classList.toggle('is-done',state==='done');
     banner.querySelector('strong').textContent=title;
     banner.querySelector('small').textContent=message;
+    // The visible loading panel, not just the separate mode banner, must
+    // report the real server stage and never mask it with a generic spinner.
+    if(isBusy&&state==='working'){
+      $('loading').querySelector('strong').textContent=title;
+      $('loading').querySelector('small').textContent=message;
+    }
   }
   function showError(message,focusId){
     $('error-box').hidden=false;
@@ -114,6 +121,9 @@
       throw new Error('Сервер не вернул корректный номер AI-задачи.');
     const endpoint='/api/generate/status/'+taskId;
     let temporaryFailures=0;
+    let shownReadyJob='';
+    pollingPaidTask=true;
+    try{
     for(;;){
       await new Promise(resolve=>window.setTimeout(resolve,2400));
       let response;
@@ -155,9 +165,19 @@
       }
       if(state.status!=='running')
         throw new Error('Неизвестное состояние AI-задачи: '+taskId);
-      setStatus('AI-генерация выполняется',state.stage||
-        'OpenAI обрабатывает выбранный прицеп и два рекламных макета.','working');
+      if(state.result?.review_pending&&state.result?.images&&state.result?.zip&&
+          state.result.job_id!==shownReadyJob){
+        shownReadyJob=state.result.job_id;
+        latest=state.result;
+        presentGeneratedResult();
+      }
+      const age=Number.isFinite(state.stage_age_seconds)?
+        ' · На этом этапе: '+Math.floor(state.stage_age_seconds/60)+' мин '+(state.stage_age_seconds%60)+' с.':'';
+      setStatus(state.result?.review_pending?'Плакаты готовы — AI-сверка отдельно':'AI-генерация выполняется',
+        (state.stage||'OpenAI обрабатывает выбранный прицеп и два рекламных макета.')+age,
+        'working');
     }
+    }finally{pollingPaidTask=false;}
   }
   function invalidateResult(){
     if(isBusy||!latest)return;
@@ -466,6 +486,10 @@
     $('approved-preset-btn').disabled=on;
     $('inspect-btn').disabled=on||!$('documents').files.length;
     $('loading').hidden=!on;
+    if(on){
+      $('loading').querySelector('strong').textContent='Подготавливаем материалы…';
+      $('loading').querySelector('small').textContent='Ожидаем текущий этап сервера.';
+    }
     const button=$('generate-btn');
     if(on)button.textContent='Создаём изображения…';
     else refreshGenerationMode();
@@ -537,7 +561,10 @@
         if(!rasterOnly&&$('poster-review-details'))$('poster-review-details').hidden=true;
         if(rasterOnly){
           const messages={issues_found:'НЕ ДЛЯ ПУБЛИКАЦИИ: AI-сверка выявила расхождения или непроверенные данные: '+(review?.issues_count??'—')+'.',no_issues_detected:'AI-сверка не выявила расхождений в проверенных полях. Это не гарантия точности.',unavailable:'AI-сверка недоступна; изображения сохранены, требуется ручная сверка.',not_requested:'AI-сверка не запускалась; требуется ручная сверка.'};
-          $('poster-review-status').textContent=(messages[review?.status]||messages.not_requested)+' Подробности в poster_review.json. Не публикуйте без проверки.';
+          $('poster-review-status').textContent=(latest.review_pending?
+            'Плакаты уже доступны. AI-сверка выполняется отдельно; в скачанном сейчас ZIP она отмечена как незавершённая. После окончания скачайте обновлённый ZIP.':
+            (messages[review?.status]||messages.not_requested)+(review?.reason?' '+review.reason:''))+
+            ' Подробности в poster_review.json. Не публикуйте без проверки.';
           const details=$('poster-review-details');
           if(details){
             details.replaceChildren();
@@ -564,7 +591,8 @@
           }
         }
       }
-      $('download-title').textContent=rasterOnly?'AI-черновики для проверки':'Файлы готовы к скачиванию';
+      $('download-title').textContent=rasterOnly?
+        (latest.review_pending?'Плакаты доступны — сверка продолжается':'AI-черновики для проверки'):'Файлы готовы к скачиванию';
       for(const id of ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16'])
         $(id).disabled=false;
       for(const fmt of ['4x3','9x16']){
@@ -823,7 +851,7 @@
     const slowWarning=window.setTimeout(()=>{
       // A stalled HTTP request may still be rendering on the server. Avoid
       // pretending it was cancelled or encouraging costly duplicate jobs.
-      if(!isBusy)return;
+      if(!isBusy||pollingPaidTask)return;
       loadingMessage.textContent=paidRendering
         ?'OpenAI всё ещё выполняет запросы. Это может занимать несколько минут. Не запускайте генерацию повторно.'
         :'Создание макета затянулось. Не нажимайте повторно; проверьте нагрузку тестовой службы на VPS.';
@@ -878,7 +906,8 @@
       }else latest=result;
       presentGeneratedResult();
     }catch(error){
-      setStatus('Не удалось создать файлы','Исправьте ошибку и повторите попытку.');
+      setStatus(latest?.review_pending?'Плакаты сохранены, статус сверки неизвестен':'Не удалось создать файлы',
+        'Проверьте статус задания. Не повторяйте платную генерацию автоматически.');
       if(/файл|фото|ракурс|материал/i.test(error.message||'')){
         $('pro-workspace').open=true;
         $('asset-review-details').open=true;

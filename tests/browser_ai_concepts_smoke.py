@@ -79,6 +79,13 @@ def main():
             if len(status_requests) == 1:
                 route.fulfill(status=502, body="Bad Gateway",
                               content_type="text/plain")
+            elif len(status_requests)==2:
+                ready={**completed,"review_pending":True,"poster_review":{
+                    "status":"unavailable","human_review_required":True}}
+                route.fulfill(status=200,content_type="application/json",body=json.dumps({
+                    "status":"running","stage":"Плакаты доступны для скачивания; выполняется AI-сверка",
+                    "stage_age_seconds":42,"result":ready,
+                }))
             else:
                 route.fulfill(status=200, content_type="application/json",
                               body=json.dumps({
@@ -155,7 +162,13 @@ def main():
             timeout=30000,
         )
         assert len(posts) == 1, posts
-        assert len(status_requests) == 2, status_requests
+        assert page.locator("#download-all").is_enabled()
+        assert page.locator("#generate-btn").is_disabled()
+        assert "сверка" in page.locator("#loading strong").inner_text().lower()
+        assert "42 с" in page.locator("#loading small").inner_text()
+        assert "сверка выполняется отдельно" in page.locator("#poster-review-status").inner_text()
+        page.wait_for_function("() => document.getElementById('loading').hidden",timeout=15000)
+        assert len(status_requests) == 3, status_requests
         assert page.locator("#generated-previews").is_visible()
         assert page.locator("#generated-preview-4x3").get_attribute("src") == "/static/demo_4x3.svg"
         assert page.locator("#generated-preview-9x16").get_attribute("src") == "/static/demo_9x16.svg"
