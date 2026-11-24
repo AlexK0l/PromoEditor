@@ -207,3 +207,19 @@ def test_explicit_geometry_and_complete_finance_checklist_for_both_formats():
         assert "negative spaces" in prompt
         for key,label in ROI_DISPLAY_LABELS.items():
             assert label+": "+source["verified_economic_scenario"][key] in prompt
+
+
+
+def test_full_copy_checklist_preserves_all_benefits_and_semantic_icons_in_each_aspect():
+    brief=approved_zubrtrail_500()
+    approved=approved_full_copy(brief)
+    for fmt in ("4x3","9x16"):
+        prompt=ai_poster_service._prompt(brief,fmt,True,True,False,product_is_rebranded=True)
+        assert "EVERY APPROVED CUSTOMER BENEFIT" in prompt
+        assert "EVERY APPROVED SELLING CLAIM" in prompt
+        for key in ("selling_claims","customer_benefits"):
+            for i,value in enumerate(approved[key]):
+                assert f"{i+1}. {value}" in prompt
+        assert "ONE VAT qualifier" in prompt
+        assert "without an icon whenever unsure" in prompt
+        assert "reduce photo area or ornamental elements" in prompt

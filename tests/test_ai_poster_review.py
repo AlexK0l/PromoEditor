@@ -33,6 +33,7 @@ def _observations(approved, visual_keys, *, fail=True):
         if fail and fmt=="9x16":
             rows=[r for r in rows if r["id"]!="roi_annual_additional_revenue"]
         formats.append({"format":fmt,"fields":rows,
+                        "price_block":{"price_occurrences":1,"tax_notes":["с НДС"],"region":None},
                         "visuals":[{"id":v,"state":"no_issue_detected",
                                     "observation":"Проверено визуально"} for v in visual_keys],
                         "vehicle_instances":[{
@@ -102,7 +103,7 @@ def test_opted_in_http_route_reviews_both_real_final_rasters_once_and_caches(
         assert "7 550 мм" not in content[0]["text"]
         assert "6 527 000" not in content[0]["text"]
         return SimpleNamespace(output_text=json.dumps(_observations(
-            approved,["readability","unwanted_blueprint","product","source_geometry","drawing_consistency"])))
+            approved,ai_poster_review._visual_keys(None,True,True,True))))
     async def close():
         pass
     api=SimpleNamespace(images=SimpleNamespace(edit=edit),responses=SimpleNamespace(create=create),close=close)
@@ -352,7 +353,7 @@ def test_pressure_skips_review_without_paid_request_or_cached_failure(monkeypatc
     assert result["status"]=="unavailable"
     assert "до платного запроса" in result["reason"]
     assert not calls
-    assert not (tmp_path/"cache"/"poster_review_v3.json").exists()
+    assert not (tmp_path/"cache"/"poster_review_v4.json").exists()
 
 
 def test_shared_vps_memory_admission_rejects_observed_thrash(monkeypatch,tmp_path):
@@ -377,3 +378,56 @@ def test_shared_vps_memory_admission_rejects_observed_thrash(monkeypatch,tmp_pat
     (tmp_path/"memory.stat").write_text("inactive_file 0\n")
     with pytest.raises(ReviewMemoryUnavailable):
         check_review_memory(meminfo=mem,group=tmp_path)
+
+
+
+def test_review_catches_missing_benefits_duplicate_vat_and_wrong_icons():
+    approved=approved_full_copy(approved_zubrtrail_500())
+    keys=ai_poster_review._visual_keys(None,None,None)
+    raw=_observations(approved,keys,fail=False)
+    assert ai_poster_review.compare_review(approved,raw,keys)["status"]=="no_issues_detected"
+    wide,tall=raw["formats"]
+    # Changing order of two actual full benefits is harmless.
+    a,b=[next(x for x in wide["fields"] if x["id"]==name)
+         for name in ("benefit_0","benefit_1")]
+    a["observed"],b["observed"]=b["observed"],a["observed"]
+    assert ai_poster_review.compare_review(approved,raw,keys)["status"]=="no_issues_detected"
+    # Generic footer text cannot pass as a specific benefit.
+    a["observed"]="Надёжная техника"
+    icon=next(x for x in wide["visuals"] if x["id"]=="pictograms")
+    icon.update(state="issue",observation="Значок массы у гидроцилиндра",region=[760,350,990,420])
+    tall["price_block"].update(tax_notes=["с НДС","с НΛС"],region=[50,820,390,900])
+    report=ai_poster_review.compare_review(approved,raw,keys)
+    assert report["issues_count"]==3
+    assert report["status"]=="issues_found"
+    assert any(x["status"]!="match" for x in report["formats"]["4x3"]["fields"] if x["id"].startswith("benefit_"))
+    price=next(x for x in report["formats"]["9x16"]["visuals"] if x["id"]=="price_integrity")
+    assert price["status"]=="issue" and price["region"]==[50,820,390,900]
+    assert report["formats"]["9x16"]["price_block"]["tax_notes"]==["с НДС","с НΛС"]
+    assert report["human_review_required"]
+
+
+def test_missing_price_count_does_not_pass_generic_review():
+    approved=approved_full_copy(approved_zubrtrail_500())
+    keys=ai_poster_review._visual_keys(None,None,None)
+    raw=_observations(approved,keys,fail=False)
+    del raw["formats"][0]["price_block"]
+    assert ai_poster_review.compare_review(approved,raw,keys)["issues_count"]==1
+
+
+def test_safe_review_previews_accept_real_upload_sizes():
+    # Reproduce the exact sizes that triggered the previous memory guard.
+    # No network; verify both files retain their original bytes.
+    import hashlib
+    for size,kind in (((3840,2400),"PNG"),((8840,6614),"JPEG")):
+        with Image.new("RGB",size,(80,110,140)) as original:
+            buf=io.BytesIO()
+            original.save(buf,kind)
+        raw=buf.getvalue()
+        digest=hashlib.sha256(raw).digest()
+        item=ai_poster_review._image_item(raw,max_edge=1280)
+        with Image.open(io.BytesIO(base64.b64decode(item["image_url"].split(",",1)[1]))) as preview:
+            assert preview.format=="JPEG"
+            assert max(preview.size)==1280
+            assert preview.width*size[1]//size[0] in range(preview.height-1,preview.height+2)
+        assert hashlib.sha256(raw).digest()==digest

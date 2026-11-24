@@ -115,6 +115,21 @@ def mandatory_copy_direction(approved: dict) -> str:
     for key, label in (("brand","Бренд"),("model","Модель"),("category","Категория")):
         if approved.get(key):
             lines.append(label + ": " + approved[key])
+    for key, title in (("selling_claims","EVERY APPROVED SELLING CLAIM"),
+                       ("customer_benefits","EVERY APPROVED CUSTOMER BENEFIT")):
+        values=approved.get(key) or []
+        if values:
+            lines.append(title+" — all "+str(len(values))+
+                         " items as distinct readable text, preserving exact wording. "
+                         "Do not merge claims with benefits, shorten into generic slogans, "
+                         "substitute unrelated features, or omit an item for lack of space.")
+            lines.extend(f"{i+1}. {value}" for i,value in enumerate(values))
+    proofs=approved.get("approved_proofs") or []
+    if proofs:
+        lines.append("All approved comparison and proof facts must be visible. "
+                     "The same precise fact in the technical/finance table can satisfy a "
+                     "proof; do not gratuitously repeat the same numeric result.")
+        lines.extend(proofs)
     roi = approved.get("verified_economic_scenario")
     if roi:
         lines.append("Print a complete readable finance table, one distinct labelled row "
@@ -125,8 +140,19 @@ def mandatory_copy_direction(approved: dict) -> str:
             if roi.get(key) is not None:
                 lines.append(label + ": " + str(roi[key]))
     lines.append("Price/VAT must appear accurately, once, without malformed repeated tax text. "
-                 "Before returning the image verify EVERY required row, model, category "
-                 "and both supplied phone numbers. Never sacrifice them to enlarge photography.")
+                 "Use exactly ONE sale-price block and ONE VAT qualifier if supplied, "
+                 "with no separate duplicate VAT tag, extra currency sign, repeated digits "
+                 "or contradictory price. If the source has no VAT qualifier do not add one. "
+                 "Every technical or benefit pictogram must depict the meaning of its own "
+                 "adjacent label. Never reuse a generic trailer/weight icon for unrelated "
+                 "facts. Use a clean typographic row without an icon whenever unsure. "
+                 "For technical and dimension lists, readable text is preferable to "
+                 "irrelevant, repeated, invented or confusing icons. "
+                 "Reserve sufficient space for ALL supplied claims AND benefits before "
+                 "decorative graphics; reduce photo area or ornamental elements as needed. "
+                 "Before returning the image verify EVERY required row, model, category, "
+                 "claim, benefit and both supplied phone numbers. Never sacrifice them "
+                 "to enlarge photography.")
     return "\n".join(lines)
 
 

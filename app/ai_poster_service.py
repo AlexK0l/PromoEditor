@@ -26,7 +26,7 @@ from .openai_service import (
 # Request the FINAL aspect natively. Both exports use a uniform 15/16 scale.
 FORMATS = {"4x3": ((1440, 1080), "1536x1152"),
            "9x16": ((1080, 1920), "1152x2048")}
-VERSION = "full-openai-ad-poster-creative-v10-native-aspects-full-image-no-crop"
+VERSION = "full-openai-ad-poster-creative-v11-complete-benefits-native-aspects-full-image-no-crop"
 
 
 class NativePosterSizeMismatch(RuntimeError):
