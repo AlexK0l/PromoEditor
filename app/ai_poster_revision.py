@@ -17,7 +17,8 @@ from PIL import Image, ImageChops
 from .ai_artwork_fit import artwork_geometry
 from .ai_poster_finish import try_expand_artwork, repair_artwork, validate_repair
 from .ai_poster_review import (expected_fields, review_pair, skipped_review,
-                               pending_review, normalized_region)
+                               pending_review, normalized_region,
+                               _canonical, _unique, _visual_keys, _check_price_block)
 from .ai_review_archive import attach_review
 from .openai_service import IMAGE_MODELS, IMAGE_QUALITIES, _default_visual_cache
 
@@ -111,19 +112,20 @@ def _safe_review(raw, approved):
         values=report.get("fields",[])
         if not isinstance(values,list):
             return skipped_review()
-        for item in values[:250]:
-            if not isinstance(item,dict) or item.get("id") not in fields:
-                continue
-            field=fields[item["id"]]
-            region=item.get("region")
-            if (not isinstance(region,list) or len(region)!=4 or
-                    any(type(n) is not int for n in region) or
-                    not(0<=region[0]<region[2]<=1000 and 0<=region[1]<region[3]<=1000)):
-                region=None
+        for field_id,field in fields.items():
+            # A previous-generation report may have omitted the new claim/
+            # benefit fields. Absence or duplicate evidence is not a match.
+            item=_unique(values[:250],"id",field_id) or {}
+            observed=item.get("observed")
+            observed=observed[:500] if isinstance(observed,str) else ""
             state=item.get("status")
-            checks.append({**field,"observed":str(item.get("observed",""))[:500],
-                           "status":state if state in ("match","different","missing","unreadable","conflicting","unverified") else "unverified",
-                           "region":region})
+            if state not in ("match","different","missing","unreadable","conflicting","unverified"):
+                state="unverified"
+            if state=="match" and (not observed.strip() or
+                    _canonical(observed,field["kind"])!=_canonical(field["expected"],field["kind"])):
+                state="different" if observed.strip() else "unverified"
+            checks.append({**field,"observed":observed,"status":state,
+                           "region":normalized_region(item.get("region"))})
         visuals=[]
         if isinstance(report.get("visuals"),list):
             for item in report["visuals"][:30]:
@@ -133,11 +135,29 @@ def _safe_review(raw, approved):
                                     "region":normalized_region(item.get("region")),
                                     "status":item.get("status") if item.get("status") in
                                     ("no_issue_detected","issue","uncertain") else "uncertain"})
+        for key in _visual_keys(None,None,None):
+            matches=[item for item in visuals if item["id"]==key]
+            if not matches:
+                visuals.append({"id":key,"status":"uncertain",
+                    "observation":"В прежнем отчёте нет этой проверки.","region":None})
+            elif len(matches)>1:
+                for item in matches:
+                    item["status"]="uncertain"
+            elif not matches[0]["observation"].strip():
+                matches[0]["status"]="uncertain"
+        price_visual=next(item for item in visuals if item["id"]=="price_integrity")
+        evidence_status={"status":"no_issue_detected","observation":"",
+                         "region":price_visual.get("region")}
+        price_evidence=_check_price_block(approved,report,evidence_status)
+        if evidence_status["status"]=="issue" and price_visual["status"]!="issue":
+            price_visual.update(evidence_status)
         vehicle=report.get("vehicle_check",{})
         issues=vehicle.get("issues",[]) if isinstance(vehicle,dict) else []
         issues=[s[:500] for s in issues[:50] if isinstance(s,str)] if isinstance(issues,list) else []
         count=sum(c["status"]!="match" for c in checks)+sum(v["status"]!="no_issue_detected" for v in visuals)+len(issues)
-        clean["formats"][fmt]={"fields":checks,"visuals":visuals,"vehicle_check":{"issues":issues},"issues_count":count}
+        clean["formats"][fmt]={"fields":checks,"visuals":visuals,
+                               "price_block":price_evidence,
+                               "vehicle_check":{"issues":issues},"issues_count":count}
         clean["issues_count"]+=count
     if clean["issues_count"]:
         clean["status"]="issues_found"

@@ -276,3 +276,25 @@ def test_import_keeps_review_skip_reason_and_visual_location():
         for fmt in revision.FORMATS}}
     clean=revision._safe_review(report,approved)
     assert clean["formats"]["9x16"]["visuals"][0]["region"]==[40,820,390,900]
+
+
+
+def test_old_or_incomplete_clean_report_cannot_claim_new_checks_passed():
+    approved=approved_full_copy(approved_zubrtrail_500())
+    old={"status":"no_issues_detected","formats":{}}
+    for fmt in revision.FORMATS:
+        old["formats"][fmt]={"fields":[{"id":"model","status":"match",
+                                        "observed":approved["model"]}],
+                             "visuals":[{"id":"readability","status":"no_issue_detected",
+                                         "observation":"Проверено"}]}
+    clean=revision._safe_review(old,approved)
+    assert clean["status"]=="issues_found"
+    for fmt in revision.FORMATS:
+        report=clean["formats"][fmt]
+        assert next(f for f in report["fields"] if f["id"]=="model")["status"]=="match"
+        assert next(f for f in report["fields"] if f["id"]=="benefit_0")["status"]=="unverified"
+        assert next(v for v in report["visuals"] if v["id"]=="pictograms")["status"]=="uncertain"
+        assert next(v for v in report["visuals"] if v["id"]=="price_integrity")["status"]=="issue"
+    old["formats"]["4x3"]["fields"][0]["observed"]="Неправильная модель"
+    fields=revision._safe_review(old,approved)["formats"]["4x3"]["fields"]
+    assert next(f for f in fields if f["id"]=="model")["status"]=="different"
