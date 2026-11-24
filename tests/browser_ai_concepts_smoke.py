@@ -209,6 +209,45 @@ def main():
             "document.documentElement.scrollWidth <= window.innerWidth + 2"
         ), "Mobile viewport overflow"
         assert not errors, errors
+
+        # Reproduce the frozen 47-second stage: a status request remains open
+        # indefinitely, not an HTTP 502. Use an accelerated clock for this
+        # regression; actual code uses an eight-second timeout and six retries.
+        page.evaluate("sessionStorage.setItem('promoeditor-ai-task','" + "b"*32 + "')")
+        page.add_init_script("""
+          window.__blockStatus=true;
+          window.__abortedStatus=0;
+          const originalFetch=window.fetch.bind(window);
+          const originalTimeout=window.setTimeout.bind(window);
+          window.setTimeout=(fn,delay,...args)=>
+            originalTimeout(fn,delay===8000?80:delay===2400?25:delay,...args);
+          window.fetch=(url,options={})=>{
+            if(window.__blockStatus&&String(url).includes('/api/generate/status/')){
+              return new Promise((resolve,reject)=>{
+                options.signal.addEventListener('abort',()=>{
+                  window.__abortedStatus++;
+                  reject(new DOMException('aborted','AbortError'));
+                },{once:true});
+              });
+            }
+            return originalFetch(url,options);
+          };
+        """)
+        page.reload(wait_until="domcontentloaded")
+        page.locator("#resume-paid-task").wait_for(state="visible",timeout=12000)
+        assert page.evaluate("window.__abortedStatus")==7
+        assert page.locator("#generate-btn").is_disabled()
+        assert page.evaluate("sessionStorage.getItem('promoeditor-ai-task')")=="b"*32
+        assert len(posts)==1
+        page.evaluate("window.__blockStatus=false")
+        page.locator("#resume-paid-task").click()
+        page.locator("#download-panel").wait_for(state="visible",timeout=12000)
+        page.wait_for_function("() => document.getElementById('loading').hidden")
+        assert page.locator("#download-all").is_enabled()
+        assert page.locator("#generate-btn").is_enabled()
+        assert page.evaluate("sessionStorage.getItem('promoeditor-ai-task')") is None
+        assert len(posts)==1
+        assert not errors, errors
         browser.close()
     print("Production AI poster UI: paid confirmation, full AI raster, honest fact review — PASS")
 

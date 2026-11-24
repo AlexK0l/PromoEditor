@@ -1106,8 +1106,9 @@
   }
   async function init(){
     try {
-      const response=await fetch('/api/config');if(!response.ok)throw new Error('API недоступен');
-      const config=await response.json();apiReady=Boolean(config.openai_ready);
+      const {response,state:config}=await readTaskStatus('/api/config');
+      if(!response.ok||!config)throw new Error('API недоступен');
+      apiReady=Boolean(config.openai_ready);
       window.PromoAssets?.setAiReady(apiReady);
       $('logout-form').hidden=!config.auth_enabled;
       $('logout-csrf').value=config.logout_csrf_token||'';
