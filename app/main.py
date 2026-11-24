@@ -45,6 +45,7 @@ from .ai_native_art_direction import (
 )
 from .ai_transport import OpenAIImageConnectionFailure
 from .ai_artwork_fit import artwork_geometry
+from .ai_poster_finish import try_expand_artwork
 from .ai_poster_review import review_pair, skipped_review
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
@@ -697,7 +698,8 @@ def _partial_poster_response(exc):
 def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        reference_raw, model, quality, selected_source=None,
                        progress=None, secondary_raw=None, variation_id='',
-                       verify_posters=False, drawing_source_pdf=None):
+                       verify_posters=False, drawing_source_pdf=None,
+                       expand_posters=False):
     """Rebrand ONLY the selected photo before authoring both full AI posters.
 
     The original photo is immutable. The one paid rebranding edit is cached
@@ -713,7 +715,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
     rebranded_raw = cached_rebrand_photo(rebrand_dir)
     if rebranded_raw is None:
         # Fail BEFORE ANY paid Images call if capacity cannot fund all three.
-        check_paid_capacity('image', 3)
+        check_paid_capacity('image', 5 if expand_posters else 3)
     else:
         previous_sources=[rebranded_raw]+[raw for raw in
                             (logo_raw,drawing_raw,reference_raw)
@@ -723,7 +725,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             AI_POSTER_VERSION,cache_direction)
         missing=sum(_cached_visual(previous_posters,fmt) is None
                     for fmt in ('4x3','9x16'))
-        check_paid_capacity('image',missing)
+        check_paid_capacity('image',missing+(2 if expand_posters and missing else 0))
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
@@ -754,15 +756,22 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
         for fmt in ('4x3','9x16'):
             png=f'ai_poster_{fmt}.png'
             jpg=f'ai_poster_{fmt}.jpg'
+            native=paid_cache/f'{fmt}.png'
+            if native.is_file():
+                with Image.open(native) as original:
+                    geometry[fmt]=artwork_geometry(original.size,posters[fmt].size)
+            if expand_posters and fmt in geometry:
+                if progress:
+                    progress('OpenAI дорисовывает поля '+fmt+' без изменения исходной композиции')
+                posters[fmt],geometry[fmt]['outpaint']=try_expand_artwork(
+                    posters[fmt],geometry[fmt],model=model,quality=quality)
+            elif fmt in geometry:
+                geometry[fmt]['outpaint']={'status':'not_requested'}
             posters[fmt].save(folder/png,format='PNG')
             posters[fmt].save(folder/jpg,format='JPEG',
                               quality=93,subsampling=0)
             images[fmt]=f'/files/{job_id}/{png}'
             jpegs[fmt]=f'/files/{job_id}/{jpg}'
-            native=paid_cache/f'{fmt}.png'
-            if native.is_file():
-                with Image.open(native) as original:
-                    geometry[fmt]=artwork_geometry(original.size,posters[fmt].size)
         if progress:
             progress('Сохраняем исходные проверенные данные и AI-плакаты в ZIP')
         approved=approved_full_copy(brief)
@@ -822,7 +831,9 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        'не является источником цены или телефонов. '
                        'approved_copy.json содержит ВСЕ исходные факты '
                        'и расчёты для сверки обоих изображений. '
-                       'В export_geometry.json — геометрия масштабирования без обрезки. '
+                       'В export_geometry.json — геометрия без обрезки и статус AI-дорисовки. '
+                       'Если дорисовка не запрошена или не завершена, поля остались. '
+                       'При дорисовке исходная центральная область PNG сохранена точно. '
                        'В poster_review.json — статус и результаты предварительной '
                        'AI-сверки (если запрошена), НЕ подтверждение точности. '
                        'Оригинальный чертёж сохранён отдельно, габариты должны '
@@ -857,11 +868,15 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'rebranding_applied':True,
                 'publication_status':'human_review_required',
                 'secondary_used_in_artwork':False,
-                'review_gate':('blocked' if review['status']=='issues_found'
+                'review_gate':('blocked' if review['status']=='issues_found' or
+                               any(g.get('outpaint',{}).get('status')=='failed'
+                                   for g in geometry.values())
                                else 'human_review_required'),
                 'poster_review':review,
                 'export_geometry':geometry,
-                'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]}
+                'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]+[
+                    g['outpaint']['reason'] for g in geometry.values()
+                    if g.get('outpaint',{}).get('status')=='failed']}
     except Exception as exc:
         if not isinstance(exc,(QuotaExceeded,QuotaStoreUnavailable)):
             recovery_url = _native_poster_recovery(
@@ -1158,6 +1173,7 @@ async def create_full_ai_posters(request:Request):
             secondary_raw=chosen_bytes(report,records,'secondary_photo'),
             **({'variation_id':variation_id} if variation_id else {}),
                 **({'verify_posters':True} if str(form.get('verify_posters','false')).lower()=='true' else {}),
+                **({'expand_posters':True} if str(form.get('expand_posters','false')).lower()=='true' else {}),
                 **({'drawing_source_pdf':drawing_source_pdf} if drawing_source_pdf else {}))
     except QuotaExceeded as exc:
         raise HTTPException(429,detail=str(exc)) from exc
@@ -1555,6 +1571,7 @@ async def _generate_from_form(form, progress=None):
                 **({'progress':progress} if progress else {}),
                 **({'variation_id':variation_id} if variation_id else {}),
                 **({'verify_posters':True} if str(form.get('verify_posters','false')).lower()=='true' else {}),
+                **({'expand_posters':True} if str(form.get('expand_posters','false')).lower()=='true' else {}),
                 **({'drawing_source_pdf':drawing_source_pdf} if drawing_source_pdf else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references

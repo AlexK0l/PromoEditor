@@ -22,7 +22,7 @@ from .openai_service import client
 from .image_analysis import analysis_preview
 from .ai_native_art_direction import approved_axle_count
 
-VERSION = "poster-review-v2-single-view"
+VERSION = "poster-review-v3-located-fields"
 FORMATS = ("4x3", "9x16")
 ROI_LABELS = {
     "additional_revenue_per_trip": "Дополнительная выручка за рейс",
@@ -102,7 +102,8 @@ def _schema():
         return {"type":"string","enum":list(values)}
     field = obj({"id":{"type":"string"},
                  "state":enum("readable","missing","unreadable","conflicting"),
-                 "observed":{"type":"string"}})
+                 "observed":{"type":"string"},
+                 "region":{"type":["array","null"],"items":{"type":"integer"}}})
     visual = obj({"id":{"type":"string"},
                   "state":enum("no_issue_detected","issue","uncertain"),
                   "observation":{"type":"string"}})
@@ -223,7 +224,12 @@ def compare_review(approved, raw, visual_keys):
                          _canonical(field["expected"],field["kind"]) else "different")
             elif state not in ("missing","unreadable","conflicting"):
                 state = "unverified"
-            checks.append({**field,"observed":value,"status":state})
+            region=observed.get("region")
+            if (not isinstance(region,list) or len(region)!=4 or
+                    any(type(n) is not int for n in region) or
+                    not (0<=region[0]<region[2]<=1000 and 0<=region[1]<region[3]<=1000)):
+                region=None
+            checks.append({**field,"observed":value,"status":state,"region":region})
         visuals = []
         for key in visual_keys:
             item = _unique(supplied.get("visuals"),"id",key) or {}
@@ -282,7 +288,7 @@ def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
                 drawing=None, product=None, original_product=None):
     """One explicitly requested Responses call for both final rasters."""
     model=os.environ.get("OPENAI_TEXT_MODEL","gpt-5.6-terra")
-    cache_path=Path(cache_dir)/"poster_review_v2.json"
+    cache_path=Path(cache_dir)/"poster_review_v3.json"
     try:
         rasters={fmt:(Path(folder)/f"ai_poster_{fmt}.png").read_bytes() for fmt in FORMATS}
         sources=[("ORIGINAL CUSTOMER LOGO",logo),
@@ -310,7 +316,13 @@ def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
             "Transcribe the actual visible value verbatim, including punctuation, currency, "
             "unit, decimal separators and VAT where visible; don't infer values, repair "
             "spelling or calculate missing facts. If not visible use missing; if uncertain "
-            "use unreadable; if repeated values disagree use conflicting. "
+            "use unreadable; if a row contains duplicate values, repeated currency "
+            "symbols or any stray digits, use conflicting even when the repeated value "
+            "is identical. Transcribe the entire affected row's values, not only the correct one. "
+            "For each field return region as [left,top,right,bottom] in integer "
+            "0..1000 normalized coordinates of the FULL FINAL POSTER, including the "
+            "complete erroneous value(s), or null if missing or location uncertain. "
+            "Coordinates are suggestions for manual selection, not edit authorization. "
             "Field labels indicate what to look for, not the answer. "
             "For model and category, inspect the separate poster headline/masthead "
             "rather than assuming a vehicle inscription or generic slogan is sufficient. "
