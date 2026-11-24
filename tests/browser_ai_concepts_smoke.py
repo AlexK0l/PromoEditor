@@ -137,7 +137,7 @@ def main():
         assert page.locator("#download-svg-9x16").evaluate("(b)=>b.parentElement.hidden")
         assert page.locator("#download-svg-4x3").is_disabled()
         assert page.locator("#download-svg-9x16").is_disabled()
-        assert "растр" in page.locator(".result-disclaimer").inner_text()
+        assert "растр" in page.locator(".result-disclaimer").inner_text().lower()
         assert "approved_copy.json" in page.locator(".prompt-download-note").inner_text()
         for selector in ("#generation-mode",
                          "#ai-concepts-workflow", "#openai-posters-workflow"):
