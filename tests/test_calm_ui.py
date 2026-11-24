@@ -103,7 +103,7 @@ def test_technical_specs_visible_but_optional_expert_controls_remain_collapsed()
 
 def test_one_click_free_asset_selection_precedes_any_potentially_paid_generation():
     script = (ROOT / "app.js").read_text(encoding="utf-8")
-    begin = script.index("  async function generate(){")
+    begin = script.index("  async function generate(")
     body = script[begin:script.index("  async function inspect(){", begin)]
     assert "window.PromoAssets.analyze(formBrief(),{freeOnly:true})" in body
     assert "window.PromoAssets.isReady()" in body
