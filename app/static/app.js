@@ -231,14 +231,16 @@
     simple.disabled=!apiReady||ai;
     if($('verify-posters'))$('verify-posters').disabled=!apiReady||!hybrid||isBusy;
     if($('verify-posters-option'))$('verify-posters-option').hidden=!hybrid;
+    if($('expand-posters'))$('expand-posters').disabled=!apiReady||!hybrid||isBusy;
+    if($('expand-posters-option'))$('expand-posters-option').hidden=!hybrid;
     simple.closest('.one-ai-choice').classList.toggle('is-disabled',!apiReady||ai);
     $('quick-ai-description').textContent=apiReady
       ?(ai
         ?'Экспериментальные AI-концепции: параметры и стоимость указаны в разделе «Дополнительно».'
         :hybrid
           ?(referencePro
-            ?'Рекламный PRO: OpenAI самостоятельно разрабатывает два полноценных плаката с одним выбранным ребрендированным ракурсом. Эталон необязателен. До 3 платных Images, возможен AI-выбор фото. Дополнительные исходные ракурсы сохраняются отдельно. PNG/JPEG и ZIP без SVG.'
-            :'OpenAI целиком рисует 4:3 и самостоятельный 9:16 в одном выбранном ребрендированном ракурсе. До 3 платных Images: один ребрендинг и два макета; возможен AI-выбор фото. PNG/JPEG, текст в растре не редактируется.')
+            ?'Рекламный PRO: OpenAI самостоятельно разрабатывает два полноценных плаката с одним выбранным ребрендированным ракурсом. Эталон необязателен. До 3 платных Images для основы, до 2 для выбранной дорисовки полей; возможен AI-выбор фото. Дополнительные исходные ракурсы сохраняются отдельно. PNG/JPEG и ZIP без SVG.'
+            :'OpenAI целиком рисует 4:3 и самостоятельный 9:16 в одном выбранном ребрендированном ракурсе. До 3 платных Images для основы, до 2 для выбранной дорисовки полей; возможен AI-выбор фото. PNG/JPEG, локальные правки доступны после генерации.')
           :paidInTemplate
             ?'AI генерирует два фона по обычному шаблону — 2 платных запроса, без AI-арт-директора.'
             :'Без AI: бесплатная сборка по локальному шаблону.')
@@ -260,7 +262,7 @@
           apiReady?'Сначала выберите один из трёх AI-дизайнов. Эталон не обязателен.':
             'На сервере нет OPENAI_API_KEY. Доступен быстрый шаблон.');
       }else if(hybrid){
-        setStatus(apiReady?'AI-постеры · 3 платных вызова OpenAI Images':'AI недоступен',
+        setStatus(apiReady?('AI-постеры · до '+(checked('expand-posters')?'5':'3')+' платных вызовов OpenAI Images'):'AI недоступен',
           apiReady?(referencePro
             ?'Рекламный PRO: AI самостоятельно создаёт оба плаката, даже без эталона. При наличии эталон подсказывает стиль. Все исходные ТТХ передаются модели; точность растра нужно проверить.'
             :'AI создаёт ЦЕЛЫЙ рекламный плакат, без алгоритмического наложения текстовых блоков. Результат растровый.'):
@@ -453,6 +455,8 @@
     $('generate-btn').disabled=on;
     if($('new-variation-btn'))$('new-variation-btn').disabled=on;
     if($('verify-posters'))$('verify-posters').disabled=on||!apiReady||!isHybrid();
+    if($('expand-posters'))$('expand-posters').disabled=on||!apiReady||!isHybrid();
+    refreshRefinementControls();
     $('generate-concepts-btn').disabled=on || !apiReady;
     $('generate-ai-posters-btn').disabled=on || !apiReady;
     $('build-prompt-btn').disabled=on;
@@ -526,7 +530,7 @@
       $('generated-previews').hidden=false;
       $('download-panel').hidden=false;
       const rasterOnly=Boolean(latest.raster_only);
-      if($('new-variation-btn'))$('new-variation-btn').hidden=!rasterOnly;
+      if($('new-variation-btn'))$('new-variation-btn').hidden=!rasterOnly||Boolean(latest.refinement);
       if($('poster-review-status')){
         const review=latest.poster_review;
         $('poster-review-status').hidden=!rasterOnly;
@@ -582,7 +586,185 @@
       setStatus(rasterOnly?'Требуется проверка':'Готово',rasterOnly
         ?('Сохранены два AI-черновика 4:3 и 9:16 без обрезки; ребрендирован только прицеп на фото «'+(latest.selected_photo?.name||'выбранное главное')+'». Проверьте все факты.')
         :(isHybrid()?'AI-макет с точным текстом и AI-типографикой':isAiPro()?'Выбранный AI-дизайн':'Шаблон')+': PNG, JPEG, CorelDRAW SVG и ZIP готовы.','done');
+      presentRefinement();
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  let refineImage=null,refineDrag=null,refineLoad=0;
+  const refineFormats=['4x3','9x16'];
+  function canRefine(){
+    return Boolean(latest?.raster_only&&/^[a-f0-9]{32}$/.test(latest?.job_id||'')&&latest.export_geometry);
+  }
+  function pendingBleeds(){
+    if(!canRefine())return [];
+    return refineFormats.filter(fmt=>{
+      const g=latest.export_geometry[fmt];
+      return g?.content_box&&g?.target_size&&
+        !['complete','not_needed'].includes(g?.outpaint?.status)&&
+        (g.content_box[0]!==0||g.content_box[1]!==0||
+         g.content_box[2]!==g.target_size[0]||g.content_box[3]!==g.target_size[1]);
+    });
+  }
+  function refreshRefinementControls(){
+    if($('refine-import'))$('refine-import').disabled=isBusy;
+    if($('refine-import-file'))$('refine-import-file').disabled=isBusy;
+    if(!$('refine-panel'))return;
+    const available=canRefine();
+    $('refine-expand').disabled=isBusy||!apiReady||!available||!pendingBleeds().length;
+    $('refine-repair').disabled=isBusy||!apiReady||!available||!refineImage;
+    for(const id of ['refine-format','refine-issue','refine-region','refine-instruction','refine-review'])
+      $(id).disabled=isBusy;
+  }
+  function regionValue(){
+    const parts=get('refine-region').split(',').map(v=>v.trim());
+    if(parts.length!==4||parts.some(v=>!/^\d+$/.test(v)))return null;
+    const rect=parts.map(Number);
+    if(!refineImage||!rect.every(Number.isSafeInteger)||
+       !(0<=rect[0]&&rect[0]<rect[2]&&rect[2]<=refineImage.naturalWidth&&
+         0<=rect[1]&&rect[1]<rect[3]&&rect[3]<=refineImage.naturalHeight))return null;
+    return rect;
+  }
+  function drawRefineRegion(){
+    const canvas=$('refine-canvas');
+    if(!canvas||!refineImage)return;
+    const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(refineImage,0,0,canvas.width,canvas.height);
+    const rect=regionValue();
+    if(rect){
+      ctx.fillStyle='rgba(255,40,60,.15)';
+      ctx.fillRect(rect[0],rect[1],rect[2]-rect[0],rect[3]-rect[1]);
+      ctx.strokeStyle='#ed2648';ctx.lineWidth=Math.max(3,canvas.width/350);
+      ctx.strokeRect(rect[0],rect[1],rect[2]-rect[0],rect[3]-rect[1]);
+    }
+  }
+  function refillIssueOptions(){
+    const select=$('refine-issue');
+    if(!select)return;
+    select.replaceChildren(new Option('Выбрать область вручную',''));
+    const fields=latest?.poster_review?.formats?.[get('refine-format')]?.fields||[];
+    fields.filter(v=>v.status!=='match').forEach((v,i)=>{
+      const option=new Option(v.label+': '+(v.observed||'не подтверждено'),'issue-'+i);
+      option.dataset.field=JSON.stringify(v);
+      select.appendChild(option);
+    });
+  }
+  function loadRefinePreview(){
+    const canvas=$('refine-canvas');
+    if(!canvas)return;
+    const stamp=++refineLoad;
+    refineImage=null;refineDrag=null;canvas.hidden=true;
+    $('refine-region').value='';$('refine-instruction').value='';
+    refillIssueOptions();refreshRefinementControls();
+    if(!canRefine())return;
+    const image=new Image();
+    image.onload=()=>{
+      if(stamp!==refineLoad)return;
+      refineImage=image;canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+      canvas.hidden=false;drawRefineRegion();refreshRefinementControls();
+    };
+    image.onerror=()=>{
+      if(stamp===refineLoad)$('refine-status').textContent='Не удалось открыть PNG. Импортируйте сохранённый ZIP.';
+    };
+    image.src=latest.images[get('refine-format')];
+  }
+  function presentRefinement(){
+    if(!$('refine-panel'))return;
+    const available=canRefine();
+    $('refine-panel').hidden=!available;
+    $('outpaint-status').hidden=!available;
+    if(!available){refineImage=null;return;}
+    const notes=refineFormats.map(fmt=>{
+      const g=latest.export_geometry[fmt]||{};
+      const state=g.outpaint?.status;
+      return fmt+': '+(state==='complete'?'AI-дорисовка выполнена; проверьте стыки':
+        state==='not_needed'?'поля не нужны':state==='failed'?'дорисовка не завершена; сохранены поля':
+        'исходный черновик; поля ещё не дорисованы');
+    });
+    $('outpaint-status').textContent=notes.join(' · ');
+    const rev=latest.refinement;
+    $('refine-status').textContent=rev?.status==='failed'?(rev.reason||'Операция не завершена; исходный ZIP сохранён.'):
+      rev?.status==='complete'?'Новый ZIP создан. Изменены форматы: '+(rev.changed_formats||[]).join(', ')+'. Исходный ZIP не изменён.':
+      rev?.status==='no_change'?'Новые пиксели не получены. Исходный комплект сохранён.':
+      'Исходный ZIP не изменяется. Новая версия сохраняется отдельно.';
+    loadRefinePreview();
+  }
+  function pickRefineIssue(){
+    const selected=$('refine-issue').selectedOptions[0];
+    if(!selected?.dataset.field)return;
+    const field=JSON.parse(selected.dataset.field);
+    $('refine-instruction').value='Строка «'+field.label+'»: должно быть ровно «'+field.expected+
+      '». Удалить ошибочные и дублирующиеся символы, не изменяя соседние строки и оформление.';
+    const box=field.region;
+    if(refineImage&&Array.isArray(box)&&box.length===4){
+      const w=refineImage.naturalWidth,h=refineImage.naturalHeight;
+      $('refine-region').value=[Math.floor(box[0]*w/1000),Math.floor(box[1]*h/1000),
+        Math.ceil(box[2]*w/1000),Math.ceil(box[3]*h/1000)].join(', ');
+    }else $('refine-region').value='';
+    drawRefineRegion();
+  }
+  function refinePoint(event){
+    const c=$('refine-canvas'),bounds=c.getBoundingClientRect();
+    return [Math.max(0,Math.min(c.width,Math.round((event.clientX-bounds.left)*c.width/bounds.width))),
+            Math.max(0,Math.min(c.height,Math.round((event.clientY-bounds.top)*c.height/bounds.height)))];
+  }
+  async function importExistingBundle(){
+    if(isBusy)return;
+    clearError();
+    const file=$('refine-import-file')?.files[0];
+    if(!file){showError('Выберите ранее скачанный ZIP PromoEditor.');return;}
+    if(file.size>68*1024*1024){showError('ZIP превышает 68 МБ.');return;}
+    busy(true);
+    setStatus('Открываем сохранённый комплект','Это бесплатная операция без OpenAI.','working');
+    try{
+      const form=new FormData();form.append('archive',file,file.name);
+      const response=await fetch('/api/poster-archive/import',{method:'POST',body:form});
+      if(!response.ok)throw new Error(await readError(response));
+      latest=await response.json();
+      presentGeneratedResult();
+      $('refine-panel').open=true;
+    }catch(error){showError(error.message||'Не удалось открыть ZIP.');}
+    finally{busy(false);}
+  }
+  async function runRefinement(action){
+    if(isBusy||!apiReady||!canRefine())return;
+    clearError();
+    const format=get('refine-format'),region=regionValue(),instruction=get('refine-instruction').trim();
+    const count=action==='expand'?pendingBleeds().length:1;
+    if(!count)return;
+    if(action==='repair'){
+      if(!region||region[2]-region[0]<6||region[3]-region[1]<6||
+         (region[2]-region[0])*(region[3]-region[1])>refineImage.naturalWidth*refineImage.naturalHeight/2){
+        showError('Выделите локальную область от 6 пикселей, не более половины плаката.');return;
+      }
+      if(!instruction||instruction.length>2500){showError('Укажите точную правку.');return;}
+    }
+    const verify=checked('refine-review');
+    if(!window.confirm((action==='expand'?'Дорисовать только поля существующих плакатов. ':'Исправить только выбранную область '+format+'. ')+
+      'До '+count+' платных Images-запросов.'+(verify?' При изменении изображений — ещё 1 платный Responses-запрос.':' Повторная AI-сверка отключена.')+
+      ' Центральная защищённая область или остальные пиксели сохраняются. Исходный ZIP не изменяется. Автоповторов нет. Продолжить?'))return;
+    const form=new FormData();
+    form.append('generation_mode','refine_posters');
+    form.append('source_job',latest.job_id);
+    form.append('refine_action',action);
+    form.append('refine_format',format);
+    form.append('refine_region',JSON.stringify(region));
+    form.append('refine_instruction',instruction);
+    form.append('refine_attempt',Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join(''));
+    form.append('verify_posters',String(verify));
+    form.append('model',get('image-model'));form.append('quality',get('image-quality'));
+    busy(true);
+    setStatus('Дорабатываем оплаченный комплект','Не создаём новые базовые плакаты.','working');
+    try{
+      const response=await fetch('/api/generate/start',{method:'POST',body:form});
+      if(!response.ok)throw new Error(await readError(response));
+      const result=await response.json();
+      try{window.sessionStorage.setItem('promoeditor-ai-task',result.task_id);}catch{}
+      latest=await pollAiGeneration(result.task_id);
+      presentGeneratedResult();
+      $('refine-panel').open=true;
+    }catch(error){showError(error.message||'Не удалось доработать комплект. Исходный ZIP сохранён.');}
+    finally{busy(false);}
   }
 
   async function generate(newVariation=false){
@@ -614,6 +796,7 @@
     if(isHybrid()&&!window.confirm(
       (newVariation?'Создать НОВЫЙ художественный вариант с новыми платными вызовами? ':'')+
       'OpenAI создаст два цельных плаката с надписями и габаритами. Только выбранный ребрендированный ракурс попадёт в Images; остальные фото и чертёж сохраняются отдельно. До 3 платных вызовов OpenAI Images: ребрендинг и два формата, возможен платный выбор главного фото. '+
+      (checked('expand-posters')?'Дополнительно: до 2 платных Images-запросов для дорисовки полей без изменения центральной композиции. ':'Дорисовка отключена: поля могут остаться. ')+
       (checked('verify-posters')?'Дополнительно: 1 платный Responses-запрос для сверки обоих плакатов, осей, всех маркировок, логотипа и исходной геометрии. ':'AI-сверка отключена. ')+
       'Повтор того же варианта использует сохранённый кэш, пока он не истёк. Результат PNG/JPEG, НЕ SVG, без обрезки. Данные и логотип требуют ручного утверждения. Продолжить?'
     ))return;
@@ -675,6 +858,7 @@
       form.append('generation_mode',isAiPro()?'ai_pro':isHybrid()?'hybrid':'template');
       if(isHybrid()&&posterVariation)form.append('poster_variation',posterVariation);
       if(isHybrid()&&checked('verify-posters'))form.append('verify_posters','true');
+      if(isHybrid()&&checked('expand-posters'))form.append('expand_posters','true');
       if(isAiPro()){
         form.append('concept_set_id',aiConceptSet.concept_set_id);
         form.append('concept_index',String(selectedAiConcept));
@@ -871,7 +1055,7 @@
     // Recover already paid work after a refresh without another Images call.
     let savedTask=null;
     try{savedTask=window.sessionStorage.getItem('promoeditor-ai-task');}catch{}
-    if(apiReady&&isHybrid()&&savedTask&&/^[a-f0-9]{32}$/.test(savedTask)){
+    if(apiReady&&savedTask&&/^[a-f0-9]{32}$/.test(savedTask)){
       clearError();
       busy(true);
       setStatus('Восстанавливаем AI-генерацию',
@@ -1034,6 +1218,26 @@
   }
   $('generate-btn').addEventListener('click',()=>generate(false));
   $('new-variation-btn')?.addEventListener('click',()=>generate(true));
+  $('expand-posters')?.addEventListener('change',refreshGenerationMode);
+  $('refine-import')?.addEventListener('click',importExistingBundle);
+  $('refine-expand')?.addEventListener('click',()=>runRefinement('expand'));
+  $('refine-repair')?.addEventListener('click',()=>runRefinement('repair'));
+  $('refine-format')?.addEventListener('change',loadRefinePreview);
+  $('refine-issue')?.addEventListener('change',pickRefineIssue);
+  $('refine-region')?.addEventListener('input',drawRefineRegion);
+  $('refine-canvas')?.addEventListener('pointerdown',event=>{
+    if(isBusy||!refineImage)return;
+    refineDrag=refinePoint(event);event.currentTarget.setPointerCapture(event.pointerId);
+    $('refine-region').value='';drawRefineRegion();
+  });
+  $('refine-canvas')?.addEventListener('pointermove',event=>{
+    if(!refineDrag||isBusy)return;
+    const [x,y]=refinePoint(event),[sx,sy]=refineDrag;
+    $('refine-region').value=[Math.min(x,sx),Math.min(y,sy),Math.max(x,sx),Math.max(y,sy)].join(', ');
+    drawRefineRegion();
+  });
+  $('refine-canvas')?.addEventListener('pointerup',()=>{refineDrag=null;});
+  $('refine-canvas')?.addEventListener('pointercancel',()=>{refineDrag=null;});
   $('inspect-btn').addEventListener('click',inspect);
   $('apply-extracted').addEventListener('click',()=>{
     const values=$('extract-result').value.trim();

@@ -547,3 +547,14 @@ button:disabled{cursor:not-allowed;opacity:.48}
   .technical-main{margin:8px 14px 20px}
   .technical-main>.data-group-body{grid-template-columns:1fr;padding:15px}
 }
+
+/* Masked finishing: a real pixel-coordinate selection, never a fixed-size
+   canvas that forces a horizontal scrollbar on mobile. */
+.refine-controls{display:flex;flex-direction:column;gap:12px;padding:14px;min-width:0}
+.refine-controls label{display:flex;flex-direction:column;gap:6px;min-width:0}
+.refine-controls label.check-field{flex-direction:row;align-items:flex-start}
+.refine-controls input,.refine-controls select,.refine-controls textarea{max-width:100%;min-width:0;box-sizing:border-box}
+.refine-controls button{align-self:flex-start;max-width:100%;white-space:normal}
+#refine-canvas{display:block;width:100%;max-width:680px;height:auto;border:1px solid var(--line);cursor:crosshair;touch-action:none;background:var(--surface-soft)}
+#refine-canvas[hidden]{display:none}
+#refine-panel,#refine-import-panel{margin-top:12px}

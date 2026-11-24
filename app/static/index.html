@@ -118,6 +118,7 @@
               <small id="quick-ai-description">OpenAI создаёт два цельных рекламных плаката с типографикой. До 3 платных вызовов Images, возможен AI-выбор фото. Экспорт PNG/JPEG без обрезки; оригинальный чертёж и исходные AI-изображения в ZIP.</small>
             </span>
           </label>
+          <label class="check-field" id="expand-posters-option"><input id="expand-posters" type="checkbox" checked><span>AI-дорисовка до края плаката <small>До 2 дополнительных платных Images-запросов. Центральная композиция не меняется; без дорисовки могут остаться поля.</small></span></label>
           <label class="check-field" id="verify-posters-option"><input id="verify-posters" type="checkbox" checked><span>Предварительная AI-сверка обоих плакатов <small>1 дополнительный платный Responses-запрос; не заменяет ручную проверку</small></span></label>
         </div>
         <div class="generate-row">
@@ -354,11 +355,37 @@
       <div id="result-warnings" class="result-warnings" role="status" aria-live="polite" hidden><strong>Как улучшить следующий макет</strong><ul id="result-warning-items"></ul></div>
       <p id="poster-review-status" class="field-tip" role="status" aria-live="polite" hidden></p>
       <ul id="poster-review-details" class="field-tip" hidden></ul>
+      <p id="outpaint-status" class="field-tip" role="status" hidden></p>
+      <details id="refine-panel" class="quiet-details" hidden>
+        <summary>Доработать уже созданные плакаты без полной перегенерации</summary>
+        <div class="refine-controls">
+          <p id="refine-status" role="status" aria-live="polite" class="field-tip">Исходный ZIP не изменяется. Результат сохраняется новым комплектом.</p>
+          <button type="button" id="refine-expand" class="secondary-button">AI-дорисовать пустые поля обоих форматов (платно)</button>
+          <label class="check-field"><input id="refine-review" type="checkbox" checked><span>Повторная сверка после правок <small>1 дополнительный платный Responses-запрос только если изображение изменилось</small></span></label>
+          <h3>Исправить отдельную область</h3>
+          <label>Плакат <select id="refine-format"><option value="9x16">Вертикальный 9:16</option><option value="4x3">Горизонтальный 4:3</option></select></label>
+          <label>Замечание из AI-сверки <select id="refine-issue"><option value="">Выбрать область вручную</option></select></label>
+          <p class="field-tip">Протяните прямоугольник на плакате. Предложенные AI координаты приблизительны: проверьте, что рамка охватывает ошибку целиком.</p>
+          <canvas id="refine-canvas" aria-label="Выбор прямоугольной области AI-правки"></canvas>
+          <label>Границы в пикселях (x1, y1, x2, y2) <input id="refine-region" type="text" placeholder="Например: 800, 1200, 1040, 1500"></label>
+          <label>Точная правка <textarea id="refine-instruction" rows="3" maxlength="2500" placeholder="Напишите верные значения и укажите, какие ошибочные символы удалить."></textarea></label>
+          <button type="button" id="refine-repair" class="primary-button">AI-исправить выделенную область (платно)</button>
+          <p class="field-tip">1 Images-запрос. За пределами рамки PNG сохраняется пиксель в пиксель; второй формат не меняется. AI-правка требует проверки.</p>
+        </div>
+      </details>
       <button type="button" id="new-variation-btn" class="secondary-button" hidden>Создать новый художественный вариант (платно)</button>
       <p class="result-disclaimer">Перед публикацией проверьте данные и права на изображения. Для правок откройте SVG в CorelDRAW.</p>
     </section>
 
 
+    <details id="refine-import-panel" class="quiet-details editor-suite">
+      <summary>Открыть ранее скачанный AI-комплект ZIP для доработки</summary>
+      <div class="refine-controls">
+        <p>Импорт не обращается к OpenAI. Можно дорисовать поля или исправить область уже оплаченного плаката без новой генерации обоих форматов.</p>
+        <label>ZIP PromoEditor (до 68 МБ) <input type="file" id="refine-import-file" accept=".zip,application/zip"></label>
+        <button type="button" id="refine-import" class="secondary-button">Открыть ZIP бесплатно</button>
+      </div>
+    </details>
     <details id="editing-suite" class="quiet-details editor-suite">
       <summary>Редактировать готовый постер <span aria-hidden="true">⌄</span></summary>
           <section id="edit-section" class="edit-section" aria-labelledby="edit-title">
@@ -455,7 +482,7 @@
     <footer class="footer">PromoEditor · AI-дизайн, проверяемые данные в редактируемом SVG и исходное выбранное фото в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261124-single-view-review-v7" defer></script>
+  <script src="/static/app.js?v=20261124-masked-finish-v8" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>
