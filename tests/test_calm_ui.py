@@ -183,3 +183,15 @@ def test_production_screen_hides_all_retired_demo_and_experimental_controls():
     assert '<div class="preset-shortcut">' in html
     assert "Заполнить пример ZubrTrail 500" in html
     assert "Проверяем режим" in html
+
+
+def test_native_poster_confirmation_and_explicit_new_variant():
+    html, _ = parse_page()
+    js = (ROOT / "app.js").read_text(encoding="utf-8")
+    confirm = js.split("if(isHybrid()&&!window.confirm(",1)[1].split("))return;",1)[0]
+    assert "PNG/JPEG, НЕ SVG" in confirm
+    assert "Алгоритм вставит" not in confirm
+    assert "2 платных текстово-визуальных" not in confirm
+    assert 'id="new-variation-btn"' in html
+    assert "form.append('poster_variation',posterVariation)" in js
+    assert "new-variation-btn')?.addEventListener('click',()=>generate(true))" in js

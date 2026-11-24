@@ -290,9 +290,9 @@
           <div class="prompt-head"><div>
             <span class="step-label">ШАГ 3 · НАСТОЯЩАЯ ГЕНЕРАЦИЯ OPENAI IMAGES</span>
             <h3 id="openai-posters-title">Рекламный AI-постер без эталона</h3>
-            <p>Эксперимент: модель нарисует готовые растровые постеры 4:3 и 9:16. Этот результат не заменяет точную гибридную SVG-версию и требует проверки перед публикацией.</p>
+            <p>Эксперимент: модель нарисует готовые растровые постеры 4:3 и 9:16. Результат требует проверки перед публикацией; редактируемый SVG не создаётся.</p>
           </div><button type="button" id="generate-ai-posters-btn" class="primary-button">Создать 2 AI-постера · 3 платных вызова Images</button></div>
-          <p class="field-tip">Фото товара обязательно, рекламный эталон — нет. Это художественные растровые постеры, а не технически проверенный вектор: OpenAI может ошибиться в кириллице, цифрах и деталях техники. Перед публикацией сверьте факты с оригиналами. Генерация оплачивается по тарифу OpenAI, включая два вызова Images.</p>
+          <p class="field-tip">Фото товара обязательно, рекламный эталон — нет. Это художественные растровые постеры, а не технически проверенный вектор: OpenAI может ошибиться в кириллице, цифрах и деталях техники. Перед публикацией сверьте факты с оригиналами. Генерация оплачивается по тарифу OpenAI: до трёх Images, возможен платный выбор фото.</p>
           <p id="openai-posters-status" role="status" aria-live="polite">По умолчанию применяется профессиональная рекламная арт-дирекция для промышленной техники. Выберите качество OpenAI в дополнительных настройках.</p>
           <div id="openai-poster-results" class="ai-poster-results" hidden>
             <a id="openai-poster-link-4x3" target="_blank" rel="noopener"><img id="openai-poster-img-4x3" alt="Горизонтальный AI-постер 4:3"><span>Горизонтальный · 4:3</span></a>
@@ -351,6 +351,7 @@
       </details>
         <p class="prompt-download-note">ZIP содержит оба формата, редактируемые SVG для CorelDRAW и ваши оригиналы.</p>
       <div id="result-warnings" class="result-warnings" role="status" aria-live="polite" hidden><strong>Как улучшить следующий макет</strong><ul id="result-warning-items"></ul></div>
+      <button type="button" id="new-variation-btn" class="secondary-button" hidden>Создать новый художественный вариант (платно)</button>
       <p class="result-disclaimer">Перед публикацией проверьте данные и права на изображения. Для правок откройте SVG в CorelDRAW.</p>
     </section>
 
@@ -451,7 +452,7 @@
     <footer class="footer">PromoEditor · AI-дизайн, проверяемые данные в редактируемом SVG и исходное выбранное фото в ZIP · API-ключ хранится только на сервере.</footer>
   </main>
   <script src="/static/assets.js?v=20261117-ai-concepts-1" defer></script>
-  <script src="/static/app.js?v=20261124-safe-aspect-reference-v2" defer></script>
+  <script src="/static/app.js?v=20261124-native-recovery-v3" defer></script>
   <script src="/static/editor.js?v=20261113-v1" defer></script>
 </body>
 </html>

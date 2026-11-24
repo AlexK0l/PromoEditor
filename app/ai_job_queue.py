@@ -21,7 +21,7 @@ PROCESS_ID = secrets.token_hex(16)
 STATUS_NAME = "status.json"
 FORM_NAME = "form.json"
 ROOT_NAME = ".ai_generation_tasks"
-TTL = 7200
+TTL = max(300, int(os.getenv('PROMO_JOB_TTL_SECONDS', '7200')))
 MAX_TOTAL_BYTES = 68 * 1024 * 1024
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 

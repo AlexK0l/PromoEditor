@@ -141,12 +141,22 @@ def test_full_raster_poster_outputs_survive_zip_failure(monkeypatch, tmp_path):
     assert len(calls) == 3
     output = main._full_posters_sync(*kwargs)
     assert len(calls) == 3
-    assert not (cache / "4x3.png").exists()
+    assert (cache / "4x3.png").is_file()
     assert output["raster_only"] is True
+    repeated = main._full_posters_sync(*kwargs)
+    assert repeated["raster_only"] is True
+    assert len(calls) == 3, "Repeat same variant must not buy art again"
+    changed = main._full_posters_sync(*kwargs, variation_id="a"*32)
+    assert changed["raster_only"] is True
+    assert len(calls) == 5, "Explicit new variant buys only two posters"
+    main._full_posters_sync(*kwargs, variation_id="a"*32)
+    assert len(calls) == 5, "Retry of explicit variant must use its cache"
     assert (tmp_path / output["job_id"] / "ai_posters.zip").is_file()
     with zipfile.ZipFile(tmp_path / output["job_id"] / "ai_posters.zip") as z:
         assert z.read("originals/product_photo.png") == raw
         assert "rebranded_product.png" in z.namelist()
+        assert "native_ai_artwork_4x3.png" in z.namelist()
+        assert "native_ai_artwork_9x16.png" in z.namelist()
 
 
 def test_approved_reference_preset_does_not_modify_legacy_demo():

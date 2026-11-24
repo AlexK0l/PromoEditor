@@ -157,3 +157,43 @@ def test_staging_preflight_rejects_no_outbound_https_without_using_key():
     assert "OPENAI_API_KEY" not in free
     assert "systemctl stop" not in free
     assert "systemctl restart" not in free
+
+
+
+def test_native_paid_portrait_network_failure_has_recovery_zip_and_reuses_landscape(
+        monkeypatch, tmp_path):
+    import base64
+    from app import ai_poster_service, main, product_rebrand_service
+    from app.render import default_brief
+    monkeypatch.setenv("PROMO_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "STORAGE", tmp_path)
+    calls = []
+    failed = [True]
+    png = _png()
+    def edit(**kwargs):
+        calls.append(kwargs["size"])
+        assert kwargs["timeout"] >= 180
+        if kwargs["size"] == "1024x1536" and failed[0]:
+            raise _fake_error("APIConnectionError", "ReadTimeout")
+        return SimpleNamespace(data=[SimpleNamespace(
+            b64_json=base64.b64encode(png).decode("ascii"))])
+    api = SimpleNamespace(images=SimpleNamespace(edit=edit))
+    monkeypatch.setattr(ai_poster_service, "client", lambda: api)
+    monkeypatch.setattr(product_rebrand_service, "client", lambda: api)
+    args = (default_brief(), png, None, None, None, "gpt-image-2.5-flare", "medium")
+    with pytest.raises(main.PartialPosterFailure) as error:
+        main._full_posters_sync(*args)
+    assert len(calls) == 3
+    job = error.value.recovery_zip.split("/")[2]
+    with zipfile.ZipFile(tmp_path/job/"ai_failed_generation.zip") as archive:
+        assert "rebranded_product.png" in archive.namelist()
+        assert "native_ai_artwork_4x3.png" in archive.namelist()
+        assert "native_ai_artwork_9x16.png" not in archive.namelist()
+        diagnostic = json.loads(archive.read("openai_connection_diagnostic.json"))
+        assert diagnostic["reason_code"] == "read_timeout"
+        assert diagnostic["format"] == "9x16"
+        assert b"PRIVATE-SDK-MESSAGE" not in archive.read("READ_ME_FIRST.txt")
+    failed[0] = False
+    assert main._full_posters_sync(*args)["raster_only"]
+    assert len(calls) == 4, "Only the failed portrait is retried on explicit user action"
+    assert calls[-1] == "1024x1536"

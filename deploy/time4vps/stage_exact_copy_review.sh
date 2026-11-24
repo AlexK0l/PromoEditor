@@ -145,6 +145,8 @@ install -o root -g root -m 0600 /dev/null "$ENV_FILE"
     printf 'PROMO_OPENAI_ART_TIMEOUT_SECONDS=480\n'
     # Only OpenAI credentials; no production auth/password/session secret.
     grep -E '^[[:space:]]*(OPENAI_API_KEY|OPENAI_ORG_ID|OPENAI_PROJECT)[[:space:]]*=' "$PROD_ENV" || true
+    # Honor configured call limits, using a separate preview counter DB.
+    grep -E '^[[:space:]]*PROMO_AI_(IMAGE|TEXT)_CALLS_PER_DAY[[:space:]]*=' "$PROD_ENV" || true
   else
     printf 'OPENAI_API_KEY=\n'
   fi
@@ -227,7 +229,7 @@ info "Windows PowerShell: ssh -N -L 18082:127.0.0.1:18082 root@YOUR_VPS_IP"
 info "Browser: http://127.0.0.1:18082"
 info "Stop: systemctl stop promoeditor-exact-preview (or automatic stop in one hour)."
 if [[ "$MODE" == "paid" ]]; then
-  info "IMPORTANT: clicking Create now makes up to 3 PAID OpenAI Images requests (one rebrand + two complete AI-created posters), with optional paid photo ranking. NO algorithmic SVG text templates; source numbers in AI raster must be reviewed."
+  info "IMPORTANT: clicking Create now makes up to 3 PAID OpenAI Images requests (one rebrand + two complete AI-created posters), with optional paid photo ranking. NO algorithmic SVG text templates; source numbers in AI raster must be reviewed. Identical requests reuse cached posters; new variants require an explicit paid action."
 else
   info "OpenAI key is absent in FREE staging; no paid calls possible."
 fi

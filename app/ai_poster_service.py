@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import io
 import json
-import os
 from PIL import Image
 from .ai_native_art_direction import approved_full_copy, reference_style_direction
 from .image_analysis import analysis_preview
 from .ai_quota import check_paid_capacity
+from .ai_transport import edit_paid_image_once
 from .openai_service import (
     client, as_image, IMAGE_MODELS, IMAGE_QUALITIES,
     _default_visual_cache, _visual_lock,
@@ -345,15 +345,13 @@ def generate_full_posters(brief: dict, product_photo: bytes, *,
                         reference,"05_customer_visual_style_only"))
                 if api is None:
                     api = client()
-                response = api.images.edit(
+                response = edit_paid_image_once(api, fmt,
                     model=model, image=inputs,
                     prompt=_prompt(brief, fmt, bool(logo),
                                    bool(drawing), bool(reference),
                                    product_is_rebranded=product_is_rebranded,
                                    secondary_photo=bool(secondary_photo)),
-                    size=api_size, quality=quality, output_format="png",
-                    timeout=max(180,min(600,int(os.getenv(
-                        "PROMO_OPENAI_ART_TIMEOUT_SECONDS","480")))))
+                    size=api_size, quality=quality, output_format="png")
                 image = as_image(response)
                 _save_visual(cache_dir, fmt, image)
             output[fmt] = finish_artwork_in_safe_aspect(image,target)

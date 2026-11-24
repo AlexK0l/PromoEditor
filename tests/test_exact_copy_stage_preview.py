@@ -41,3 +41,5 @@ def test_exact_copy_preview_is_branch_pinned_and_isolated():
     assert "Preview CSS /static/$asset has wrong MIME type" in script
     assert 'systemctl stop "$UNIT" || true' in script
 
+
+    assert "PROMO_AI_(IMAGE|TEXT)_CALLS_PER_DAY" in script

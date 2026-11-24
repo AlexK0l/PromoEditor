@@ -635,17 +635,77 @@ def _build_concept_previews_sync(brief, report, records, concepts,
 
 
 
+
+def _native_poster_recovery(folder, job_id, brief, rebranded_raw, paid_cache, exc):
+    """Package received art; no API calls and no raw SDK error messages."""
+    try:
+        if rebranded_raw:
+            (folder/'rebranded_product.png').write_bytes(rebranded_raw)
+        native = [(fmt, paid_cache/f'{fmt}.png') for fmt in ('4x3','9x16')
+                  if paid_cache is not None and (paid_cache/f'{fmt}.png').is_file()]
+        rendered = [folder/f'ai_poster_{fmt}.{ext}' for fmt in ('4x3','9x16')
+                    for ext in ('png','jpg')
+                    if (folder/f'ai_poster_{fmt}.{ext}').is_file()]
+        diagnostic = exc.report if isinstance(exc, OpenAIImageConnectionFailure) else None
+        if not (rebranded_raw or native or rendered or diagnostic):
+            return None
+        archive_path = folder/'ai_failed_generation.zip'
+        with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_STORED) as archive:
+            if rebranded_raw:
+                archive.write(folder/'rebranded_product.png', 'rebranded_product.png')
+            for fmt, source in native:
+                archive.write(source, f'native_ai_artwork_{fmt}.png')
+            for source in rendered:
+                archive.write(source, source.name)
+            archive.writestr('brief.json', json.dumps(brief, ensure_ascii=False, indent=2))
+            archive.writestr('approved_copy.json', json.dumps(
+                approved_full_copy(brief), ensure_ascii=False, indent=2))
+            if diagnostic:
+                archive.writestr('openai_connection_diagnostic.json',
+                    json.dumps(diagnostic, ensure_ascii=False, indent=2))
+            archive.writestr('READ_ME_FIRST.txt',
+                'Генерация НЕ завершена. Эти материалы не предназначены для публикации.\n'
+                'Сохранены только полученные этапы, без автоматических повторных запросов.\n'
+                'Тип ошибки: '+type(exc).__name__+'.\n'
+                + ('Безопасная диагностика: '+exc.public_reason+'\n' if diagnostic else '')
+                + 'При сетевом сбое запрос мог быть оплачен даже без полученного ответа.\n')
+        return f'/files/{job_id}/ai_failed_generation.zip'
+    except Exception:
+        # Disk/ZIP failure must not erase the independent paid cache or mask
+        # the original exception. Never log the untrusted exception message.
+        return None
+
+
+def _poster_variation(form):
+    value = form.get('poster_variation', '')
+    if not isinstance(value, str) or (value and not JOB_ID.fullmatch(value)):
+        raise HTTPException(400, detail='Некорректный идентификатор художественного варианта.')
+    return value
+
+
+def _partial_poster_response(exc):
+    return JSONResponse(status_code=502, content={
+        'detail': ('AI-генерация не завершена. '+(exc.public_reason or
+                   'Тип ошибки: '+exc.cause_type+'.')+
+                   ' Сохранённые материалы доступны в ZIP. Автоматических повторов нет.'),
+        'recovery_zip': exc.recovery_zip,
+    })
+
+
 def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        reference_raw, model, quality, selected_source=None,
-                       progress=None, secondary_raw=None):
+                       progress=None, secondary_raw=None, variation_id=''):
     """Rebrand ONLY the selected photo before authoring both full AI posters.
 
     The original photo is immutable. The one paid rebranding edit is cached
     by original bytes/logo/brand/model. Partial paid outputs survive ZIP
-    failures. Other uploaded photos never enter either model call.
+    failures. A secondary photo may inform poster composition, not rebranding.
     """
     if progress:
         progress('Проверяем оплаченный кэш изображений и доступные лимиты')
+    if variation_id and not JOB_ID.fullmatch(variation_id):
+        raise ValueError('Некорректный идентификатор художественного варианта.')
+    cache_direction = 'complete-poster' + (':'+variation_id if variation_id else '')
     rebrand_dir = rebrand_cache_dir(brief, product_raw, logo_raw, model, quality)
     rebranded_raw = cached_rebrand_photo(rebrand_dir)
     if rebranded_raw is None:
@@ -657,35 +717,35 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                             if raw]
         previous_posters=_default_visual_cache(
             brief,True,previous_sources,model,quality,
-            AI_POSTER_VERSION,'complete-poster')
+            AI_POSTER_VERSION,cache_direction)
         missing=sum(_cached_visual(previous_posters,fmt) is None
                     for fmt in ('4x3','9x16'))
         check_paid_capacity('image',missing)
-    if rebranded_raw is None:
-        if progress:
-            progress('AI наносит ваш бренд только на выбранное исходное фото')
-        rebranded_raw = rebrand_selected_photo(
-            brief, product_raw, logo=logo_raw, model=model, quality=quality,
-            folder=rebrand_dir)
-    # The secondary camera view is a reference ONLY. Rebrand only the
-    # selected primary original; never mutate other uploaded photos.
-    poster_sources=[rebranded_raw]+[raw for raw in
-        (logo_raw,drawing_raw,secondary_raw,reference_raw) if raw]
-    paid_cache=_default_visual_cache(
-        brief,True,poster_sources,model,quality,
-        AI_POSTER_VERSION,"complete-poster")
-    if progress:
-        progress('OpenAI создаёт ДВА полноценных рекламных дизайна 4:3 и 9:16')
-    posters = generate_full_posters(
-        brief,rebranded_raw,logo=logo_raw,drawing=drawing_raw,
-        reference=reference_raw,secondary_photo=secondary_raw,
-        model=model,quality=quality,cache_dir=paid_cache,
-        consume_cache=False,product_is_rebranded=True)
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
     folder.mkdir(mode=0o700)
+    paid_cache = None
     try:
+        if rebranded_raw is None:
+            if progress:
+                progress('AI наносит ваш бренд только на выбранное исходное фото')
+            rebranded_raw = rebrand_selected_photo(
+                brief, product_raw, logo=logo_raw, model=model, quality=quality,
+                folder=rebrand_dir)
+        # The original secondary camera view is supplied only as reference.
+        poster_sources=[rebranded_raw]+[raw for raw in
+            (logo_raw,drawing_raw,secondary_raw,reference_raw) if raw]
+        paid_cache=_default_visual_cache(
+            brief,True,poster_sources,model,quality,
+            AI_POSTER_VERSION,cache_direction)
+        if progress:
+            progress('OpenAI создаёт ДВА полноценных рекламных дизайна 4:3 и 9:16')
+        posters = generate_full_posters(
+            brief,rebranded_raw,logo=logo_raw,drawing=drawing_raw,
+            reference=reference_raw,secondary_photo=secondary_raw,
+            model=model,quality=quality,cache_dir=paid_cache,
+            consume_cache=False,product_is_rebranded=True)
         (folder/'rebranded_product.png').write_bytes(rebranded_raw)
         images={};jpegs={}
         for fmt in ('4x3','9x16'):
@@ -710,6 +770,11 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                         arcname=f'ai_poster_{fmt}.png')
                 z.write(folder/f'ai_poster_{fmt}.jpg',
                         arcname=f'ai_poster_{fmt}.jpg')
+                # Retain the native pre-crop AI artwork for visual QA.
+                native=paid_cache/f'{fmt}.png'
+                if native.is_file():
+                    z.write(native, arcname=f'native_ai_artwork_{fmt}.png',
+                            compress_type=zipfile.ZIP_STORED)
             z.write(folder/'rebranded_product.png',
                     arcname='rebranded_product.png')
             z.write(folder/'approved_copy.json',
@@ -746,10 +811,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                         original.format,'.bin')
                 z.writestr(f'originals/{name}{suffix}',
                            raw,compress_type=zipfile.ZIP_STORED)
-        try:
-            _finish_visual_cache(paid_cache)
-        except OSError:
-            pass
+        # Retain the paid pair until the configured cache TTL. A normal
+        # repeated request reuses it; only an explicit variant gets a new key.
         return {'job_id':job_id,'images':images,'jpeg':jpegs,
                  'zip':f'/files/{job_id}/ai_posters.zip',
                 'generation_mode':'openai_full_poster',
@@ -759,7 +822,13 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'rebranded_photo':f'/files/{job_id}/rebranded_product.png',
                 'rebranding_applied':True,
                 'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]}
-    except Exception:
+    except Exception as exc:
+        if not isinstance(exc,(QuotaExceeded,QuotaStoreUnavailable)):
+            recovery_url = _native_poster_recovery(
+                folder,job_id,brief,rebranded_raw,paid_cache,exc)
+            if recovery_url:
+                (folder/'ai_posters.zip').unlink(missing_ok=True)
+                raise PartialPosterFailure(recovery_url,exc) from exc
         shutil.rmtree(folder,ignore_errors=True)
         raise
 
@@ -1018,6 +1087,12 @@ async def create_full_ai_posters(request:Request):
         raise HTTPException(400,detail='Недопустимые настройки модели OpenAI.')
     groups=await _asset_groups(form)
     prefs,cached=_asset_review(form)
+    variation_id=_poster_variation(form)
+    if (brief.get('style')=='reference_pro' and not groups['reference_examples']
+            and not groups['references']):
+        raise HTTPException(400,detail='Загрузите рекламный эталон. Платные запросы не запускались.')
+    if not MAIN_AI_GENERATION_SLOT.acquire(blocking=False):
+        raise HTTPException(409,detail='Уже выполняется AI-генерация.')
     try:
         report,records=await asyncio.to_thread(
             analyze_project,groups,prefs,cached_report=cached,use_ai=False,
@@ -1033,15 +1108,22 @@ async def create_full_ai_posters(request:Request):
         photo_id=report['selected_assets']['primary_photo']
         source={'id':photo_id,'name':records[photo_id]['name'],
                 'sha256':records[photo_id]['sha256']}
+        style_files=[raw for _,raw in
+                     (groups['reference_examples']+groups['references'])][:2]
+        style_board=combine_style_references(
+            style_files[0] if style_files else None,style_files[1:])
         return await asyncio.to_thread(
             _full_posters_sync,brief,product,
             chosen_bytes(report,records,'logo'),drawing,
-            chosen_bytes(report,records,'reference_example'),model,quality,
-            selected_source=source)
+            style_board,model,quality,selected_source=source,
+            secondary_raw=chosen_bytes(report,records,'secondary_photo'),
+            **({'variation_id':variation_id} if variation_id else {}))
     except QuotaExceeded as exc:
         raise HTTPException(429,detail=str(exc)) from exc
     except QuotaStoreUnavailable as exc:
         raise HTTPException(503,detail=str(exc)) from exc
+    except PartialPosterFailure as exc:
+        return _partial_poster_response(exc)
     except HTTPException:
         raise
     except ValueError as exc:
@@ -1049,6 +1131,8 @@ async def create_full_ai_posters(request:Request):
     except Exception as exc:
         raise HTTPException(
             502,detail=f'Не удалось создать AI-постеры ({type(exc).__name__}).') from exc
+    finally:
+        MAIN_AI_GENERATION_SLOT.release()
 
 
 @app.post('/api/concepts')
@@ -1287,6 +1371,8 @@ async def generate(request:Request):
                 'результата; повторный платный запрос не отправлен.'))
         try:
             return await _generate_from_form(form)
+        except PartialPosterFailure as exc:
+            return _partial_poster_response(exc)
         finally:
             MAIN_AI_GENERATION_SLOT.release()
     return await _generate_from_form(form)
@@ -1303,6 +1389,7 @@ async def _generate_from_form(form, progress=None):
     use_openai=str(form.get('use_openai','false')).lower()=='true'
     use_demo=str(form.get('use_demo','false')).lower()=='true'
     mode=str(form.get('generation_mode','template'))
+    variation_id=_poster_variation(form) if mode=='hybrid' else ''
     # The user-approved 4:3 and 9:16 advertising samples live in the CHAT,
     # not magically inside a VPS upload. The prior charged ZIP had ZERO
     # style reference files, so the image model never actually saw them.
@@ -1433,7 +1520,8 @@ async def _generate_from_form(form, progress=None):
                 str(form.get('quality','medium')),
                 selected_source=selected_source,
                 secondary_raw=detail_raw,
-                **({'progress':progress} if progress else {}))
+                **({'progress':progress} if progress else {}),
+                **({'variation_id':variation_id} if variation_id else {}))
         else:
             image_references=([reference_example_raw] if reference_example_raw else [])+references
             result=await asyncio.to_thread(

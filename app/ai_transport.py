@@ -91,7 +91,7 @@ def connection_report(
     elapsed = max(0.0, min(9999.0, time.monotonic() - started_at))
     return {
         "phase": "paid_artwork_images_edit",
-        "format": format_name if format_name in ("4x3", "9x16") else "unknown",
+        "format": format_name if format_name in ("4x3", "9x16", "rebrand") else "unknown",
         "reason_code": code,
         "sdk_exception": types[0],
         "cause_classes": types[1:],
@@ -106,3 +106,20 @@ def connection_report(
             "Если запрос дошёл до OpenAI, его стоимость может быть учтена."
         ),
     }
+
+
+def edit_paid_image_once(api, format_name: str, **options):
+    """One paid Images attempt, bounded timeout and redacted transport errors."""
+    import os
+    try:
+        timeout = int(os.getenv("PROMO_OPENAI_ART_TIMEOUT_SECONDS", "480"))
+    except (TypeError, ValueError):
+        timeout = 480
+    started = time.monotonic()
+    try:
+        return api.images.edit(timeout=max(180, min(600, timeout)), **options)
+    except Exception as exc:
+        report = connection_report(exc, format_name=format_name, started_at=started)
+        if report is None:
+            raise
+        raise OpenAIImageConnectionFailure(report) from exc

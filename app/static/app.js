@@ -12,6 +12,9 @@
   let promptDirty = true;
   let aiConceptSet = null;
   let selectedAiConcept = null;
+  let posterVariation='';
+  try{posterVariation=window.sessionStorage.getItem('promoeditor-poster-variation')||'';}catch{}
+  if(!/^[a-f0-9]{32}$/.test(posterVariation))posterVariation='';
 
   // Optional new fields should not disable the entire UI if an older HTML
   // document briefly remains in the browser cache after deployment.
@@ -353,11 +356,12 @@
     if(window.PromoAssets?.hasFiles()&&!window.PromoAssets.isReady()){
       showError('Сначала проанализируйте материалы и подтвердите выбор.');return;
     }
+    if(!window.confirm('Создать два платных AI-постера? До 3 вызовов OpenAI Images, возможен платный выбор фото. Результат PNG/JPEG, не SVG.'))return;
     invalidateFullAiPosters();busy(true);
     $('openai-posters-status').textContent=
-      'OpenAI создаёт два текстless AI-макета, программа вставляет точные данные и AI подбирает единый стиль шрифтов. 3 Images + 2 платных AI-анализа, возможен дополнительный выбор фото.';
+      'OpenAI создаёт два цельных растровых плаката с типографикой. До 3 Images, возможен платный выбор фото. Текст нужно сверить.';
     setStatus('Художественная генерация OpenAI',
-      'Готовим AI-оформление, точные SVG-тексты и AI-типографику для 4:3 и 9:16.','working');
+      'Готовим два полностью AI-созданных растровых изображения 4:3 и 9:16.','working');
     try{
       const form=new FormData();
       form.append('payload',JSON.stringify(formBrief()));
@@ -452,6 +456,7 @@
   function busy(on){
     isBusy=on;
     $('generate-btn').disabled=on;
+    if($('new-variation-btn'))$('new-variation-btn').disabled=on;
     $('generate-concepts-btn').disabled=on || !apiReady;
     $('generate-ai-posters-btn').disabled=on || !apiReady;
     $('build-prompt-btn').disabled=on;
@@ -525,6 +530,7 @@
       $('generated-previews').hidden=false;
       $('download-panel').hidden=false;
       const rasterOnly=Boolean(latest.raster_only);
+      if($('new-variation-btn'))$('new-variation-btn').hidden=!rasterOnly;
       for(const id of ['download-all','download-4x3','download-9x16','download-jpeg-4x3','download-jpeg-9x16'])
         $(id).disabled=false;
       for(const fmt of ['4x3','9x16']){
@@ -549,7 +555,7 @@
       $('download-panel').scrollIntoView({behavior:'smooth',block:'start'});
   }
 
-  async function generate(){
+  async function generate(newVariation=false){
     if(isBusy)return;
     clearError();
     if(!get('model').trim()){
@@ -576,13 +582,19 @@
     }
     const paidRendering=isHybrid()||checked('use-openai');
     if(isHybrid()&&!window.confirm(
-      'OpenAI отредактирует только выбранное фото прицепа и создаст два цельных художественных макета без надписей. Алгоритм вставит ТОЧНЫЙ текст, цену, телефоны и характеристики в SVG. После вставки AI проанализирует оба макета и подберёт единый шрифт, цвета и масштаб, но НЕ изменит слова. Цена: 3 платных вызова Images + 2 платных текстово-визуальных AI-запроса, при нескольких фото возможен ещё 1 платный AI-запрос для выбора ракурса. Тексты SVG редактируются, фото и логотип проверьте. Продолжить?'
+      (newVariation?'Создать НОВЫЙ художественный вариант с новыми платными вызовами? ':'')+
+      'OpenAI создаст два цельных плаката, включая надписи и чертёж. До 3 платных вызовов OpenAI Images: ребрендинг и два формата, возможен платный выбор главного фото. Повтор того же варианта использует сохранённый кэш, пока он не истёк. Результат PNG/JPEG, НЕ SVG. Цифры, логотип, чертёж и текст требуют проверки. Продолжить?'
     ))return;
+    if(isHybrid()&&newVariation){
+      posterVariation=Array.from(crypto.getRandomValues(new Uint8Array(16)),
+        n=>n.toString(16).padStart(2,'0')).join('');
+      try{window.sessionStorage.setItem('promoeditor-poster-variation',posterVariation);}catch{}
+    }
     invalidateResult();busy(true);
     setStatus('Подготавливаем материалы','Проверяем фотографии и создаём оба макета.','working');
     const loadingMessage=$('loading').querySelector('small');
     loadingMessage.textContent=paidRendering
-      ?'AI рисует два рекламных макета без текста, программа вставляет ваши точные данные, а AI подбирает стиль шрифта. Оригиналы и SVG сохранятся в ZIP.'
+      ?'OpenAI рисует оба готовых рекламных плаката с текстом. Оригиналы, PNG/JPEG и данные для сверки сохранятся в ZIP.'
       :'Формируем два SVG-исходника, PNG и JPEG. Не закрывайте вкладку.';
     const elapsed=$('generate-elapsed');
     const started=Date.now();
@@ -629,6 +641,7 @@
       form.append('use_openai',String(isHybrid()||checked('use-openai')));
       form.append('use_demo',String(checked('use-demo')));
       form.append('generation_mode',isAiPro()?'ai_pro':isHybrid()?'hybrid':'template');
+      if(isHybrid()&&posterVariation)form.append('poster_variation',posterVariation);
       if(isAiPro()){
         form.append('concept_set_id',aiConceptSet.concept_set_id);
         form.append('concept_index',String(selectedAiConcept));
@@ -986,7 +999,8 @@
       refreshGenerationMode();invalidateResult();clearError();
     });
   }
-  $('generate-btn').addEventListener('click',generate);
+  $('generate-btn').addEventListener('click',()=>generate(false));
+  $('new-variation-btn')?.addEventListener('click',()=>generate(true));
   $('inspect-btn').addEventListener('click',inspect);
   $('apply-extracted').addEventListener('click',()=>{
     const values=$('extract-result').value.trim();
