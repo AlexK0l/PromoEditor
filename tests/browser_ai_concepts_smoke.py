@@ -97,6 +97,11 @@ def main():
         assert page.locator("#mode-hybrid").is_checked()
         assert page.locator("#openai-posters-workflow").is_hidden()
 
+        # PRO must permit a real product photo without any style exemplar.
+        page.evaluate("document.querySelector('[data-style=reference_pro]').click()")
+        assert page.locator("#style").input_value() == "reference_pro"
+        assert page.locator("#reference_example").evaluate("(el)=>el.files.length") == 0
+        assert page.locator("#references").evaluate("(el)=>el.files.length") == 0
         photo = _product_png()
         page.locator("#model").fill("TEST INDUSTRIAL TRAILER 500")
         page.locator("#hero").set_input_files({
@@ -117,7 +122,9 @@ def main():
             dialog.dismiss()
         page.once("dialog", decline)
         page.locator("#generate-btn").click()
-        assert confirmations and "3 платных вызова" in confirmations[0]
+        assert confirmations and "До 3 платных вызовов OpenAI Images" in confirmations[0], confirmations
+        assert "PNG/JPEG, НЕ SVG" in confirmations[0]
+        assert "кэш" in confirmations[0]
         assert not posts, "Rejecting a paid call must make ZERO requests"
         assert page.locator("#loading").is_hidden()
 
@@ -133,6 +140,8 @@ def main():
         assert page.locator("#generated-preview-4x3").get_attribute("src") == "/static/demo_4x3.svg"
         assert page.locator("#generated-preview-9x16").get_attribute("src") == "/static/demo_9x16.svg"
         assert page.locator("#download-all").is_enabled()
+        assert page.locator("#new-variation-btn").is_visible()
+        assert page.locator("#new-variation-btn").is_enabled()
         assert page.locator("#download-svg-4x3").evaluate("(b)=>b.parentElement.hidden")
         assert page.locator("#download-svg-9x16").evaluate("(b)=>b.parentElement.hidden")
         assert page.locator("#download-svg-4x3").is_disabled()
