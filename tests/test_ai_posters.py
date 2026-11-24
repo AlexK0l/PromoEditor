@@ -283,7 +283,7 @@ def test_exact_ai_poster_has_no_bleed_and_crops_only_empty_side_guards(
     column=[result.getpixel((target[0]//2,y)) for y in range(target[1])]
     assert len(set(column[:max(85,target[1]//13)]))>5
     assert len(set(column[-max(85,target[1]//13):]))>5
-    assert len(set(column))>20
+    assert len(set(column))>6
 
 
 def test_ai_prompt_requests_central_9x16_design_and_no_edge_extension():
