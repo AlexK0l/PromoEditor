@@ -189,7 +189,7 @@ def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
         rasters={fmt:(Path(folder)/f"ai_poster_{fmt}.png").read_bytes() for fmt in FORMATS}
         sources=[("ORIGINAL CUSTOMER LOGO",logo),
                  ("ORIGINAL TECHNICAL DRAWING: geometry reference only",drawing),
-                 ("REB RANDED PRODUCT PHOTO: compare geometry and logo",product)]
+                 ("REBRANDED PRODUCT PHOTO: compare geometry and logo",product)]
         h=hashlib.sha256(json.dumps([VERSION,model,approved],sort_keys=True,
                                      ensure_ascii=False).encode("utf8"))
         for raw in [*rasters.values(),logo,drawing,product]:
@@ -244,6 +244,7 @@ def review_pair(approved, folder: Path, cache_dir: Path, *, logo=None,
             input=[{"role":"user","content":content}],
             text={"format":{"type":"json_schema","name":"poster_visual_review",
                             "strict":True,"schema":_schema()}},
+            store=False,
             max_output_tokens=14000,
             timeout=180,
         )

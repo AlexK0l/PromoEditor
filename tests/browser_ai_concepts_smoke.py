@@ -46,6 +46,8 @@ def main():
                      "9x16": "/static/demo_9x16.svg"},
             "zip": "/files/" + "a" * 32 + "/ai_posters.zip",
             "warnings": [],
+            "poster_review": {"status":"issues_found","issues_count":3,
+                              "human_review_required":True},
         }
         status_requests = []
         def begin_reply(route):
@@ -152,6 +154,8 @@ def main():
         assert "approved_copy.json" in page.locator(".prompt-download-note").inner_text()
         assert "AI-черновики" in page.locator("#download-title").inner_text()
         assert page.locator("#poster-review-status").is_visible()
+        assert "расхождения" in page.locator("#poster-review-status").inner_text()
+        assert "3" in page.locator("#poster-review-status").inner_text()
         for selector in ("#generation-mode",
                          "#ai-concepts-workflow", "#openai-posters-workflow"):
             assert page.locator(selector).is_hidden(), selector
