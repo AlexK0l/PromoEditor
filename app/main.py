@@ -46,6 +46,7 @@ from .ai_native_art_direction import (
 from .ai_transport import OpenAIImageConnectionFailure
 from .ai_artwork_fit import artwork_geometry
 from .ai_poster_finish import try_expand_artwork
+from .ai_poster_revision import import_bundle, revise_bundle, FORMATS as REVISION_FORMATS
 from .ai_poster_review import review_pair, skipped_review
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
@@ -1287,7 +1288,10 @@ def _run_generation_task(task_id: str):
     try:
         form,opened=ai_job_queue.reopen_form(folder)
         stage('Проверяем исходные данные проекта')
-        result=asyncio.run(_generate_from_form(form,progress=stage))
+        if str(form.get('generation_mode',''))=='refine_posters':
+            result=_refine_from_form(form,progress=stage)
+        else:
+            result=asyncio.run(_generate_from_form(form,progress=stage))
         # A completed task must have NO uploaded private sources left.
         # Clean them BEFORE reporting completion; the browser can download
         # its generated ZIP without the original form inputs remaining here.
@@ -1365,9 +1369,9 @@ async def start_ai_generation(request:Request):
     folder=None
     try:
         form=await request.form()
-        if str(form.get('generation_mode',''))!='hybrid':
+        if str(form.get('generation_mode','')) not in ('hybrid','refine_posters'):
             raise HTTPException(
-                400,detail='Фоновый запуск предусмотрен только для основного AI-режима.')
+                400,detail='Фоновый запуск предусмотрен для AI-генерации или доработки ZIP.')
         if not os.getenv('OPENAI_API_KEY'):
             raise HTTPException(
                 400,detail='На сервере не настроен OPENAI_API_KEY.')
@@ -1595,6 +1599,89 @@ async def _generate_from_form(form, progress=None):
     return result
 
 
+@app.post('/api/poster-archive/import')
+async def import_poster_archive(request:Request):
+    """Open an existing paid ZIP with no OpenAI requests."""
+    _guard_rate(request)
+    if int(request.headers.get('content-length') or 0)>MAX_ALL+1024*1024:
+        raise HTTPException(413,detail='ZIP превышает 68 МБ.')
+    if not MAIN_AI_GENERATION_SLOT.acquire(blocking=False):
+        raise HTTPException(409,detail='Уже выполняется AI-операция.')
+    folder=None
+    try:
+        form=await request.form()
+        upload=form.get('archive')
+        if not isinstance(upload,UploadFile) or not str(upload.filename or '').lower().endswith('.zip'):
+            raise HTTPException(400,detail='Загрузите ранее скачанный ZIP PromoEditor.')
+        _clean_jobs()
+        job_id=secrets.token_hex(16)
+        folder=STORAGE/job_id
+        folder.mkdir(mode=0o700)
+        path=folder/'upload.zip'
+        count=0
+        with path.open('xb') as dest:
+            while True:
+                chunk=await upload.read(1024*1024)
+                if not chunk:
+                    break
+                count+=len(chunk)
+                if count>MAX_ALL:
+                    raise HTTPException(413,detail='ZIP превышает 68 МБ.')
+                dest.write(chunk)
+        return await asyncio.to_thread(import_bundle,path,folder,job_id)
+    except (ValueError,zipfile.BadZipFile,TypeError,KeyError) as exc:
+        if folder:
+            shutil.rmtree(folder,ignore_errors=True)
+        raise HTTPException(400,detail='Некорректный комплект ZIP PromoEditor.') from exc
+    except HTTPException:
+        if folder:
+            shutil.rmtree(folder,ignore_errors=True)
+        raise
+    except Exception as exc:
+        if folder:
+            shutil.rmtree(folder,ignore_errors=True)
+        raise HTTPException(503,detail='Не удалось открыть комплект ZIP.') from exc
+    finally:
+        MAIN_AI_GENERATION_SLOT.release()
+
+
+def _refine_from_form(form,progress=None):
+    source_id=form.get('source_job','')
+    attempt=form.get('refine_attempt','')
+    if not isinstance(source_id,str) or not JOB_ID.fullmatch(source_id):
+        raise HTTPException(400,detail='Некорректный номер исходного комплекта.')
+    if not isinstance(attempt,str) or not JOB_ID.fullmatch(attempt):
+        raise HTTPException(400,detail='Не подтверждена конкретная попытка AI-доработки.')
+    source=STORAGE/source_id/'ai_posters.zip'
+    if not source.is_file() or time.time()-source.parent.stat().st_mtime>TTL_SECONDS:
+        raise HTTPException(404,detail='Срок хранения истёк. Откройте скачанный ZIP заново.')
+    try:
+        region=json.loads(str(form.get('refine_region','null')))
+    except (ValueError,TypeError) as exc:
+        raise HTTPException(400,detail='Некорректная область исправления.') from exc
+    job_id=secrets.token_hex(16)
+    folder=STORAGE/job_id
+    folder.mkdir(mode=0o700)
+    try:
+        # A private snapshot survives cleanup of an older source job while
+        # the single paid workflow is in progress.
+        snapshot=folder/'source.zip'
+        shutil.copyfile(source,snapshot)
+        result=revise_bundle(snapshot,folder,job_id,
+                             action=str(form.get('refine_action','')),
+                             fmt=str(form.get('refine_format','')),
+                             region=region,instruction=str(form.get('refine_instruction','')),
+                             model=str(form.get('model','gpt-image-2.5-flare')),
+                             quality=str(form.get('quality','medium')),
+                             verify=str(form.get('verify_posters','false')).lower()=='true',
+                             attempt=attempt,progress=progress)
+        snapshot.unlink(missing_ok=True)
+        return result
+    except Exception:
+        shutil.rmtree(folder,ignore_errors=True)
+        raise
+
+
 @app.post('/api/edit')
 async def edit_existing_promo(request: Request):
     """One paid edit of an uploaded promo. Existing generated jobs remain unchanged."""
@@ -1614,6 +1701,8 @@ async def edit_existing_promo(request: Request):
     mask = masks[0][1] if masks else None
     if mask is not None and len(mask) >= 4 * 1024 * 1024:
         raise HTTPException(413, detail='Маска должна быть PNG менее 4 МБ.')
+    if not MAIN_AI_GENERATION_SLOT.acquire(blocking=False):
+        raise HTTPException(409,detail='Уже выполняется AI-операция.')
     try:
         edited = await asyncio.to_thread(
             edit_promotional_image, source[0][1], instruction.strip(),
@@ -1628,6 +1717,8 @@ async def edit_existing_promo(request: Request):
         raise HTTPException(400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(502, detail=f'AI-редактирование не удалось ({type(exc).__name__}). Проверьте доступность OpenAI.')
+    finally:
+        MAIN_AI_GENERATION_SLOT.release()
     _clean_jobs()
     job_id = secrets.token_hex(16)
     folder = STORAGE / job_id
