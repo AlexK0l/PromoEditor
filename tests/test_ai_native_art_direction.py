@@ -183,4 +183,4 @@ def test_customer_reference_pro_describes_editorial_campaign_not_template():
         assert ("coordinate layout" in direction.lower()
                 or "ui panels" in direction.lower())
         assert "cinematic" in direction.lower() or "professional" in direction
-        assert "central aspect-safe framing" in direction
+        assert "full native canvas" in direction

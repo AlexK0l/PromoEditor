@@ -247,63 +247,56 @@ def test_transparent_vehicle_png_gets_a_clean_light_model_reference():
 
 
 @pytest.mark.parametrize(
-    "format_key,native_size,target,side_guard",
+    "native_size,target,box",
     [
-        ("4x3", (1536, 1024), (1440, 1080), 86),
-        ("9x16", (1024, 1536), (1080, 1920), 80),
+        ((1536, 1024), (1440, 1080), [0,60,1440,1020]),
+        ((1024, 1536), (1080, 1920), [0,150,1080,1770]),
+        ((1080,1920), (1080,1920), [0,0,1080,1920]),
+        ((1024,1024), (1440,1080), [180,0,1260,1080]),
     ],
 )
-def test_exact_ai_poster_has_no_bleed_and_crops_only_empty_side_guards(
-        format_key,native_size,target,side_guard):
-    """Regression from customer's real 9:16 paid ZIP.
-
-    Prior output had 150 identically copied rows at top and 150 vertically
-    extended rows at the bottom (60px for 4:3). NO row extension is allowed.
-    Source is a synthetic native-size image with strongly varying stripes
-    through the full height and disposable colored side guard bands.
-    """
-    from PIL import ImageDraw
-    width,height=native_size
+def test_complete_ai_raster_is_preserved_in_exact_output(native_size,target,box):
+    """Customer's actual CTA and telephone digits were cut off at both sides."""
+    from PIL import ImageChops, ImageDraw
+    from app.ai_artwork_fit import artwork_geometry, MATTE_RGB
     src=Image.new("RGB",native_size,(235,235,235))
+    w,h=src.size
     pen=ImageDraw.Draw(src)
-    for y in range(0,height,8):
-        color=(10,30,60) if (y//8)%2==0 else (230,200,70)
-        pen.rectangle((0,y,width-1,min(y+7,height-1)),fill=color)
-    pen.rectangle((0,0,side_guard-2,height-1),fill=(240,0,0))
-    pen.rectangle((width-side_guard+1,0,width-1,height-1),
-                  fill=(0,0,240))
+    # Non-disposable left/right text-like blocks and distinct edge rows.
+    pen.rectangle((0,0,80,h-1),fill=(240,0,0))
+    pen.rectangle((w-80,0,w-1,h-1),fill=(0,0,240))
+    pen.rectangle((0,0,w-1,16),fill=(25,50,75))
+    pen.rectangle((0,h-17,w-1,h-1),fill=(20,100,30))
     result=ai_poster_service.finish_artwork_in_safe_aspect(src,target)
-    assert result.size==target
-    mid=target[1]//2
-    for x in (0,15,target[0]-16,target[0]-1):
-        assert result.getpixel((x,mid))[0] != 240, "left guard leaked"
-        assert result.getpixel((x,mid))[2] != 240, "right guard leaked"
-    # OLD: top 150px (portrait) or 60px (landscape) was one copied row;
-    # NEW: actual source rows throughout, including BOTH print edges.
-    column=[result.getpixel((target[0]//2,y)) for y in range(target[1])]
-    assert len(set(column[:max(85,target[1]//13)]))>5
-    assert len(set(column[-max(85,target[1]//13):]))>5
-    assert len(set(column))>6
+    report=artwork_geometry(native_size,target)
+    assert report["crop"] is False
+    assert report["content_box"] == box
+    assert result.size == target
+    x,y,r,b=box
+    expected=src.resize((r-x,b-y),Image.Resampling.LANCZOS)
+    assert ImageChops.difference(result.crop(tuple(box)),expected).getbbox() is None
+    assert result.getpixel((x,(y+b)//2))==(240,0,0)
+    assert result.getpixel((r-1,(y+b)//2))==(0,0,240)
+    if y:
+        assert result.crop((0,0,target[0],y)).getextrema()==tuple((c,c) for c in MATTE_RGB)
+    if b<target[1]:
+        assert result.crop((0,b,target[0],target[1])).getextrema()==tuple((c,c) for c in MATTE_RGB)
 
 
-def test_ai_prompt_requests_central_9x16_design_and_no_edge_extension():
+def test_ai_prompt_demands_full_native_canvas_and_no_fabricated_blueprint():
     brief=default_brief()
     for fmt in ("4x3","9x16"):
-        prompt=ai_poster_service._prompt(
-            brief,fmt,logo=False,drawing=False,reference=False)
+        prompt=ai_poster_service._prompt(brief,fmt,logo=False,drawing=True,reference=False)
         assert "no post-generation edge-row stretching" in prompt.lower()
-        assert "OUTER SIDE GUARD BANDS" in prompt
-        assert "do not compose for the entire native image" in prompt.lower()
+        assert "no cropping" in prompt.lower()
         assert "3:2 or 2:3" in prompt
         assert "vertical pixel replication" in prompt
-        assert "adds vertical decorative bleed" not in prompt
-        if fmt=="9x16":
-            assert "OUTER 80 PIXELS on EACH SIDE" in prompt
-            assert "x=11%-89%" in prompt
-            assert "native 9:16 vertical" in prompt
-        else:
-            assert "1536x1024" in prompt
-            assert "x=9%-91%" in prompt
+        assert "OUTER SIDE GUARD BANDS" not in prompt
+        assert "preserve the whole native artwork" in prompt
+        assert "NEVER redraw, reinterpret, relabel" in prompt
+        assert "annual additional revenue" in prompt
+        assert "difference in purchase price" in prompt
+        assert "1536x1024" in prompt if fmt=="4x3" else "1024x1536" in prompt
 
 
 def test_4x3_ai_prompt_protects_logo_from_trailer_overlap():
@@ -332,7 +325,7 @@ def test_9x16_ai_prompt_protects_header_and_whole_vehicle():
     assert "every wheel, axle and extremity" in p
     assert "bottom price / cta strip" in p
     assert "outside the right specifications" not in p
-    assert "outer 80 pixels on each side" in p
+    assert "preserve the whole native artwork" in p
 
 
 def test_both_paid_image_edit_requests_include_safe_layout_not_old_cache(
@@ -348,7 +341,7 @@ def test_both_paid_image_edit_requests_include_safe_layout_not_old_cache(
         cache_dir=tmp_path / "safe_brand_test",
     )
     assert len(images.calls) == 2
-    assert "safe-crop-no-edge-extension" in ai_poster_service.VERSION
+    assert "full-image-no-crop" in ai_poster_service.VERSION
     assert ai_poster_service.VERSION != "full-openai-ad-poster-creative-v6-safe-crop-no-edge-extension"
     landscape, portrait = [call["prompt"].lower() for call in images.calls]
     assert "trailer must never overlap the logo area" in landscape

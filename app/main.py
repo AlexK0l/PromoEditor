@@ -44,6 +44,7 @@ from .ai_native_art_direction import (
     approved_full_copy, combine_style_references,
 )
 from .ai_transport import OpenAIImageConnectionFailure
+from .ai_artwork_fit import artwork_geometry
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
 from .render import default_brief, image_bytes, load_image, render_poster, valid_hex
@@ -747,7 +748,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             model=model,quality=quality,cache_dir=paid_cache,
             consume_cache=False,product_is_rebranded=True)
         (folder/'rebranded_product.png').write_bytes(rebranded_raw)
-        images={};jpegs={}
+        images={};jpegs={};geometry={}
         for fmt in ('4x3','9x16'):
             png=f'ai_poster_{fmt}.png'
             jpg=f'ai_poster_{fmt}.jpg'
@@ -756,12 +757,18 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                               quality=93,subsampling=0)
             images[fmt]=f'/files/{job_id}/{png}'
             jpegs[fmt]=f'/files/{job_id}/{jpg}'
+            native=paid_cache/f'{fmt}.png'
+            if native.is_file():
+                with Image.open(native) as original:
+                    geometry[fmt]=artwork_geometry(original.size,posters[fmt].size)
         if progress:
             progress('Сохраняем исходные проверенные данные и AI-плакаты в ZIP')
         approved=approved_full_copy(brief)
         (folder/'approved_copy.json').write_text(
             json.dumps(approved,ensure_ascii=False,indent=2),
             encoding='utf8')
+        (folder/'export_geometry.json').write_text(
+            json.dumps(geometry,ensure_ascii=False,indent=2),encoding='utf8')
         archive=folder/'ai_posters.zip'
         with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,
                              compresslevel=6) as z:
@@ -779,6 +786,7 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                     arcname='rebranded_product.png')
             z.write(folder/'approved_copy.json',
                     arcname='approved_copy.json')
+            z.write(folder/'export_geometry.json',arcname='export_geometry.json')
             z.writestr('brief.json',
                        json.dumps(brief,ensure_ascii=False,indent=2))
             z.writestr('selected_photo.json',json.dumps({
@@ -794,6 +802,9 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                        'не является источником цены или телефонов. '
                        'approved_copy.json содержит ВСЕ исходные факты '
                        'и расчёты для сверки обоих изображений. '
+                       'В export_geometry.json — геометрия масштабирования без обрезки. '
+                       'Оригинальный чертёж сохранён отдельно, габариты должны '
+                       'быть указаны точным текстом. '
                        'Изменённый кадр: rebranded_product.png. '
                        'Оригинал: originals/product_photo.*. '
                        'Дополнительные фото НЕ ребрендировались. '
@@ -821,6 +832,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                 'selected_photo':selected_source or {},
                 'rebranded_photo':f'/files/{job_id}/rebranded_product.png',
                 'rebranding_applied':True,
+                'publication_status':'human_review_required',
+                'export_geometry':geometry,
                 'warnings':[AI_POSTER_WARNING,REBRAND_WARNING]}
     except Exception as exc:
         if not isinstance(exc,(QuotaExceeded,QuotaStoreUnavailable)):
@@ -1202,7 +1215,7 @@ async def preview_promo_prompt(request:Request):
     try:prompt=build_promo_prompt(brief,report)
     except ValueError as exc:raise HTTPException(400,detail=str(exc))
     return {'prompt':prompt,'formats':['4x3','9x16'],'ai_required':False,
-            'notice':'Промпт сформирован из формы без платного вызова. При включённом OpenAI он передаётся для генерации сцены, а тексты и векторные элементы компонуются программно.'}
+            'notice':'Промпт сформирован бесплатно для шаблонного режима. Основной полнорастровый AI-режим использует собственную арт-дирекцию и не накладывает SVG-тексты.'}
 
 
 def _run_generation_task(task_id: str):
