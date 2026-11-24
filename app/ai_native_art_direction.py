@@ -131,3 +131,41 @@ def reference_style_direction(fmt: str) -> str:
             "graceful densely packed information from top to bottom. "
         )
     raise ValueError("Неподдерживаемый формат AI-плаката.")
+
+
+
+def combine_style_references(
+    exemplar: bytes | None, references: list[bytes] | None,
+) -> bytes | None:
+    """Make one STYLE-ONLY contact sheet from up to TWO customer examples.
+
+    Two different example formats (landscape and portrait) are visual
+    evidence, not sources of numbers/price/customer contact data. User
+    uploaded originals are not modified or published. Only the transient
+    downsized board is transmitted as an image input to the model.
+    """
+    import io
+    from PIL import Image, ImageOps
+
+    examples=([exemplar] if exemplar else []) + list(references or [])
+    if not examples:
+        return None
+    if len(examples)==1:
+        return examples[0]
+    chosen=examples[:2]
+    # Each source is decoded/resized alone to cap memory on the shared VPS.
+    board=Image.new("RGB",(1500,960),"#F4F5F7")
+    boxes=((8,10,835,940),(851,10,1492,940))
+    for raw,box in zip(chosen,boxes):
+        with Image.open(io.BytesIO(raw)) as source:
+            source.draft("RGB",(850,920))
+            source.thumbnail((850,920),Image.Resampling.LANCZOS)
+            rgb=ImageOps.contain(source.convert("RGB"),
+                                 (box[2]-box[0],box[3]-box[1]),
+                                 method=Image.Resampling.LANCZOS)
+        x=box[0]+(box[2]-box[0]-rgb.width)//2
+        y=box[1]+(box[3]-box[1]-rgb.height)//2
+        board.paste(rgb,(x,y))
+    out=io.BytesIO()
+    board.save(out,format="JPEG",quality=88,optimize=False)
+    return out.getvalue()
