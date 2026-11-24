@@ -253,3 +253,55 @@ def test_primary_create_uses_full_openai_image_art_not_procedural_svg(
     assert "corel" not in result.json()
     assert called and called[0][0]=="full_openai_image_poster"
     assert len(called)==1
+
+
+
+def test_real_uploaded_landscape_and_portrait_style_files_reach_paid_model(
+        monkeypatch,tmp_path):
+    """PRO files MUST be sent to the real model as a joined STYLE image.
+
+    The customer's earlier ZIP contained NO original style reference at
+    all. This checks actual HTTP multipart handling, not prompt strings.
+    """
+    from app import main
+    monkeypatch.setenv("OPENAI_API_KEY","dummy-no-network")
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    calls=[]
+    def native(brief,product,logo,drawing,reference,model,quality,
+               selected_source=None,progress=None,secondary_raw=None):
+        assert brief["style"]=="reference_pro"
+        assert reference
+        with Image.open(io.BytesIO(reference)) as board:
+            assert board.size==(1500,960)
+            assert board.format=="JPEG"
+            # first landscape and second portrait belong to DIFFERENT
+            # visual sources, both should survive the montage.
+            assert board.getpixel((415,475))[0]>80
+            assert board.getpixel((1170,475))[2]>80
+        calls.append("received_both_uploaded_style_examples")
+        return {
+            "images":{"4x3":"/files/mock/4x3.png",
+                      "9x16":"/files/mock/9x16.png"},
+            "jpeg":{"4x3":"/files/mock/4x3.jpg",
+                    "9x16":"/files/mock/9x16.jpg"},
+            "zip":"/files/mock/ai_posters.zip",
+            "generation_mode":"openai_full_poster",
+            "raster_only":True,"ai_used":True,"warnings":[],
+        }
+    monkeypatch.setattr(main,"_full_posters_sync",native)
+    brief=default_brief()
+    brief["style"]="reference_pro"
+    with TestClient(main.app) as client:
+        result=client.post("/api/generate",data={
+            "payload":json.dumps(brief,ensure_ascii=False),
+            "generation_mode":"hybrid","use_openai":"true",
+        },files=[
+            ("hero",("photo.png",_png("yellow"),"image/png")),
+            ("reference_example",
+             ("landscape.png",_png("red"),"image/png")),
+            ("references",("portrait.png",_png("blue"),"image/png")),
+        ])
+    assert result.status_code==200,result.text
+    assert calls==["received_both_uploaded_style_examples"]
