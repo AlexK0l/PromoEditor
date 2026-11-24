@@ -98,3 +98,50 @@ def test_both_customer_style_examples_are_transmitted_without_exposing_raw():
         assert image.mode=="RGB"
     assert combine_style_references(wide,[])==wide
     assert combine_style_references(None,[]) is None
+
+
+
+def test_reference_pro_without_actual_uploaded_example_is_rejected_before_paid_ai(
+        monkeypatch,tmp_path):
+    """The latest paid customer ZIP had no originals/style_reference file.
+
+    Images shown in a ChatGPT conversation are not automatically uploaded
+    into the PromoEditor web form. Prevent another paid, unguided art run.
+    """
+    import json
+    from fastapi.testclient import TestClient
+    from app import main
+    from app.render import default_brief
+
+    brief=default_brief()
+    brief["style"]="reference_pro"
+    monkeypatch.setenv("OPENAI_API_KEY","dummy-not-network")
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    def forbidden(*args,**kwargs):
+        raise AssertionError("Paid image/ranking called before style validation")
+    monkeypatch.setattr(main,"_full_posters_sync",forbidden)
+    monkeypatch.setattr(main,"analyze_project",forbidden)
+    image=_png(420,270,"#FFDD00")
+    with TestClient(main.app) as client:
+        result=client.post("/api/generate",data={
+            "payload":json.dumps(brief,ensure_ascii=False),
+            "generation_mode":"hybrid","use_openai":"true",
+        },files={"hero":("trailer.png",image,"image/png")})
+    assert result.status_code==400,result.text
+    assert "Рекламный PRO" in result.text
+    assert "эталон" in result.text
+    assert "Платные запросы не запускались" in result.text
+
+
+def test_customer_reference_pro_describes_editorial_campaign_not_template():
+    for fmt in ("4x3","9x16"):
+        direction=reference_style_direction(fmt)
+        assert "auto-filled report" in direction
+        assert "identical rectangle" in direction
+        assert "not a fixed coordinate layout" in direction.lower() or (
+            "not ui panels" in direction.lower()
+            or "not a hardcoded coordinate layout" in direction.lower())
+        assert "cinematic" in direction.lower() or "professional" in direction
+        assert "central aspect-safe framing" in direction
