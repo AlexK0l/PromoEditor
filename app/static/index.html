@@ -133,7 +133,7 @@
             <div class="mini-uploads optional-uploads">
               <label for="documents" class="mini-upload"><span class="mini-icon" aria-hidden="true">▤</span><span><strong>Документы с ТТХ</strong><small id="file-documents">PDF, Excel, Word, CSV</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="documents" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md" aria-label="Документы с характеристиками"></label>
               <label class="mini-upload" for="background" hidden><span class="mini-icon" aria-hidden="true">▧</span><span><strong>Свой фон</strong><small id="file-background">Фото промышленной сцены</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="background" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Загрузить собственное фото промышленной площадки для фона постера"></label>
-              <label class="mini-upload" for="reference_example"><span class="mini-icon" aria-hidden="true">✦</span><span><strong>Рекламный эталон · необязательно</strong><small id="file-reference_example">Пример оформления</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="reference_example" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Необязательный пример рекламного дизайна"></label>
+              <label class="mini-upload" for="reference_example"><span class="mini-icon" aria-hidden="true">✦</span><span><strong>Рекламный эталон · для PRO обязателен</strong><small id="file-reference_example">Пример оформления</small></span><span class="mini-plus" aria-hidden="true">+</span><input id="reference_example" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Пример рекламного дизайна для AI, обязателен для Рекламный PRO"></label>
             </div>
           </details>
             <details class="quiet-details asset-file-details" id="asset-files-details">
@@ -166,7 +166,7 @@
             <option value="sales">Продажи</option><option value="engineering">Техническая убедительность</option>
             <option value="prestige">Имидж бренда</option><option value="balanced">Универсальная подача</option>
           </select></label>
-          <p class="field-tip">Эталон необязателен: OpenAI может создавать рекламные изображения на основе фото техники и брифа без него. Векторные AI-композиции доступны отдельно; генерация изображений и планирование текста тарифицируются отдельно.</p>
+          <p class="field-tip">Для «Рекламный PRO» обязательно загрузите хотя бы один исходный рекламный эталон; желательно оба образца 4:3 и 9:16. Файлы из переписки автоматически на VPS не попадают. Для остальных стилей эталон необязателен. Генерация OpenAI Images платная, плакаты — растровые.</p>
         </div>
         <details class="quiet-details design-options" id="design-options" hidden>
           <summary>Поменять стиль и настройки AI <span aria-hidden="true">⌄</span></summary>
@@ -192,7 +192,7 @@
             <div class="data-group-body">
               <div class="extra-uploads">
             <label class="mini-upload" for="detail"><span class="mini-icon">▣</span><span><strong>Второе фото</strong><small id="file-detail">Дополнительный ракурс</small></span><span class="mini-plus">+</span><input id="detail" type="file" accept="image/png,image/jpeg,image/webp"></label>
-            <label class="mini-upload" for="references" hidden><span class="mini-icon">▧</span><span><strong>Референсы</strong><small id="file-references">Можно несколько; до 2 попадут в AI-сцену</small></span><span class="mini-plus">+</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>
+            <label class="mini-upload" for="references"><span class="mini-icon">▧</span><span><strong>Второй рекламный эталон · 9:16</strong><small id="file-references">Добавьте второй образец, чтобы AI видел оба формата</small></span><span class="mini-plus">+</span><input id="references" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>
           </div>
           <div class="extra-clear"><button type="button" data-clear="detail" hidden>Убрать второе фото</button><button type="button" data-clear="references" hidden>Убрать референсы</button></div>
             </div>
