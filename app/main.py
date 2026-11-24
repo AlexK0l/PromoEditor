@@ -40,6 +40,9 @@ from .ai_exact_copy_template import (
     _rasterize_in_worker,
 )
 from .ai_technical_sheet import render_technical_sheet
+from .ai_native_art_direction import (
+    approved_full_copy, combine_style_references,
+)
 from .ai_transport import OpenAIImageConnectionFailure
 from .ai_quota import QuotaExceeded, QuotaStoreUnavailable, check_paid_capacity
 from .editor_service import edit_promotional_image
@@ -633,13 +636,16 @@ def _build_concept_previews_sync(brief, report, records, concepts,
 
 
 def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
-                       reference_raw, model, quality, selected_source=None):
+                       reference_raw, model, quality, selected_source=None,
+                       progress=None, secondary_raw=None):
     """Rebrand ONLY the selected photo before authoring both full AI posters.
 
     The original photo is immutable. The one paid rebranding edit is cached
     by original bytes/logo/brand/model. Partial paid outputs survive ZIP
     failures. Other uploaded photos never enter either model call.
     """
+    if progress:
+        progress('Проверяем оплаченный кэш изображений и доступные лимиты')
     rebrand_dir = rebrand_cache_dir(brief, product_raw, logo_raw, model, quality)
     rebranded_raw = cached_rebrand_photo(rebrand_dir)
     if rebranded_raw is None:
@@ -647,7 +653,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
         check_paid_capacity('image', 3)
     else:
         previous_sources=[rebranded_raw]+[raw for raw in
-                            (logo_raw,drawing_raw,reference_raw) if raw]
+                            (logo_raw,drawing_raw,secondary_raw,reference_raw)
+                            if raw]
         previous_posters=_default_visual_cache(
             brief,True,previous_sources,model,quality,
             AI_POSTER_VERSION,'complete-poster')
@@ -655,21 +662,25 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                     for fmt in ('4x3','9x16'))
         check_paid_capacity('image',missing)
     if rebranded_raw is None:
+        if progress:
+            progress('AI наносит ваш бренд только на выбранное исходное фото')
         rebranded_raw = rebrand_selected_photo(
             brief, product_raw, logo=logo_raw, model=model, quality=quality,
             folder=rebrand_dir)
-    # NEVER send secondary or unselected uploaded trailer photos to the
-    # rebranding endpoint or to the complete poster artwork generator.
+    # The secondary camera view is a reference ONLY. Rebrand only the
+    # selected primary original; never mutate other uploaded photos.
     poster_sources=[rebranded_raw]+[raw for raw in
-                                  (logo_raw,drawing_raw,reference_raw) if raw]
+        (logo_raw,drawing_raw,secondary_raw,reference_raw) if raw]
     paid_cache=_default_visual_cache(
         brief,True,poster_sources,model,quality,
         AI_POSTER_VERSION,"complete-poster")
+    if progress:
+        progress('OpenAI создаёт ДВА полноценных рекламных дизайна 4:3 и 9:16')
     posters = generate_full_posters(
-        brief, rebranded_raw, logo=logo_raw, drawing=drawing_raw,
-        reference=reference_raw, model=model, quality=quality,
-        cache_dir=paid_cache, consume_cache=False,
-        product_is_rebranded=True)
+        brief,rebranded_raw,logo=logo_raw,drawing=drawing_raw,
+        reference=reference_raw,secondary_photo=secondary_raw,
+        model=model,quality=quality,cache_dir=paid_cache,
+        consume_cache=False,product_is_rebranded=True)
     _clean_jobs()
     job_id=secrets.token_hex(16)
     folder=STORAGE/job_id
@@ -685,6 +696,12 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                               quality=93,subsampling=0)
             images[fmt]=f'/files/{job_id}/{png}'
             jpegs[fmt]=f'/files/{job_id}/{jpg}'
+        if progress:
+            progress('Сохраняем исходные проверенные данные и AI-плакаты в ZIP')
+        approved=approved_full_copy(brief)
+        (folder/'approved_copy.json').write_text(
+            json.dumps(approved,ensure_ascii=False,indent=2),
+            encoding='utf8')
         archive=folder/'ai_posters.zip'
         with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,
                              compresslevel=6) as z:
@@ -695,6 +712,8 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
                         arcname=f'ai_poster_{fmt}.jpg')
             z.write(folder/'rebranded_product.png',
                     arcname='rebranded_product.png')
+            z.write(folder/'approved_copy.json',
+                    arcname='approved_copy.json')
             z.writestr('brief.json',
                        json.dumps(brief,ensure_ascii=False,indent=2))
             z.writestr('selected_photo.json',json.dumps({
@@ -704,13 +723,21 @@ def _full_posters_sync(brief, product_raw, logo_raw, drawing_raw,
             },ensure_ascii=False,indent=2))
             z.writestr('REVIEW_BEFORE_PUBLICATION.txt',
                        AI_POSTER_WARNING+'\n'+REBRAND_WARNING+'\n'
+                       'Полный постер в PNG/JPEG нарисовал OpenAI Images; '
+                       'программная сетка и точные текстовые SVG-плашки '
+                       'НЕ использовались. Эталон художественного стиля '
+                       'не является источником цены или телефонов. '
+                       'approved_copy.json содержит ВСЕ исходные факты '
+                       'и расчёты для сверки обоих изображений. '
                        'Изменённый кадр: rebranded_product.png. '
                        'Оригинал: originals/product_photo.*. '
-                       'Только выбранный главный ракурс редактировался; '
-                       'проверяйте логотип и надписи. В этом режиме SVG нет.\n')
+                       'Дополнительные фото НЕ ребрендировались. '
+                       'Перед публикацией ВРУЧНУЮ проверьте весь текст. '
+                       'Текст AI-растра не редактируется как SVG.\n')
             for name,raw in (('product_photo',product_raw),
                              ('customer_logo',logo_raw),
                              ('drawing_preview',drawing_raw),
+                             ('secondary_photo',secondary_raw),
                              ('style_reference',reference_raw)):
                 if not raw:
                     continue
