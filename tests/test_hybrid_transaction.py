@@ -201,61 +201,55 @@ def test_completed_hybrid_response_reports_actual_mode(monkeypatch, tmp_path):
     assert metadata["art_director"].startswith("OpenAI Responses")
 
 
-def test_primary_create_uses_exact_copy_ai_template_not_full_raster(
-        monkeypatch, tmp_path):
-    """Customer-facing Create must use textless AI design + exact SVG copy.
+def test_primary_create_uses_full_openai_image_art_not_procedural_svg(
+        monkeypatch,tmp_path):
+    """The customer rejected the six-column AI-blank-template stub.
 
-    The legacy raster Images engine must NOT run from the main button.
-    CI does not make paid network requests.
+    Main Create must call the full-raster OpenAI artistic flow, never
+    the hard-coded ai_reference_render or exact-copy typography pass.
+    This test uses NO paid network.
     """
-    monkeypatch.setenv("OPENAI_API_KEY", "test-no-network")
-    monkeypatch.setenv("PROMO_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(main, "STORAGE", tmp_path)
-    monkeypatch.setattr(main, "_guard_rate", lambda request: None)
-    original = _png("yellow")
-    called = []
+    monkeypatch.setenv("OPENAI_API_KEY","test-no-network")
+    monkeypatch.setenv("PROMO_DATA_DIR",str(tmp_path))
+    monkeypatch.setattr(main,"STORAGE",tmp_path)
+    monkeypatch.setattr(main,"_guard_rate",lambda request:None)
+    original=_png("yellow")
+    called=[]
 
-    def typed_posters(brief, product, logo, drawing, reference, model, quality,
-                     selected_source=None):
-        called.append(("typed_poster", product, model, quality))
-        assert selected_source["id"] == "photo_1"
-        assert selected_source["name"] == "real.png"
-        assert brief["model"]
-        assert product == original
+    def native_posters(brief,product,logo,drawing,reference,model,quality,
+                       selected_source=None,progress=None,secondary_raw=None):
+        called.append(("full_openai_image_poster",product,model,quality))
+        assert selected_source["id"]=="photo_1"
+        assert selected_source["name"]=="real.png"
+        assert product==original
         return {
-            "images": {"4x3": "/files/test/ai_poster_4x3.png",
-                       "9x16": "/files/test/ai_poster_9x16.png"},
-            "jpeg": {"4x3": "/files/test/ai_poster_4x3.jpg",
-                     "9x16": "/files/test/ai_poster_9x16.jpg"},
-            "zip": "/files/test/ai_typographic_posters.zip",
-            "corel": {"4x3":"/files/test/corel_4x3.svg",
-                      "9x16":"/files/test/corel_9x16.svg"},
-            "generation_mode": "ai_template_exact_copy",
-            "raster_only": False,
-            "ai_used": True,
-            "warnings": [],
+            "images":{"4x3":"/files/test/ai_poster_4x3.png",
+                      "9x16":"/files/test/ai_poster_9x16.png"},
+            "jpeg":{"4x3":"/files/test/ai_poster_4x3.jpg",
+                    "9x16":"/files/test/ai_poster_9x16.jpg"},
+            "zip":"/files/test/ai_posters.zip",
+            "generation_mode":"openai_full_poster",
+            "raster_only":True,"ai_used":True,"warnings":[],
         }
 
-    def forbidden_old_renderer(*args, **kwargs):
-        raise AssertionError("Primary AI creation called old layout renderer")
+    def forbidden_stub(*args,**kwargs):
+        raise AssertionError("Primary AI poster routed to procedural stub!")
 
-    monkeypatch.setattr(main, "_exact_typography_posters_sync", typed_posters)
-    monkeypatch.setattr(main, "_full_posters_sync", forbidden_old_renderer)
-    monkeypatch.setattr(main, "_generate_sync", forbidden_old_renderer)
+    monkeypatch.setattr(main,"_full_posters_sync",native_posters)
+    monkeypatch.setattr(main,"_exact_typography_posters_sync",forbidden_stub)
+    monkeypatch.setattr(main,"_generate_sync",forbidden_stub)
     with TestClient(main.app) as browser:
-        result = browser.post("/api/generate",
-            data={
-                "payload": json.dumps(default_brief(), ensure_ascii=False),
-                "generation_mode": "hybrid",
-                "use_openai": "true",
-                "model": "gpt-image-2.5-flare",
-                "quality": "medium",
-            },
-            files={"hero": ("real.png", original, "image/png")})
-    assert result.status_code == 200, result.text
-    assert result.json()["generation_mode"] == "ai_template_exact_copy"
-    assert result.json()["raster_only"] is False
-    assert result.json()["zip"].endswith("ai_typographic_posters.zip")
-    assert result.json()["corel"]["4x3"].endswith(".svg")
-    assert called and called[0][0] == "typed_poster"
-    assert len(called) == 1 and called[0][0] == "typed_poster"
+        result=browser.post("/api/generate",data={
+            "payload":json.dumps(default_brief(),ensure_ascii=False),
+            "generation_mode":"hybrid",
+            "use_openai":"true",
+            "model":"gpt-image-2.5-flare",
+            "quality":"medium",
+        },files={"hero":("real.png",original,"image/png")})
+    assert result.status_code==200,result.text
+    assert result.json()["generation_mode"]=="openai_full_poster"
+    assert result.json()["raster_only"] is True
+    assert result.json()["zip"].endswith("ai_posters.zip")
+    assert "corel" not in result.json()
+    assert called and called[0][0]=="full_openai_image_poster"
+    assert len(called)==1
